@@ -1,1 +1,11 @@
-[package]\nname = "vor-sim"\nversion = "0.1.0"\nedition = "2021"\n
+[package]
+name = "vor-sim"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition = "2021"
+description = "Motor de simulación procedural de Voronia: heightmap, hidrología, clima, biomas, culturas, estados, religiones, rutas."
+
+[lib]
+path = "src/lib.rs"

@@ -1,1 +1,17 @@
-[package]\nname = "vor-import"\nversion = "0.1.0"\nedition = "2021"\n
+[package]
+name = "vor-import"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition = "2021"
+description = "Parsers de Azgaar (.map / JSON) y regeneración bit-exacta de geometría (grilla jitterizada, Delaunay/Voronoi, repacking grid→pack)."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+vor-core = { path = "../vor-core" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

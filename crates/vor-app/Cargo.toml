@@ -1,1 +1,8 @@
-[package]\nname = "vor-app"\nversion = "0.1.0"\nedition = "2021"\n
+[package]
+name = "vor-app"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition = "2021"
+description = "Binario final de Voronia: winit + egui + wgpu + orquestación de crates."

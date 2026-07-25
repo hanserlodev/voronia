@@ -1,1 +1,11 @@
-[package]\nname = "vor-format"\nversion = "0.1.0"\nedition = "2021"\n
+[package]
+name = "vor-format"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition = "2021"
+description = "Serialización del formato binario .gmap de Voronia (bincode v1, versionado de formato)."
+
+[lib]
+path = "src/lib.rs"

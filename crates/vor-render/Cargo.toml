@@ -1,1 +1,11 @@
-[package]\nname = "vor-render"\nversion = "0.1.0"\nedition = "2021"\n
+[package]
+name = "vor-render"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition = "2021"
+description = "Pipeline wgpu de Voronia: capas, cámara ortográfica 2D, triangulación lyon. Solo lectura sobre el World Data Model."
+
+[lib]
+path = "src/lib.rs"
