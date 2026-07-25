@@ -1,6 +1,8 @@
 # Rust / Cargo
 target/
 **/*.rs.bk
+# Cargo.lock: por ahora sigue ignorado (estado heredado del commit inicial).
+# Para un workspace de app nativa normalmente se commitea — ver decisión más adelante.
 Cargo.lock
 
 # Voronia's own binary format (world snapshots)
@@ -22,8 +24,18 @@ desktop.ini
 # This rule is defensive — in case anyone symlinks it in by mistake.
 /azgaar-fmg/
 
-# opencode runtime (skills live elsewhere; this folder caches node_modules, tools and other agent-specific state — not project content)
-.opencode/
+# OpenCode agent checkpoint de sesión (ephemeral, ver SKILL.md "Límite de contexto").
+# NO commitear: es estado transitorio para sobrevivir compactación del contexto.
+/agent_state_checkpoint.md
+
+# OpenCode runtime dentro del repo:
+#  - `.opencode/skills/`  -> SE commitea. Las skills viven adentro del repo a propósito
+#    (protocolo de maintenance del SKILL.md: el historial de git de la skill queda
+#    sincronizado con el historial del proyecto). NO ignorar.
+#  - Todo lo demás bajo `.opencode/` (caches de agent, node_modules, tools,
+#    state session-specific, etc.) -> NO se commitea.
+.opencode/*
+!.opencode/skills/
 
 # Editor / language server caches
 .cache/

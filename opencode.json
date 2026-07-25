@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "Responde, razona y asísteme siempre en idioma español, sin importar el idioma de la consulta original.",
+    ".opencode/skills/voronia-dev/SKILL.md"
+  ],
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 16000
+  }
+}
