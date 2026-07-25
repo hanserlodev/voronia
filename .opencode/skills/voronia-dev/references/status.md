@@ -2,36 +2,51 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 24 julio 2026 (configuración de OpenCode + regla de límite de contexto 160K)
+**Última actualización**: 24 julio 2026 (comienzo Fase 1 — World Data Model base en `vor-core`)
 
 ## Fase actual del roadmap
 
-**Fase 0 — Investigación y sentado de bases**: no iniciada.
+**Fase 1 — Regeneración de geometría + parser de datos**: en marcha.
 
-Nada de código escrito todavía. Existe el plan maestro completo (`voronia-plan-proyecto.md`, §1–§29) y esta skill. El repo de Voronia en sí (workspace de Cargo, GitHub) todavía no se creó.
+**Fase 0 — Investigación y sentado de bases**: ✓ COMPLETADA. Documentación consolidada en `docs/fase-0-investigacion.md` (PRNG exacto, Delaunay/Voronoi con trampa de `Math.floor`, repacking grid→pack, parser `.map` slot-by-slot, validación empírica contra el archivo real "Brample"). Workspace de Cargo inicializado y los tipos base del World Data Model ya están commiteados.
 
-## Próximos pasos concretos (de la Fase 0, plan maestro §23)
+## Progreso de la Fase 1 (plan maestro §23)
 
-- [ ] Clonar el repo de Azgaar y revisar `src/` para identificar el PRNG exacto que usa.
-- [ ] Identificar el algoritmo exacto de Delaunay/Voronoi y de repacking grid→pack en el código fuente real.
-- [ ] Exportar un mapa real de Azgaar (JSON completo) y diseccionar su estructura exacta.
-- [ ] Crear el repo `voronia` bajo `hanserlodev`, licencia MIT, README con créditos a Azgaar.
-- [ ] Setup del Cargo workspace vacío (estructura en `references/architecture.md`).
-- [ ] Colocar esta skill en `.opencode/skills/voronia-dev/` dentro del repo recién creado (ver nota abajo).
+- [x] Clonar/revisar Azgaar para identificar algoritmos de geom + PRNG (hecho en Fase 0 — ver `docs/fase-0-investigacion.md`).
+- [x] Diseccionar `.map` real ("Brample") — estructura de 47 slots confirmada (fase-0 §12.3).
+- [x] **Setup Cargo workspace + crates vacíos** (commit `3d688a0`); fix `Cargo.toml` con `\n` literal roto + workspace inheritance (commit `dd9d378`).
+- [x] **Trackear la skill en el repo** (commit `dc011e9`) — `.gitignore` con `.opencode/*` + `!.opencode/skills/` (resolución del "PENDIENTE DE CONFIRMACIÓN DE HANS" que vivía abajo).
+- [x] **`vor-core` con tipos base del World Data Model** (commit `dd9d378`) — `Grid`/`Pack`/`GridCells`/`PackCells`/`VoronoiVertices`/`Feature`/entidades/`Settings`/`MapHeader`/`MapCoordinates`/`World` + `error::CoreError`. SoA estricto, enums fuertes, `serde_json::Value` opaco para subsistemas que no se modelan en Fase 1 (economía/milicia → Fase 7). `cargo check` + `clippy` + `fmt` limpios.
+- [ ] **Portear `Alea@1.0.1`** (npm, Johannes Baagøe) en `vor-import` — módulo PRNG interno. Tests byte-exactos contra la versión JS.
+- [ ] **Helpers numéricos de Azgaar** (`rn(v, decimals)` — mínimo para geometría; `rand/P/gauss` van a Fase 7).
+- [ ] **`getBoundaryPoints` + `getJitteredGrid`/`placePoints`** (`graphUtils.ts:17-98`): fila-mayor, x-interno, jitter via `Alea` re-seedeada, `rn(.,2)`, `Math.min` clamp. Tests deterministas (seed fijo → mismos puntos).
+- [ ] **Validar `delaunator` (Rust) bit-exacto** contra `delaunator@5.0.1` sobre los mismos `allPoints`. Si diverge, investigar antes de seguir.
+- [ ] **Portear `Voronoi` class** (`voronoi.ts`) — `cells.v/c/b/i`, `vertices.p/v/c`, `edgesAroundPoint` con cap 20 half-edges, helpers. CRÍTICO: `circumcenter` con `Math.floor` truncado a entero (f64 interno → i32).
+- [ ] **Portear `reGraph`** (`main.js:1157-1209`) — descartes (height<20 no-costero, type=-2 con `i%4==0` o feature lake), puntos extra costeros (`i>e`, mismo tipo, `dist>=spacing`, punto medio `rn(.,1)`), segundo `calculateVoronoi` sobre `newCells.p`, `pack.cells.g/h/area`.
+- [ ] **Parser del `.map`** (slot-by-slot, `\r\n` o `\n` SVG-rescued, gzip opcional) — header `[0]`, settings `[1]`, gridGeneral `[6]` (JSON), grid.cells `[7]`-`[11]`, pack.cells `[16]`-`[44]`, entidades JSON `[12]`-`[46]`. Cubrir auto-update de slots deprecated `[23]/[28]/[33]`.
+- [ ] **Poblar `World`** desde el parser — mapear slots del `.map` a structs de `vor-core`. Tipos fuertes según `references/architecture.md`.
+- [ ] **Validación empírica contra Brample**: `seed=861039636`, `2000×2000` → reproducir `grid.points` byte-a-byte contra slot `[6]`. Mismo `pack.cells.g`. Bug silencioso si diverge.
+- [ ] **Test end-to-end**: cargar Brample → `World` → verificar counts (10k grid cells, pack count, burgs/states/cultures) vs dump del archivo.
+
+**Scope de Fase 1 confirmado con Hans (24 jul 2026)**: **solo parser `.map`**. JSON export Full DIFERIDO a fase siguiente (aprovechando el hallazgo fase-0 §13.4: si solo se importan mapas ya generados, NO hace falta portear `aleaPRNG`/`randomizeOptions` — las options serializadas en slot `[1]` se importan como opaco).
 
 ## Decisiones tomadas (fuera de las que ya están en el plan maestro)
 
-- Nombre del proyecto: **Voronia** (decidido 24 jul 2026, tras descartar `Worldforge`/`Terraforge` por colisión real con proyectos existentes — detalle en plan maestro §1.3).
-- **Configuración de OpenCode** (24 jul 2026): creado `opencode.json` en la raíz del repo con `compaction.auto: true`, `compaction.prune: true`, `compaction.reserved: 16000` tokens, e `instructions` con español por defecto + referencia a esta skill. La compactación automática queda habilitada — el modelo GLM-5.2 vía NVIDIA tiene ventana nominal ~1M pero límite práctico ≈170K, así que el umbral operativo es 160K (ver nueva sección en `SKILL.md`).
-- **Regla crítica de checkpoint de contexto** (24 jul 2026): al acercarse a 160K tokens el agente debe detener generación, escribir `agent_state_checkpoint.md` en la raíz, avisar a Hans y disparar compactación. Detalle completo en `SKILL.md` (sección "Límite de contexto y checkpoint de sesión"). `agent_state_checkpoint.md` agregado a `.gitignore` como ruta temporal no-commiteable.
+- **Nombre del proyecto**: Voronia (24 jul 2026, tras descartar `Worldforge`/`Terraforge` por colisión con proyectos reales — detalle en plan maestro §1.3).
+- **Configuración de OpenCode** (24 jul 2026): `opencode.json` con `compaction.auto: true`, `compaction.prune: true`, `compaction.reserved: 16000`, `instructions` español por defecto + skill voronia-dev. Compactación automática porque GLM-5.2 vía NVIDIA tiene ventana nominal ~1M pero límite práctico ≈170K; umbral operativo 160K (ver `SKILL.md` "Límite de contexto y checkpoint de sesión").
+- **Regla crítica de checkpoint de contexto** (24 jul 2026): al acercarse a 160K tokens el agente detiene generación, escribe `agent_state_checkpoint.md` en la raíz, avisa a Hans con mensaje literal (ver `SKILL.md`), dispara compactación. `agent_state_checkpoint.md` cubierto por `.gitignore` como ruta temporal no-commiteable.
 - **Protocolo de reanudación** (24 jul 2026): al decir "continuar con el trabajo que se dejó / seguir donde lo dejamos / continuar con la Fase X", el agente lee `references/status.md` + `agent_state_checkpoint.md` si existe, **reconstruye el `todowrite`** ítem por ítem (mismo texto, orden, estado y prioridad), verifica con `git status` los archivos pendientes de commitear, confirma con Hans el punto exacto en 1-2 líneas, y ejecuta el próximo paso sugerido. Tras reanudar, borra el `agent_state_checkpoint.md`. Detalle en `SKILL.md` (subsección "Protocolo de reanudación").
+- **Tracking de skill en repo** (24 jul 2026, commit `dc011e9`): `.gitignore` refina `.opencode/` como `.opencode/*` + `!.opencode/skills/` para trackear la skill (protocolo `SKILL.md` punto 4) sin trackear caches/node_modules/tools (estos últimos también cubiertos por `.opencode/.gitignore` interno con `node_modules`/`package.json`/`package-lock.json`/`bun.lock`). Resolución del "PENDIENTE DE CONFIRMACIÓN DE HANS" que vivía en ediciones anteriores de este archivo.
+- **Parser `.map` primero, JSON export Full diferido** (24 jul 2026, decisión de Hans): Fase 1 scopea solo el parser `.map` (slot-by-slot). JSON export Full entra en una fase próxima.
+- **`serde_json::Value` opaco para economía/milicia** (24 jul 2026): slots `[40]`-`[44]` (goods/markets/deals) y el subtree `military` dentro de `State` se preservan como JSON opaco en `vor-core`, no se modelan como tipos fuertes todavía — propio de Fase 7 (plan §10). Re-export sin pérdida hasta entonces.
+- **Enums con `Default` + `#[default]`** (24 jul 2026): para que structs deriven `Default` felizmente y `#[serde(default)]` funcione en campos enum. Se eligió la variant "neutral/placeholder" como default en cada caso (`GovernmentForm::Anarchy`, `CultureType::Generic`, `ReligionType::Folk`, `ReligionExpansion::Culture`, `RouteGroup::Roads`, `IceKind::Glacier`, `FeatureType::Ocean`).
 
 ## Bloqueos / cosas pendientes de confirmar
 
-- Verificación final de disponibilidad exacta de `voronia` en GitHub y crates.io (chequeo rápido, no bloqueante para arrancar pero hacerlo antes de publicar nada).
-- Ver plan maestro §26 (decisiones pendientes) para el resto: `.gmap` vs `.mapg`, alcance real de soporte a `.map` legacy, prioridad de la Fase 8.
-- **Inconsistencia de `.gitignore` vs. skill (PENDIENTE DE CONFIRMACIÓN DE HANS)**: `.gitignore` línea `.opencode/` ignora TODA la carpeta, incluida `.opencode/skills/voronia-dev/` (la skill). Pero el protocolo de mantenimiento de `SKILL.md` (punto 4) dice que la skill debe commitearse junto con el código. Hoy la skill **no está trackeada** por git (`git check-ignore` la descarta). El archivo `.gitignore` actual comenta "skills live elsewhere", que parece ser una asunción vieja previa a meter la skill dentro del repo. Opciones: (a) cambiar `.opencode/` por reglas más finas que ignoren solo `node_modules/`/caches, (b) forzar el trackeo con `git add -f .opencode/skills/`, o (c) mover la skill fuera del repo (rompe el protocolo). esto lo dejé sin tocar porque excede el pedido de ahora — decidir antes de commitear la skill por primera vez.
+- **Variants de enums a confirmar contra wiki de Azgaar** antes del cierre de Fase 1: `CultureType`, `GovernmentForm`, `ReligionType` (variant `Organized` — el string exacto puede ser "Organized" o "Organized Religion"), subgrupos `LandGroup`/`LakeGroup`. Ver campos marcados `// TODO Fase 1: confirmar variants exactas` en `crates/vor-core/src/entities/*`.
+- **`Cargo.lock` sigue ignorado** (decisión heredada del commit inicial — ver nota adjunta en `.gitignore`). Para un workspace con binarios normalmente se commitea; sin decisión final todavía.
+- Ver plan maestro §26 (decisiones pendientes) para el resto: `.gmap` vs `.mapg`, alcance de soporte a `.map` legacy más allá del parser, prioridad Fase 8, etc.
 
-## Nota sobre esta skill
+## Historia corta de ediciones de este archivo
 
-Esta skill se escribió *antes* de que existiera el repo de Voronia (se generó en una conversación de planificación). Cuando se cree el repo real, esta carpeta (`voronia-dev/`) va dentro de `.opencode/skills/` en la raíz — eso la pone bajo control de versión junto con el código, que es la forma en que se mantiene sincronizada con cada cambio del proyecto (ver protocolo de mantenimiento en `SKILL.md`).
+La edición previa (configuración OpenCode, commit previo DC011E9) decía "Fase 0: no iniciada" y marcaba como pendiente confirmar el tracking de la skill. **Eso estaba desactualizado**: la Fase 0 estaba completa (residía en `docs/fase-0-investigacion.md`), y el workspace ya existía. Se corrige acá. Si en una sesión futura este archivo dijese algo incompatible con `git log` o `docs/fase-0-investigacion.md`, dudá del archivo y confía en el log + la investigación.
