@@ -43,9 +43,14 @@
 
 ## Bloqueos / cosas pendientes de confirmar
 
-- **Variants de enums a confirmar contra wiki de Azgaar** antes del cierre de Fase 1: `CultureType`, `GovernmentForm`, `ReligionType` (variant `Organized` — el string exacto puede ser "Organized" o "Organized Religion"), subgrupos `LandGroup`/`LakeGroup`. Ver campos marcados `// TODO Fase 1: confirmar variants exactas` en `crates/vor-core/src/entities/*`.
 - **`Cargo.lock` sigue ignorado** (decisión heredada del commit inicial — ver nota adjunta en `.gitignore`). Para un workspace con binarios normalmente se commitea; sin decisión final todavía.
 - Ver plan maestro §26 (decisiones pendientes) para el resto: `.gmap` vs `.mapg`, alcance de soporte a `.map` legacy más allá del parser, prioridad Fase 8, etc.
+- **Divergencia verificada entre `azgaar-fmg` (repo clonado v1.138.0 según header de Brample) y el `.map` "Brample" real (generado el 22 jul 2026, un día posterior al último commit del clon `51d8e3e`)**: el algoritmo `placePoints`/`getJitteredGrid` del repo produce puntos divergentes contra el slot `[6]` de Brample con el mismo seed `861039636` y `cellsDesired=10000`. Confirmado bit-exacto Rust↔JS-standalone-replicando-el-bg-master-actual, lo que implica que el Brample fue generado con **una build de azgaar.github.io más nueva que el último commit del repo clonado**. Por eso:
+  * Mi fixture `crates/vor-import/tests/reference/grid_2000x2000_c10k_seed_861039636_selfref.json` es **self-reference** — valida Rust contra el álgoritmo actual del repo, no contra el Brample.
+  * Hans generará un nuevo `.map` de referencia desde azgaar.github.io (master actual en producción) y lo dejará en `~/Descargas/`. El item "Test end-to-end: cargar .map de referencia → World Data Model" usará ese nuevo archivo.
+  * Las pruebas `Alea` bit-exactas vs JS quedan intactas (no se ven afectadas por la divergencia — eso prueba Rust=JS standalone).
+  * Las pruebas `place_points` structural (spacing=20, cellsX=cellsY=100, 10000 pts, boundary `[1,-20],[1,2020],[42,-20]...`) calzan bit-exacto con Brample slot `[6]` — no es afectada, esas derivaciones no usan RNG.
+- **Variants de enums a confirmar contra wiki de Azgaar** antes del cierre de Fase 1: `CultureType`, `GovernmentForm`, `ReligionType` (variant `Organized` — el string exacto puede ser "Organized" o "Organized Religion"), subgrupos `LandGroup`/`LakeGroup`. Ver campos marcados `// TODO Fase 1: confirmar variants exactas` en `crates/vor-core/src/entities/*`.
 
 ## Historia corta de ediciones de este archivo
 
