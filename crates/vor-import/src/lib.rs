@@ -18,5 +18,6 @@
 //! Si cualquier paso diverge, los atributos caen en celdas equivocadas — sin
 //! error visible, solo datos incorrectos (ver §13.4 consequence 3).
 
+pub mod geometry;
 pub mod numbers;
 pub mod prng;
