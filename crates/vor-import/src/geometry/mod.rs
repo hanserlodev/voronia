@@ -15,6 +15,8 @@
 use crate::numbers::rn;
 use crate::prng::Alea;
 
+pub mod delaunay;
+
 /// Producto de `place_points` — los campos del grid antes de Voronoi.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlacedGrid {

@@ -2,7 +2,7 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 24 julio 2026 (comienzo Fase 1 — World Data Model base en `vor-core`)
+**Última actualización**: 25 julio 2026 (porte bit-exacto de `delaunator@5.1.0` en `vor-import`)
 
 ## Fase actual del roadmap
 
@@ -17,16 +17,16 @@
 - [x] **Setup Cargo workspace + crates vacíos** (commit `3d688a0`); fix `Cargo.toml` con `\n` literal roto + workspace inheritance (commit `dd9d378`).
 - [x] **Trackear la skill en el repo** (commit `dc011e9`) — `.gitignore` con `.opencode/*` + `!.opencode/skills/` (resolución del "PENDIENTE DE CONFIRMACIÓN DE HANS" que vivía abajo).
 - [x] **`vor-core` con tipos base del World Data Model** (commit `dd9d378`) — `Grid`/`Pack`/`GridCells`/`PackCells`/`VoronoiVertices`/`Feature`/entidades/`Settings`/`MapHeader`/`MapCoordinates`/`World` + `error::CoreError`. SoA estricto, enums fuertes, `serde_json::Value` opaco para subsistemas que no se modelan en Fase 1 (economía/milicia → Fase 7). `cargo check` + `clippy` + `fmt` limpios.
-- [ ] **Portear `Alea@1.0.1`** (npm, Johannes Baagøe) en `vor-import` — módulo PRNG interno. Tests byte-exactos contra la versión JS.
-- [ ] **Helpers numéricos de Azgaar** (`rn(v, decimals)` — mínimo para geometría; `rand/P/gauss` van a Fase 7).
-- [ ] **`getBoundaryPoints` + `getJitteredGrid`/`placePoints`** (`graphUtils.ts:17-98`): fila-mayor, x-interno, jitter via `Alea` re-seedeada, `rn(.,2)`, `Math.min` clamp. Tests deterministas (seed fijo → mismos puntos).
-- [ ] **Validar `delaunator` (Rust) bit-exacto** contra `delaunator@5.0.1` sobre los mismos `allPoints`. Si diverge, investigar antes de seguir.
-- [ ] **Portear `Voronoi` class** (`voronoi.ts`) — `cells.v/c/b/i`, `vertices.p/v/c`, `edgesAroundPoint` con cap 20 half-edges, helpers. CRÍTICO: `circumcenter` con `Math.floor` truncado a entero (f64 interno → i32).
+- [x] **Portear `Alea@1.0.1`** (npm, Johannes Baagøe) en `vor-import` (commit `eaabd5e`) — módulo `prng::alea`. 1100 floats validados bit-a-bit Rust↔JS. Fixtures como bits (vía `BigUint64Array`).
+- [x] **Helpers numéricos de Azgaar** — `rn(v, decimals)` (commit `482cdff`) con `js_math_round = floor(x + 0.5)` para replicar ties-hacia-+∞ de `Math.round` JS.
+- [x] **`getBoundaryPoints` + `getJitteredGrid`/`placePoints`** (`graphUtils.ts:17-98`) (commit `f30357f`) — fila-mayor, x-interno, jitter via `Alea` re-seedeada, `rn(.,2)`, `Math.min` clamp. Test bit-exacto contra fixture self-reference.
+- [x] **Validar `delaunator` bit-exacto** contra `delaunator@5.1.0` (npm) — descartado el crate `delaunator = "1.1"` (Rust) por divergencia en casos degenerate (6280 entradas en `triangles` sobre los 10000 puntos jittered). Porte manual bit-exacto desde `delaunator-5.1.0.js` en `crates/vor-import/src/geometry/delaunay.rs` (incluye los robust predicates de Shewchuk inline). Test bit-exacto en `tests/delaunay_bit_exact.rs` con fixture self-reference.
+- [ ] **Portear `Voronoi` class** (`voronoi.ts`) — `cells.v/c/b/i`, `vertices.p/v/c`, `edgesAroundPoint` con cap 20 half-edges, helpers `nextHalfedge`/`triangleOfEdge`/`edgesOfTriangle`. CRÍTICO: `circumcenter` con `Math.floor` truncado a entero (f64 interno → i32).
 - [ ] **Portear `reGraph`** (`main.js:1157-1209`) — descartes (height<20 no-costero, type=-2 con `i%4==0` o feature lake), puntos extra costeros (`i>e`, mismo tipo, `dist>=spacing`, punto medio `rn(.,1)`), segundo `calculateVoronoi` sobre `newCells.p`, `pack.cells.g/h/area`.
 - [ ] **Parser del `.map`** (slot-by-slot, `\r\n` o `\n` SVG-rescued, gzip opcional) — header `[0]`, settings `[1]`, gridGeneral `[6]` (JSON), grid.cells `[7]`-`[11]`, pack.cells `[16]`-`[44]`, entidades JSON `[12]`-`[46]`. Cubrir auto-update de slots deprecated `[23]/[28]/[33]`.
 - [ ] **Poblar `World`** desde el parser — mapear slots del `.map` a structs de `vor-core`. Tipos fuertes según `references/architecture.md`.
-- [ ] **Validación empírica contra Brample**: `seed=861039636`, `2000×2000` → reproducir `grid.points` byte-a-byte contra slot `[6]`. Mismo `pack.cells.g`. Bug silencioso si diverge.
-- [ ] **Test end-to-end**: cargar Brample → `World` → verificar counts (10k grid cells, pack count, burgs/states/cultures) vs dump del archivo.
+- [ ] **BLOQUEADO**: Validación empírica contra `.map` Brample real — divergencia de versión de Azgaar (Brample 1.138.0 vs azgaar-fmg master). Hans generará un nuevo `.map` de referencia desde azgaar.github.io actual y lo dejará en `~/Descargas/`.
+- [ ] **Test end-to-end**: cargar `.map` de referencia → `World` → verificar counts (10k grid cells, pack count, burgs/states/cultures) vs dump del archivo. Usa el nuevo `.map` que Hans generará.
 
 **Scope de Fase 1 confirmado con Hans (24 jul 2026)**: **solo parser `.map`**. JSON export Full DIFERIDO a fase siguiente (aprovechando el hallazgo fase-0 §13.4: si solo se importan mapas ya generados, NO hace falta portear `aleaPRNG`/`randomizeOptions` — las options serializadas en slot `[1]` se importan como opaco).
 
@@ -40,6 +40,7 @@
 - **Parser `.map` primero, JSON export Full diferido** (24 jul 2026, decisión de Hans): Fase 1 scopea solo el parser `.map` (slot-by-slot). JSON export Full entra en una fase próxima.
 - **`serde_json::Value` opaco para economía/milicia** (24 jul 2026): slots `[40]`-`[44]` (goods/markets/deals) y el subtree `military` dentro de `State` se preservan como JSON opaco en `vor-core`, no se modelan como tipos fuertes todavía — propio de Fase 7 (plan §10). Re-export sin pérdida hasta entonces.
 - **Enums con `Default` + `#[default]`** (24 jul 2026): para que structs deriven `Default` felizmente y `#[serde(default)]` funcione en campos enum. Se eligió la variant "neutral/placeholder" como default en cada caso (`GovernmentForm::Anarchy`, `CultureType::Generic`, `ReligionType::Folk`, `ReligionExpansion::Culture`, `RouteGroup::Roads`, `IceKind::Glacier`, `FeatureType::Ocean`).
+- **Porte manual de `delaunator@5.1.0` en vez del crate `delaunator` (Rust)** (25 jul 2026): el crate `delaunator = "1.1"` de crates.io NO es bit-exacto contra el JS `delaunator@5.1.0` (npm) que Azgaar usa según `azgaar-fmg/package-lock.json:1599`. Causa raíz: el crate `robust = "1.2"` reimplementa Shewchuk de forma distinta (signo del `orient2dadapt` no negado, constante `THETA` vs `ccwerrboundA`) y además `delaunator-rs` tiene un bug en `find_closest_point` (filtra `d > 0` indiscriminadamente en ambos usos). Resultado: divergencia de 6280 entradas en `triangles` y 12145 en `halfedges` sobre los 10000 puntos jittered `placePoints(2000,2000,10000,"861039636")`. Decisión: porte manual bit-exacto en `crates/vor-import/src/geometry/delaunay.rs`, replicando el fuente JS 1-a-1 (incluyendo los robust predicates inline de Shewchuk). Esto sigue el patrón del porte de `Alea@1.0.1` y garantiza bit-exactitud (hallazgo fase-0 §13.4 crítico para que atributos del `.map` queden en celdas correctas).
 
 ## Bloqueos / cosas pendientes de confirmar
 
