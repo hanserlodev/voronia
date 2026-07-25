@@ -1,0 +1,30 @@
+# Rust / Cargo
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Voronia's own binary format (world snapshots)
+*.gmap
+
+# Dev artifacts
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Azgaar reference checkout lives outside the repo tree (sibling folder).
+# This rule is defensive — in case anyone symlinks it in by mistake.
+/azgaar-fmg/
+
+# opencode runtime (skills live elsewhere; this folder caches node_modules, tools and other agent-specific state — not project content)
+.opencode/
+
+# Editor / language server caches
+.cache/
+*.iml
