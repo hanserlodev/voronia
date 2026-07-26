@@ -2,7 +2,7 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 25 julio 2026 (porte bit-exacto de `delaunator@5.1.0` en `vor-import`)
+**Última actualización**: 25 julio 2026 (porte bit-exacto de `Voronoi` class en `vor-import`)
 
 ## Fase actual del roadmap
 
@@ -21,7 +21,7 @@
 - [x] **Helpers numéricos de Azgaar** — `rn(v, decimals)` (commit `482cdff`) con `js_math_round = floor(x + 0.5)` para replicar ties-hacia-+∞ de `Math.round` JS.
 - [x] **`getBoundaryPoints` + `getJitteredGrid`/`placePoints`** (`graphUtils.ts:17-98`) (commit `f30357f`) — fila-mayor, x-interno, jitter via `Alea` re-seedeada, `rn(.,2)`, `Math.min` clamp. Test bit-exacto contra fixture self-reference.
 - [x] **Validar `delaunator` bit-exacto** contra `delaunator@5.1.0` (npm) — descartado el crate `delaunator = "1.1"` (Rust) por divergencia en casos degenerate (6280 entradas en `triangles` sobre los 10000 puntos jittered). Porte manual bit-exacto desde `delaunator-5.1.0.js` en `crates/vor-import/src/geometry/delaunay.rs` (incluye los robust predicates de Shewchuk inline). Test bit-exacto en `tests/delaunay_bit_exact.rs` con fixture self-reference.
-- [ ] **Portear `Voronoi` class** (`voronoi.ts`) — `cells.v/c/b/i`, `vertices.p/v/c`, `edgesAroundPoint` con cap 20 half-edges, helpers `nextHalfedge`/`triangleOfEdge`/`edgesOfTriangle`. CRÍTICO: `circumcenter` con `Math.floor` truncado a entero (f64 interno → i32).
+- [x] **Portear `Voronoi` class** (`voronoi.ts`) en `crates/vor-import/src/geometry/voronoi.rs` — `cells.v/c/b`, `vertices.p/v/c`, helpers `edgesAroundPoint` (cap 20 half-edges), `nextHalfedge`/`triangleOfEdge`/`edgesOfTriangle` (estos últimos expuestos como `pub fn` en `delaunay.rs`). `circumcenter` usa `f64::floor()` para reproducir `Math.floor` de Azgaar bit-exacto (fase-0 §6.3) — importante: replicamos `(1/D) * numerator` en vez de `numerator / D` para preservar el doble redondeo de f64 que hace el JS. Test bit-exacto en `tests/voronoi_bit_exact.rs` con fixture self-reference (`voronoi_grid_2000x2000_c10k_seed_861039636_selfref.json`, 5.2MB): valida `cells.v`/`cells.c`/`cells.b`/`vertices.p`/`vertices.v`/`vertices.c` bit-a-bit contra la `Voronoi` class JS (replicada vanilla en `generate_voronoi_fixture.js`) sobre los mismos 10200 puntos. 19 tests en `cargo test --workspace`, clippy + fmt clean.
 - [ ] **Portear `reGraph`** (`main.js:1157-1209`) — descartes (height<20 no-costero, type=-2 con `i%4==0` o feature lake), puntos extra costeros (`i>e`, mismo tipo, `dist>=spacing`, punto medio `rn(.,1)`), segundo `calculateVoronoi` sobre `newCells.p`, `pack.cells.g/h/area`.
 - [ ] **Parser del `.map`** (slot-by-slot, `\r\n` o `\n` SVG-rescued, gzip opcional) — header `[0]`, settings `[1]`, gridGeneral `[6]` (JSON), grid.cells `[7]`-`[11]`, pack.cells `[16]`-`[44]`, entidades JSON `[12]`-`[46]`. Cubrir auto-update de slots deprecated `[23]/[28]/[33]`.
 - [ ] **Poblar `World`** desde el parser — mapear slots del `.map` a structs de `vor-core`. Tipos fuertes según `references/architecture.md`.

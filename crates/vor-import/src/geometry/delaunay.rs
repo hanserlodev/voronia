@@ -1100,6 +1100,67 @@ fn orient2dadapt(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64, detsum: f
     d_buf[dlen - 1]
 }
 
+// === Helpers half-edge (públicos para `voronoi.rs`) ===
+//
+// Réplica 1-a-1 de los static methods de `delaunator@5.1.0.js` documentados en
+// https://mapbox.github.io/delaunator/#edge-and-triangle — mismos helpers que
+// `voronoi.ts:107-126` consume como `triangleOfEdge`, `nextHalfedge`, etc.
+
+/// `Math.floor(e / 3)` — índice del triángulo al que pertenece el half-edge `e`.
+#[inline]
+pub fn triangle_of_edge(e: usize) -> usize {
+    e / 3
+}
+
+/// Siguiente half-edge del mismo triángulo (e % 3 == 2 → e - 2, sino e + 1).
+#[inline]
+pub fn next_halfedge(e: usize) -> usize {
+    if e % 3 == 2 {
+        e - 2
+    } else {
+        e + 1
+    }
+}
+
+/// Previous half-edge del mismo triángulo (e % 3 == 0 → e + 2, sino e - 1).
+/// (No se usa en `voronoi.ts` pero está por simetría con la API de Delaunator.)
+#[inline]
+pub fn prev_halfedge(e: usize) -> usize {
+    if e.is_multiple_of(3) {
+        e + 2
+    } else {
+        e - 1
+    }
+}
+
+/// Los 3 half-edges del triángulo `t`: `[3t, 3t+1, 3t+2]`.
+#[inline]
+pub fn edges_of_triangle(t: usize) -> [usize; 3] {
+    [3 * t, 3 * t + 1, 3 * t + 2]
+}
+
+/// Los 3 puntos del triángulo `t`, índices en `triangles` (counter-clockwise).
+#[inline]
+pub fn points_of_triangle(triangles: &[u32], t: usize) -> [u32; 3] {
+    let e = edges_of_triangle(t);
+    [triangles[e[0]], triangles[e[1]], triangles[e[2]]]
+}
+
+/// Triángulos adyacentes al triángulo `t` vía cada half-edge. `EMPTY` si el half-edge
+/// es de borde (sin vecino) — replica `trianglesAdjacentToTriangle` de `voronoi.ts:66-73`.
+#[inline]
+pub fn triangles_adjacent_to_triangle(halfedges: &[usize], t: usize) -> [usize; 3] {
+    let e = edges_of_triangle(t);
+    let mut out = [EMPTY; 3];
+    for i in 0..3 {
+        let opposite = halfedges[e[i]];
+        if opposite != EMPTY {
+            out[i] = triangle_of_edge(opposite);
+        }
+    }
+    out
+}
+
 // === Export de interfaces pùblicas ===
 
 #[cfg(test)]
