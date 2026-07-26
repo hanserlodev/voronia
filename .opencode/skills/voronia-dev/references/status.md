@@ -2,11 +2,11 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 25 julio 2026 (parser `.map` + `Loader::load` completos y validados end-to-end contra Sorvik `.map` real)
+**Última actualización**: 26 julio 2026 (Fase 1 registrada en `docs/fase-1.md`, checkpoint protocol añadido a SKILL.md)
 
 ## Fase actual del roadmap
 
-**Fase 1 — Regeneración de geometría + parser de datos**: ✓ **COMPLETADA**. Parser del `.map` bit-exacto y handshake end-to-end contra Sorvik (`.map` real generado por Azgaar 1.138.0 — 47 slots, 10000 grid cells, 7268 pack cells post-reGraph, 19 features, 16 culturas, 14 estados, 1010 burgos, 24 religiones, 226 provincias, 141 ríos, 815 rutas, 13 zonas, 4 ice, 83 markers, 1 measurer — todos los counts calcen con el dump del archivo).
+**Fase 1 — Regeneración de geometría + parser de datos**: ✓ **COMPLETADA**. Parser del `.map` bit-exacto y handshake end-to-end contra Sorvik (`.map` real generado por Azgaar 1.138.0 — 47 slots, 10000 grid cells, 7268 pack cells post-reGraph, 19 features, 16 culturas, 14 estados, 1010 burgos, 24 religiones, 226 provincias, 141 ríos, 815 rutas, 13 zonas, 4 ice, 83 markers, 1 measurer — todos los counts calcen con el dump del archivo). Documento de fase congelado: `docs/fase-1.md`.
 
 **Fase 0 — Investigación y sentado de bases**: ✓ COMPLETADA. Documentación consolidada en `docs/fase-0-investigacion.md` (PRNG exacto, Delaunay/Voronoi con trampa de `Math.floor`, repacking grid→pack, parser `.map` slot-by-slot, validación empírica contra el archivo real "Brample"). Workspace de Cargo inicializado y los tipos base del World Data Model ya están commiteados.
 
