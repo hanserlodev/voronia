@@ -21,3 +21,4 @@
 pub mod geometry;
 pub mod numbers;
 pub mod prng;
+pub mod regraph;
