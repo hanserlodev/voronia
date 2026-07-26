@@ -19,6 +19,7 @@
 //! error visible, solo datos incorrectos (ver §13.4 consequence 3).
 
 pub mod geometry;
+pub mod mapfile;
 pub mod numbers;
 pub mod prng;
 pub mod regraph;

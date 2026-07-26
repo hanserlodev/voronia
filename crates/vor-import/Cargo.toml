@@ -15,3 +15,4 @@ vor-core = { path = "../vor-core" }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+flate2 = { workspace = true }

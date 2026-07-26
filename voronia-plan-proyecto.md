@@ -830,12 +830,13 @@ Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de
 - [ ] Crear el repo `voronia` bajo `hanserlodev`, licencia MIT, README inicial con créditos.
 - [ ] Setup del Cargo workspace (estructura de §13, vacía pero compilando).
 
-### Fase 1 — Regeneración de geometría + parser de datos · `L`
-- [ ] Portar el generador de puntos en grilla jitterizada con semilla.
-- [ ] Portar Delaunay (`delaunator`) + derivación de Voronoi.
-- [ ] Portar el algoritmo de repacking grid→pack.
-- [ ] Validar contra mapas reales exportados de Azgaar (mismo seed → mismos índices de celda).
-- [ ] Parser del JSON export → poblar `World Data Model` (`vor-import`).
+### Fase 1 — Regeneración de geometría + parser de datos · `L` · ✓ COMPLETADA (commit `7907084`, 25 jul 2026)
+ - [x] Portar el generador de puntos en grilla jitterizada con semilla.
+ - [x] Portar Delaunay (`delaunator`) + derivación de Voronoi.
+ - [x] Portar el algoritmo de repacking grid→pack.
+ - [x] Validar contra mapas reales exportados de Azgaar (mismo seed → mismos índices de celda) — handshake Sorvik `.map` confirmado bit-exacto en `place_points` (10000 pts) y end-to-end loader (47 slots, 7268 pack cells, todos los counts de catálogos).
+ - [x] Parser del `.map` Azgaar → poblar `World Data Model` (`vor-import::mapfile::Loader::load`). Parser JSON export Full DIFERIDO a Fase 2+ (decisión Hans: fase 0 §13.4 — si solo se importan mapas ya generados, no hace falta portear `aleaPRNG`/`randomizeOptions`).
+
 
 ### Fase 2 — Visor GPU mínimo · `M`
 - [ ] Ventana (winit) + inicialización de wgpu.
@@ -915,7 +916,7 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 - [x] Nombre del proyecto: `Voronia` (§1.3) — falta solo la verificación final de registro exacto en GitHub/crates.io al crear el repo.
 - [ ] `.gmap` vs `.mapg` vs otro — y confirmar que no colisiona con un formato ya establecido.
 - [ ] ¿`bincode` es suficiente para siempre, o se planifica desde ya la migración a `rkyv`?
-- [ ] ¿Soporte a `.map` legacy es un requisito real de v1, o alcanza con JSON export? (afecta el esfuerzo de Fase 1).
+- [x] ¿Soporte a `.map` legacy es un requisito real de v1, o alcanza con JSON export? (afecta el esfuerzo de Fase 1). → **Resuelto (25 jul 2026, Hans)**: Fase 1 scopea solo `.map` legacy (slot-by-slot), JSON export Full DIFERIDO. Validado handshake vs `.map` real Azgaar 1.138.0 (Sorvik). El `.map` legacy queda como vía de import soportada oficial en v1.
 - [ ] Alcance exacto de Fase 8 (qué extensión de §21 se prioriza primero).
 - [ ] ¿Se apunta a publicar en crates.io los crates internos (`vor-core`, etc.) por separado, o el workspace se mantiene monolítico?
 
