@@ -306,7 +306,8 @@ fn parse_string_opaque(slot: Option<&str>) -> serde_json::Value {
 }
 
 /// Convierte `vor_import::geometry::voronoi::Voronoi` → `vor_core::VoronoiVertices`
-/// (solo la parte de vértices — los `cells.v/c/b` son topología derivable por el caller).
+/// (vuelca `vertices.p/v/c` + `cells.v` como `cell_rings` para que el renderer no
+/// recalcule mallas).
 fn voronoi_to_vor_core(v: &Voronoi) -> vor_core::voronoi::VoronoiVertices {
     vor_core::voronoi::VoronoiVertices {
         positions: v
@@ -327,6 +328,7 @@ fn voronoi_to_vor_core(v: &Voronoi) -> vor_core::voronoi::VoronoiVertices {
             .iter()
             .map(|v| [v[0] as i32, v[1] as i32, v[2] as i32])
             .collect(),
+        cell_rings: v.cells.v.clone(),
     }
 }
 

@@ -5,4 +5,18 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 edition = "2021"
-description = "Herramientas headless de Voronia: generación batch, conversión de formatos, sin dependencias gráficas."
+description = "Herramientas headless y CLI de Voronia (importación, conversión, viewer)."
+
+[[bin]]
+name = "vor"
+path = "src/main.rs"
+
+[dependencies]
+vor-import = { path = "../vor-import" }
+vor-app = { path = "../vor-app" }
+vor-core = { path = "../vor-core" }
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+pollster.workspace = true

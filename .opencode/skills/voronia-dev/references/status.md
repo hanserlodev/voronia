@@ -2,9 +2,11 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 26 julio 2026 (Fase 1 registrada en `docs/fase-1.md`, checkpoint protocol añadido a SKILL.md)
+**Última actualización**: 26 julio 2026 (Fase 2 registrada en `docs/fase-2.md`)
 
 ## Fase actual del roadmap
+
+**Fase 2 — Visor GPU mínimo**: ✓ **COMPLETADA**. Ventana winit 0.30 + wgpu 22 + cámara ortográfica 2D con pan/zoom + capa heightmap (triangulación con lyon, color por altura) + overlay egui 0.29 (FPS, cursor, info cámara, path del mapa). Bin `vor` que carga `.map` reales y abre el visor. 48 tests verdes, clippy clean, fmt clean. Documento de fase: `docs/fase-2.md`.
 
 **Fase 1 — Regeneración de geometría + parser de datos**: ✓ **COMPLETADA**. Parser del `.map` bit-exacto y handshake end-to-end contra Sorvik (`.map` real generado por Azgaar 1.138.0 — 47 slots, 10000 grid cells, 7268 pack cells post-reGraph, 19 features, 16 culturas, 14 estados, 1010 burgos, 24 religiones, 226 provincias, 141 ríos, 815 rutas, 13 zonas, 4 ice, 83 markers, 1 measurer — todos los counts calcen con el dump del archivo). Documento de fase congelado: `docs/fase-1.md`.
 
@@ -32,6 +34,17 @@
 
 **Scope de Fase 1 confirmado con Hans (24 jul 2026)**: **solo parser `.map`**. JSON export Full DIFERIDO a fase siguiente (aprovechando el hallazgo fase-0 §13.4: si solo se importan mapas ya generados, NO hace falta portear `aleaPRNG`/`randomizeOptions` — las options serializadas en slot `[1]` se importan como opaco).
 
+## Progreso de la Fase 2 (plan maestro §23)
+
+- [x] Configurar deps wgpu 22 / winit 0.30 / egui 0.29 / lyon 1.0 / bytemuck / pollster.
+- [x] **vor-render::Camera** — ortográfica 2D con pan (drag), zoom al cursor, screen→world, frame_bounds.
+- [x] **vor-render::HeightmapLayer** — `build_mesh(grid)` triangula celdas con lyon, rampa de color por altura.
+- [x] **vor-render::Renderer** — pipeline wgpu + shaders WGSL + buffers GPU. Campos `pub` para que vor-app gestione los passes.
+- [x] **vor-app::State** — winit 0.30 (ApplicationHandler), wgpu 22, egui 0.29 integrado. Overlay egui con FPS, cursor, info cámara, path. Pan con botón izq, zoom con rueda.
+- [x] **vor-cli** — bin `vor` que carga `.map` vía vor-import y abre el visor.
+- [x] **Tests/sanity** — 48 tests verdes (`cargo test --workspace`), clippy 0 warnings, fmt clean. 7 tests nuevos en vor-render (cámara + rampa color).
+- [ ] **Prueba end-to-end** — correr `cargo run --bin vor -- /path/to/map.map` para ver si el visor abre correctamente en X11/Wayland. Falta hacerlo.
+
 ## Decisiones tomadas (fuera de las que ya están en el plan maestro)
 
 - **Nombre del proyecto**: Voronia (24 jul 2026, tras descartar `Worldforge`/`Terraforge` por colisión con proyectos reales — detalle en plan maestro §1.3).
@@ -47,6 +60,12 @@
 - **`PackCells::grid_id` se obtiene de `re_graph`, no del archivo** (25 jul 2026): el mapping `pack.cells.g[packId] → gridId` es parte del output de `re_graph`. El loader lo preserva del `Pack` retornado; `parse_pack_cells` lo deja vacío y el loader lo completa del `re_graph` output.
 - **Enums con `Default` + `#[default]`** (24 jul 2026): para que structs deriven `Default` felizmente y `#[serde(default)]` funcione en campos enum. Se eligió la variant "neutral/placeholder" como default en cada caso (`GovernmentForm::Anarchy`, `CultureType::Generic`, `ReligionType::Folk`, `ReligionExpansion::Culture`, `RouteGroup::Roads`, `IceKind::Glacier`, `FeatureType::Ocean`).
 - **Porte manual de `delaunator@5.1.0` en vez del crate `delaunator` (Rust)** (25 jul 2026): el crate `delaunator = "1.1"` de crates.io NO es bit-exacto contra el JS `delaunator@5.1.0` (npm) que Azgaar usa según `azgaar-fmg/package-lock.json:1599`. Causa raíz: el crate `robust = "1.2"` reimplementa Shewchuk de forma distinta (signo del `orient2dadapt` no negado, constante `THETA` vs `ccwerrboundA`) y además `delaunator-rs` tiene un bug en `find_closest_point` (filtra `d > 0` indiscriminadamente en ambos usos). Resultado: divergencia de 6280 entradas en `triangles` y 12145 en `halfedges` sobre los 10000 puntos jittered `placePoints(2000,2000,10000,"861039636")`. Decisión: porte manual bit-exacto en `crates/vor-import/src/geometry/delaunay.rs`, replicando el fuente JS 1-a-1 (incluyendo los robust predicates inline de Shewchuk). Esto sigue el patrón del porte de `Alea@1.0.1` y garantiza bit-exactitud (hallazgo fase-0 §13.4 crítico para que atributos del `.map` queden en celdas correctas).
+- **wgpu 22 fijado por compatibilidad con egui-wgpu 0.29** (26 jul 2026): egui-wgpu 0.29 depende de wgpu ^22.1.0. wgpu 23 causa conflicto de dependencias. Decisión: wgpu 22 hasta que egui-wgpu mueva a 23+.
+- **egui incluido desde Fase 2, no diferido a Fase 5** (26 jul 2026, decisión de Hans): overlay egui mínimo con FPS/info desde el día 1 del visor.
+- **`cell_rings` en vor-core::VoronoiVertices** (26 jul 2026): viola el principio "cells.v es derivable del Delaunay" de Fase 1, pero es necesario porque vor-render no puede depender de vor-import (regla dura del plan). Se marcó `#[serde(skip)]` para no persistirlo en `.gmap`.
+- **Render en dos passes wgpu** (26 jul 2026): Pass 1 = heightmap con `ClearOp::Clear`; Pass 2 = egui con `LoadOp::Load` sobre la misma surface. Evita composición en CPU.
+- **Desktop-only en Fase 2** (26 jul 2026): no se construye ni prueba en web/WASM. winit 0.30 con features x11+wayland.
+- **`forget_lifetime()` para egui-wgpu** (26 jul 2026): egui_wgpu::Renderer::render requiere `RenderPass<'static>`. Se usa `RenderPass::forget_lifetime()` que es safe porque el pass internamente no retiene referencias reales al encoder (el lifetime es un `PhantomData` de guardia).
 
 ## Bloqueos / cosas pendientes de confirmar
 

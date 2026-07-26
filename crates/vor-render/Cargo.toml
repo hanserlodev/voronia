@@ -9,3 +9,15 @@ description = "Pipeline wgpu de Voronia: capas, cámara ortográfica 2D, triangu
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+vor-core = { path = "../vor-core" }
+wgpu.workspace = true
+lyon = { workspace = true, features = ["extra"] }
+glam.workspace = true
+bytemuck.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true

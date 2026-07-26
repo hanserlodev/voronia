@@ -12,6 +12,12 @@
 /// (el circumcenter de ese triángulo). `positions[t]`, `adjacent_cells[t]` y
 /// `adjacent_vertices[t]` describen ese vértice. Los IDs `-1` en `adjacent_vertices`
 /// marcan bordes (sin triángulo vecino del lado opuesto).
+///
+/// Además el campo `cell_rings` (las `cells.v` de Azgaar) guarda, por cada celda `p`
+/// (= punto), la lista de IDs de triángulos cuyos circumcentros conforman el polígono
+/// de la celda, en orden CCW. **No se persiste** (es derivable del Delaunay), pero
+/// `vor-import` lo repuebla en runtime — el renderer lo necesita para triangular el
+/// polígono de cada celda sin tener que recalcular geometría.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct VoronoiVertices {
     /// Coordenadas `[x, y]` del vértice. **Enteros** en Azgaar (por `Math.floor` en `circumcenter`);
@@ -22,6 +28,12 @@ pub struct VoronoiVertices {
     /// IDs de los 3 triángulos vecinos (uno por half-edge opuesto). `-1` si el half-edge
     /// es de borde (sin triángulo vecino).
     pub adjacent_vertices: Vec<[i32; 3]>,
+    /// `cells.v[p]` de Azgaar: IDs de triángulos cuyos circumcentros conforman el polígono
+    /// de la celda `p`, en orden CCW (vía `edgesAroundPoint`, cap 20). No se persiste
+    /// (derivable del Delaunay); `vor-import` lo repuebla en runtime para que el renderer
+    /// no recalcula mallas.
+    #[serde(skip)]
+    pub cell_rings: Vec<Vec<u32>>,
 }
 
 impl VoronoiVertices {
