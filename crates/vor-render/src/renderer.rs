@@ -163,7 +163,7 @@ impl Renderer {
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None,
                 ..Default::default()
             },
             depth_stencil: None,
@@ -268,6 +268,18 @@ impl Renderer {
             pass.set_vertex_buffer(0, vbo.slice(..));
             pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..count, 0, 0..1);
+        }
+    }
+
+    pub fn layer_vertex_count(&self, layer_index: usize) -> usize {
+        if layer_index == 0 {
+            self.index_count as usize
+        } else {
+            let idx = layer_index - 1;
+            self.layers
+                .get(idx)
+                .map(|l| l.index_count as usize)
+                .unwrap_or(0)
         }
     }
 

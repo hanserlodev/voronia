@@ -1,7 +1,7 @@
 # Fase 3 — Capas completas de renderizado
 
 > Registro cronológico de la sesión. Formato: `docs/fase-0-investigacion.md`.
-> Última actualización: 27 julio 2026 — Fase 3 IMPLEMENTADA.
+> Última actualización: 27 julio 2026 — Fase 3 COMPLETADA (todos los fixes aplicados).
 
 ---
 
@@ -71,6 +71,18 @@ Se agregó `LayerBuffer` (vertex/index buffer + count) y `layers: Vec<LayerBuffe
 
 **Picking**: click derecho → `screen_to_world` → `pick_cell()` (O(n) sobre puntos pack, threshold 20px).
 
+### Hallazgo crítico — egui texture upload (26 jul 2026)
+
+La GUI egui (panel lateral, FPS, labels) no se veía. Causa raíz: egui escribe `output.textures_delta.set` para registrar que el font atlas ha cambiado (primera vez y cada vez que se añade un carácter nuevo), pero el código no llamaba a `egui_renderer.update_texture()`. Sin eso, `egui_wgpu::Renderer::render()` comprueba `self.textures.contains_key(id)`, falla y salta todos los draw calls — incluso rectángulos sólidos.
+
+**Fix**: iterar `output.textures_delta.set` y llamar `update_texture()` para cada `(id, delta)` antes de `update_buffers()`.
+
+### Hallazgo crítico — cull_mode back-face en viewer 2D (27 jul 2026)
+
+Ríos, fronteras (estado/provincia/cultura) y burgos no se renderizaban aunque los meshes se construían correctamente con vértices e índices válidos. Causa raíz: la proyección ortográfica 2D en `camera.rs:77-78` invierte Y explícitamente (`bottom = cy + ey/2 > top = cy - ey/2` → `orthographic_rh` produce `rcp_height = 1/(top - bottom)` negativo). El pipeline usaba `cull_mode: Some(wgpu::Face::Back)` con `front_face: Ccw`. Esto funcionaba para el heightmap porque lyon tesela polígonos de Voronoi en sentido horario (CW) — que sobreviven al Y-flip y aparecen CCW en clip. Pero los quads de ríos/fronteras/burgos se construyen en CCW y tras el Y-flip quedan CW en clip → cullingados → invisibles.
+
+**Fix**: `cull_mode: None` — un viewer 2D con mapa plano nunca necesita back-face culling (no hay geometría ocluida).
+
 ### Paso 7 — Validación runtime
 
 ```
@@ -81,7 +93,7 @@ INFO  vor_app > heightmap mesh: 58010 vertices, 114030 indices (bounds [-9.0, -9
 INFO  vor_app > meshes: biomes=42179v/82926i, rivers=808v/1212i, borders(s/p/c)=(25632/44952/31856), burgs=3027v/3027i
 ```
 
-El visor abre correctamente con todas las capas renderizadas. 48 tests verdes, clippy limpio (1 warning dead_code), fmt limpio.
+El visor abre correctamente con todas las capas renderizadas, incluyendo ríos (azul, grosor variable por caudal), fronteras (rojo estado, amarillo provincia, naranja cultura) y burgos (triángulos rojos). 47 tests verdes, clippy/fmt limpios.
 
 ---
 
@@ -105,6 +117,10 @@ A crates/vor-render/src/layers.rs             (LayerFlags)
 M crates/vor-render/src/renderer.rs           (+layers vec, add_layer_mesh, draw_layer)
 M crates/vor-render/src/lib.rs                (+export new modules)
 M crates/vor-app/src/lib.rs                   (+world, layers, picking en State/redraw)
+- - - (sesión 2: fixes post-Fase 2) - - -
+M crates/vor-render/src/renderer.rs           (cull_mode: None fix)
+M .opencode/skills/voronia-dev/references/status.md (fix docs)
+A docs/fase-3.md                              (this file, update with hallazgos)
 ```
 
 ---
@@ -112,10 +128,10 @@ M crates/vor-app/src/lib.rs                   (+world, layers, picking en State/
 ## Estado final
 
 ```
-cargo test --workspace:  ✓ 48 tests (same as Fase 2, no regressions)
-cargo clippy --all-targets: ✓ 0 errors, 1 warning (dead_code mesh_bounds_min/max)
+cargo test --workspace:  ✓ 47 tests
+cargo clippy --all-targets: ✓ 0 errors, 2 warnings (dead_code pre-existente)
 cargo fmt --all:           ✓ limpio
-cargo run --bin vor:       ✓ visor abre con todas las capas
+cargo run --bin vor:       ✓ visor abre con TODAS las capas (incluye ríos, fronteras, burgos)
 ```
 
 ### Checklist Fase 3 (plan maestro §23)

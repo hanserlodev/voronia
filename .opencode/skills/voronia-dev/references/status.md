@@ -2,13 +2,15 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 27 julio 2026 (Fase 3 completa — fix de textura egui + UI panel + labels + población)
+**Última actualización**: 27 julio 2026 (Fase 3 completa — + cull_mode None fix ríos/fronteras/burgos)
 
 ## Fase actual del roadmap
 
-**Fase 3 — Capas completas de renderizado**: ✓ **IMPLEMENTADA**. Todas las capas de render funcionando: heightmap, biomas, ríos (polilíneas con grosor variable según caudal), fronteras de estados/provincias/culturas, burgos (triángulos), labels de nombres de burgo en overlay egui con skip de panel. Sistema de toggles por capa en SidePanel izquierdo. Picking con click derecho → panel de info con celda seleccionada (altura, bioma, estado, cultura, provincia, burgo, río, población real = pts * population_rate). Población se muestra en habitantes (multiplicada por `population_rate` del .map, default 1000). Panel muestra FPS, coordenadas cámara, cursor mundo. 48 tests verdes (sin regresión), clippy clean (1 warning dead_code en mesh_bounds), fmt clean. Bin `vor` carga Sorvik y muestra capas correctamente con GUI egui funcional.
+**Fase 3 — Capas completas de renderizado**: ✓ **IMPLEMENTADA**. Todas las capas de render funcionando: heightmap, biomas, ríos (polilíneas con grosor variable según caudal), fronteras de estados/provincias/culturas, burgos (triángulos), labels de nombres de burgo en overlay egui con skip de panel. Sistema de toggles por capa en SidePanel izquierdo. Picking con click derecho → panel de info con celda seleccionada (altura, bioma, estado, cultura, provincia, burgo, río, población real = pts * population_rate). Población se muestra en habitantes (multiplicada por `population_rate` del .map, default 1000). Panel muestra FPS, coordenadas cámara, cursor mundo. 47 tests verdes, clippy/fmt clean. Bin `vor` carga Sorvik y muestra TODAS las capas.
 
-**Fix crítico aplicado (26 jul 2026)**: la GUI egui no se veía porque faltaba llamar a `egui_renderer.update_texture()` con `output.textures_delta`. Sin eso, el font atlas nunca se subía a GPU, y `egui_wgpu::Renderer::render` saltaba todos los draw calls por no encontrar la textura de fuentes (todas las meshes de egui usan `TextureId::Egui` incluso rectángulos sólidos). Fix: iterar `output.textures_delta.set` y llamar `update_texture` para cada (id, delta).
+**Fix crítico 1 — egui texture upload (26 jul 2026)**: faltaba llamar a `egui_renderer.update_texture()` con `output.textures_delta`. Sin eso, el font atlas nunca se subía a GPU.
+
+**Fix crítico 2 — cull_mode (27 jul 2026)**: la proyección ortográfica 2D invierte Y (`bottom > top` en `orthographic_rh`). El pipeline usaba `cull_mode: Some(Face::Back)` con `front_face: Ccw`. Los quads de ríos/bordes/burgos se construyen en CCW, pero tras la proyección con Y-flip, algunos triángulos quedaban CW y se cullingaban (desaparecían). La altura/biomas funcionaban porque lyon tesela los polígonos de Voronoi en CW, sobreviviendo al flip. Fix: `cull_mode: None` — un viewer 2D no necesita back-face culling.
 
 **Fase 2 — Visor GPU mínimo**: ✓ **COMPLETADA**. Ventana winit 0.30 + wgpu 22 + cámara ortográfica 2D con pan/zoom + capa heightmap (triangulación con lyon, color por altura) + overlay egui 0.29 (FPS, cursor, info cámara, path del mapa). Bin `vor` que carga `.map` reales y abre el visor. 48 tests verdes, clippy clean, fmt clean. Documento de fase: `docs/fase-2.md`.
 
@@ -46,7 +48,7 @@
 - [x] **vor-render::Renderer** — pipeline wgpu + shaders WGSL + buffers GPU. Campos `pub` para que vor-app gestione los passes.
 - [x] **vor-app::State** — winit 0.30 (ApplicationHandler), wgpu 22, egui 0.29 integrado. Overlay egui con FPS, cursor, info cámara, path. Pan con botón izq, zoom con rueda.
 - [x] **vor-cli** — bin `vor` que carga `.map` vía vor-import y abre el visor.
-- [x] **Tests/sanity** — 48 tests verdes (`cargo test --workspace`), clippy 0 warnings, fmt clean. 7 tests nuevos en vor-render (cámara + rampa color).
+- [x] **Tests/sanity** — 47 tests verdes (`cargo test --workspace`), clippy 0 warnings, fmt clean. 7 tests nuevos en vor-render (cámara + rampa color).
 - [ ] **Prueba end-to-end** — correr `cargo run --bin vor -- /path/to/map.map` para ver si el visor abre correctamente en X11/Wayland. Falta hacerlo.
 
 ## Decisiones tomadas (fuera de las que ya están en el plan maestro)
@@ -70,6 +72,7 @@
 - **Render en dos passes wgpu** (26 jul 2026): Pass 1 = heightmap con `ClearOp::Clear`; Pass 2 = egui con `LoadOp::Load` sobre la misma surface. Evita composición en CPU.
 - **Desktop-only en Fase 2** (26 jul 2026): no se construye ni prueba en web/WASM. winit 0.30 con features x11+wayland.
 - **`forget_lifetime()` para egui-wgpu** (26 jul 2026): egui_wgpu::Renderer::render requiere `RenderPass<'static>`. Se usa `RenderPass::forget_lifetime()` que es safe porque el pass internamente no retiene referencias reales al encoder (el lifetime es un `PhantomData` de guardia).
+- **`cull_mode: None` en pipeline de mapa** (27 jul 2026): la proyección ortográfica 2D invierte Y (`bottom > top` en `camera.rs:77-78`). Con `cull_mode: Some(Face::Back), front_face: Ccw`, los triángulos CCW en mundo (ríos/bordes/burgos) se vuelven CW en clip tras el Y-flip y se cullingan. `cull_mode: None` es correcto para un viewer 2D (el mapa siempre mira de frente, no hay geometría ocluida).
 
 ## Bloqueos / cosas pendientes de confirmar
 
