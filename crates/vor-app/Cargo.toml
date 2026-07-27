@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 vor-core = { path = "../vor-core" }
+vor-format = { path = "../vor-format" }
 vor-import = { path = "../vor-import" }
 vor-render = { path = "../vor-render" }
 wgpu.workspace = true

@@ -2,11 +2,15 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 27 julio 2026 (Fase 3 completa — + cull_mode None fix ríos/fronteras/burgos)
+**Última actualización**: 27 julio 2026 (Fase 4 completada — formato `.vorn` implementado)
 
 ## Fase actual del roadmap
 
-**Fase 3 — Capas completas de renderizado**: ✓ **IMPLEMENTADA**. Todas las capas de render funcionando: heightmap, biomas, ríos (polilíneas con grosor variable según caudal), fronteras de estados/provincias/culturas, burgos (triángulos), labels de nombres de burgo en overlay egui con skip de panel. Sistema de toggles por capa en SidePanel izquierdo. Picking con click derecho → panel de info con celda seleccionada (altura, bioma, estado, cultura, provincia, burgo, río, población real = pts * population_rate). Población se muestra en habitantes (multiplicada por `population_rate` del .map, default 1000). Panel muestra FPS, coordenadas cámara, cursor mundo. 47 tests verdes, clippy/fmt clean. Bin `vor` carga Sorvik y muestra TODAS las capas.
+**Fase 3 — Capas completas de renderizado**: ✓ **COMPLETADA**.
+
+**Fase 4 — Formato `.vorn`**: ✓ **COMPLETADA** (27 jul 2026). Nombre: `.vorn` (Vorn World File). Esquema serde + bincode v1 en `vor-format` con header de 16 bytes (magic VORN + version + metadata_len + compression flag), metadata versionada. Load 2.4× más rápido que re-importar desde `.map` (Sorvik: 37ms vs 90ms). Save: 18ms. Autosave periódico integrado en vor-app (toggle en panel lateral, default cada 60s, guarda a `<source>.vorn`). 5 tests de formato nuevos, 53 tests total workspace, clippy/fmt clean.
+
+Todas las capas de render funcionando: heightmap, biomas, ríos (polilíneas con grosor variable según caudal), fronteras de estados/provincias/culturas, burgos (triángulos), labels de nombres de burgo en overlay egui con skip de panel. Sistema de toggles por capa en SidePanel izquierdo. Picking con click derecho → panel de info con celda seleccionada (altura, bioma, estado, cultura, provincia, burgo, río, población real = pts * population_rate). Población se muestra en habitantes (multiplicada por `population_rate` del .map, default 1000). Panel muestra FPS, coordenadas cámara, cursor mundo. 47 tests verdes, clippy/fmt clean. Bin `vor` carga Sorvik y muestra TODAS las capas.
 
 **Fix crítico 1 — egui texture upload (26 jul 2026)**: faltaba llamar a `egui_renderer.update_texture()` con `output.textures_delta`. Sin eso, el font atlas nunca se subía a GPU.
 
@@ -68,7 +72,7 @@
 - **Porte manual de `delaunator@5.1.0` en vez del crate `delaunator` (Rust)** (25 jul 2026): el crate `delaunator = "1.1"` de crates.io NO es bit-exacto contra el JS `delaunator@5.1.0` (npm) que Azgaar usa según `azgaar-fmg/package-lock.json:1599`. Causa raíz: el crate `robust = "1.2"` reimplementa Shewchuk de forma distinta (signo del `orient2dadapt` no negado, constante `THETA` vs `ccwerrboundA`) y además `delaunator-rs` tiene un bug en `find_closest_point` (filtra `d > 0` indiscriminadamente en ambos usos). Resultado: divergencia de 6280 entradas en `triangles` y 12145 en `halfedges` sobre los 10000 puntos jittered `placePoints(2000,2000,10000,"861039636")`. Decisión: porte manual bit-exacto en `crates/vor-import/src/geometry/delaunay.rs`, replicando el fuente JS 1-a-1 (incluyendo los robust predicates inline de Shewchuk). Esto sigue el patrón del porte de `Alea@1.0.1` y garantiza bit-exactitud (hallazgo fase-0 §13.4 crítico para que atributos del `.map` queden en celdas correctas).
 - **wgpu 22 fijado por compatibilidad con egui-wgpu 0.29** (26 jul 2026): egui-wgpu 0.29 depende de wgpu ^22.1.0. wgpu 23 causa conflicto de dependencias. Decisión: wgpu 22 hasta que egui-wgpu mueva a 23+.
 - **egui incluido desde Fase 2, no diferido a Fase 5** (26 jul 2026, decisión de Hans): overlay egui mínimo con FPS/info desde el día 1 del visor.
-- **`cell_rings` en vor-core::VoronoiVertices** (26 jul 2026): viola el principio "cells.v es derivable del Delaunay" de Fase 1, pero es necesario porque vor-render no puede depender de vor-import (regla dura del plan). Se marcó `#[serde(skip)]` para no persistirlo en `.gmap`.
+- **`cell_rings` en vor-core::VoronoiVertices** (26 jul 2026): viola el principio "cells.v es derivable del Delaunay" de Fase 1, pero es necesario porque vor-render no puede depender de vor-import (regla dura del plan). Se marcó `#[serde(skip)]` para no persistirlo en `.vorn`.
 - **Render en dos passes wgpu** (26 jul 2026): Pass 1 = heightmap con `ClearOp::Clear`; Pass 2 = egui con `LoadOp::Load` sobre la misma surface. Evita composición en CPU.
 - **Desktop-only en Fase 2** (26 jul 2026): no se construye ni prueba en web/WASM. winit 0.30 con features x11+wayland.
 - **`forget_lifetime()` para egui-wgpu** (26 jul 2026): egui_wgpu::Renderer::render requiere `RenderPass<'static>`. Se usa `RenderPass::forget_lifetime()` que es safe porque el pass internamente no retiene referencias reales al encoder (el lifetime es un `PhantomData` de guardia).
@@ -77,7 +81,7 @@
 ## Bloqueos / cosas pendientes de confirmar
 
 - **`Cargo.lock` sigue ignorado** (decisión heredada del commit inicial — ver nota adjunta en `.gitignore`). Para un workspace con binarios normalmente se commitea; sin decisión final todavía.
-- Ver plan maestro §26 (decisiones pendientes) para el resto: `.gmap` vs `.mapg`, alcance de soporte a `.map` legacy más allá del parser, prioridad Fase 8, etc.
+- **Nombre del formato decidido**: `.vorn` (Vorn World File). Ver §8.2 del plan maestro. El placeholder `.gmap` queda reemplazado definitivamente.
 - **Divergencia verificada entre `azgaar-fmg` (repo clonado v1.138.0 según header de Brample) y el `.map` "Brample" real (generado el 22 jul 2026, un día posterior al último commit del clon `51d8e3e`)**: el algoritmo `placePoints`/`getJitteredGrid` del repo produce puntos divergentes contra el slot `[6]` de Brample con el mismo seed `861039636` y `cellsDesired=10000`. Confirmado bit-exacto Rust↔JS-standalone-replicando-el-bg-master-actual, lo que implica que el Brample fue generado con **una build de azgaar.github.io más nueva que el último commit del repo clonado**. Por eso:
   * Mi fixture `crates/vor-import/tests/reference/grid_2000x2000_c10k_seed_861039636_selfref.json` es **self-reference** — valida Rust contra el álgoritmo actual del repo, no contra el Brample.
   * Hans generará un nuevo `.map` de referencia desde azgaar.github.io (master actual en producción) y lo dejará en `~/Descargas/`. El item "Test end-to-end: cargar .map de referencia → World Data Model" usará ese nuevo archivo.

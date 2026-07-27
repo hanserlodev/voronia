@@ -367,7 +367,7 @@ Todos los counts calcen con dump Python del archivo y con `Loader::load` output.
 | Item | Por qué | Plan maestro ref |
 |---|---|---|
 | **Parser JSON export (modo Full)** | Requiere `aleaPRNG 1.1.0` + `randomizeOptions` (tramo setSeed→generateGrid) que NO se necesita para importar `.map` ya generados (fase-0 §13.4) | §23 Fase 1 "Parser JSON export Full DIFERIDO" |
-| **Formato `.gmap` (save/load binario)** | Fase 4 dedicada | §23 Fase 4 |
+| **Formato `.vorn` (save/load binario)** | Fase 4 dedicada | §23 Fase 4 |
 | **Generación procedural nativa (heightmap, ríos, culturas, etc.)** | Fase 7 (XL) | §23 Fase 7 |
 | **Visor GPU (winit/wgpu/lyon)** | Fase 2 (M) — **PRÓXIMA** | §23 Fase 2 |
 

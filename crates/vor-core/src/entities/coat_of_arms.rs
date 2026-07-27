@@ -8,6 +8,6 @@
 pub struct CoatOfArms {
     /// Payload opaco del blasón. Preserva todo el JSON de Azgaar (= interoperabilidad
     /// total con Armoria/MFCG sin perder datos al importar).
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub payload: serde_json::Value,
 }

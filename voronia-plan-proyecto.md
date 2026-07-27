@@ -18,7 +18,7 @@ Azgaar's Fantasy Map Generator es una app web (JS/TS) que genera y edita mapas d
 
 Este proyecto **no es un port ni un wrapper de Azgaar**. Es un motor nativo (Rust + wgpu) que:
 1. Puede **importar** datos generados por Azgaar (`.map` / JSON export).
-2. Convierte esos datos a un **formato binario propio optimizado para GPU** (`.gmap`).
+2. Convierte esos datos a un **formato binario propio optimizado para GPU** (`.vorn`).
 3. Renderiza con aceleración por hardware real (no SVG/DOM).
 4. Eventualmente **reimplementa y expande** toda la lógica procedural de Azgaar de forma nativa, para dejar de depender de Azgaar por completo.
 5. Se mantiene **de código abierto**, con atribución correcta a Azgaar por la lógica/algoritmos de referencia.
@@ -71,7 +71,7 @@ Construir un motor de mundos de fantasía nativo, rápido y extensible — inspi
 
 - [ ] Renderizar mapas de decenas/cientos de miles de celdas a 60 FPS con pan/zoom fluido.
 - [ ] Leer mapas existentes de Azgaar (`.map` y JSON export) con fidelidad geométrica.
-- [ ] Definir un formato binario propio (`.gmap`) como fuente de verdad interna, rápido de cargar/guardar.
+- [ ] Definir un formato binario propio (`.vorn`) como fuente de verdad interna, rápido de cargar/guardar.
 - [ ] Reimplementar (progresivamente) toda la lógica procedural de Azgaar en Rust.
 - [ ] Ofrecer edición interactiva (terreno, entidades, fronteras) con undo/redo real.
 - [ ] Expandir capacidades más allá de lo que Azgaar permite hoy (ver §21).
@@ -128,7 +128,7 @@ Alternativa de respaldo si en algún momento no convence: `Mundrift` (nombre inv
 
 - Todo el código: 0% JS/TS de Azgaar se reutiliza literalmente. Se reimplementa en Rust desde cero.
 - El renderer: de SVG/DOM a pipeline GPU (wgpu).
-- El formato de persistencia interno: de `.map` (texto custom + SVG embebido) a `.gmap` (binario propio).
+- El formato de persistencia interno: de `.map` (texto custom + SVG embebido) a `.vorn` (binario propio).
 - La UI: de HTML/CSS a UI nativa inmediata (egui, ver §12).
 
 ### 2.3 Licencia y atribución
@@ -187,7 +187,7 @@ Si cualquiera de estos pasos difiere aunque sea ligeramente del original, **los 
 4. **Incremental, no big-bang.** Cada fase entrega algo usable y demostrable (ver §23).
 5. **El `.map` de Azgaar es un formato de intercambio, no el modelo interno.** Voronia nunca piensa "en términos de Azgaar" puertas adentro — solo en el import/export.
 6. **Extensible desde el día uno.** El sistema procedural se diseña para poder agregar nuevos generadores sin tocar el core (ver §21.4, sistema de plugins).
-7. **Todo dato serializable y versionado.** El formato `.gmap` lleva número de versión desde la v1 para poder evolucionar sin romper mapas guardados.
+7. **Todo dato serializable y versionado.** El formato `.vorn` lleva número de versión desde la v1 para poder evolucionar sin romper mapas guardados.
 
 ---
 
@@ -222,7 +222,7 @@ Si cualquiera de estos pasos difiere aunque sea ligeramente del original, **los 
               │               │               │
               └───────┬───────┴───────┬───────┘
                       ▼               ▼
-                 .gmap (save)   GPU Framebuffer
+                 .vorn (save)   GPU Framebuffer
                       │               │
                       ▼               ▼
                    Disco          Pantalla (winit/egui)
@@ -235,7 +235,7 @@ Import:   .map/JSON  → import layer → World Data Model
 Generate: settings    → simulation engine → World Data Model
 Edit:     UI input    → edit engine → World Data Model (mutación controlada)
 Render:   World Data Model → render engine → GPU → pantalla
-Save:     World Data Model → serializer → .gmap
+Save:     World Data Model → serializer → .vorn
 Export:   World Data Model → exporters → PNG/SVG/GeoJSON/.map-compatible
 ```
 
@@ -498,13 +498,13 @@ Todos confirmados en el modelo real de Azgaar; se listan de forma compacta (estr
 
 En ambos casos aplica el hallazgo de §3: la geometría no viene en el archivo, se regenera.
 
-### 8.2 Formato interno propio: `.gmap`
+### 8.2 Formato interno propio: `.vorn`
 
 - **Binario**, no texto — prioriza velocidad de carga sobre legibilidad humana.
 - Contiene: cabecera con versión de formato + metadata (nombre del mundo, semilla, fecha, versión de Voronia que lo generó) + el `World Data Model` completo serializado + (opcionalmente) buffers ya pre-triangulados listos para subir a GPU, para saltarse la tesselation en cada carga.
 - Serialización v1 con `bincode`; evaluar migración a `rkyv` (zero-copy) si los tiempos de carga en mapas grandes no son suficientes.
 - Versionado desde el día 1 (`u16 format_version` en la cabecera) para poder migrar mapas guardados cuando el modelo de datos evolucione.
-- **Decisión pendiente de naming exacto**: `.gmap` es la opción por defecto en este documento (users mismo lo propuso, "g" de GPU). Alternativa: `.mapg`. Antes de fijarlo, vale la pena una revisión rápida de que no colisione fuerte con extensiones ya establecidas en otro software (p. ej. algunas herramientas GPS/GIS usan nombres parecidos) — ver §26.
+- **Formato `.vorn`** (Vorn World File, de "Voronoi"): nombre definitivo del formato binario. Reemplaza al placeholder `.gmap` que se usó durante las fases de diseño. Extensión `.vorn` — corta, original, sin colisiones con formatos existentes. El nombre completo del formato es "Vorn" y se refiere a él como "Vorn World File" o "formato Vorn".
 
 ### 8.3 Exportación
 
@@ -682,7 +682,7 @@ voronia/
 ├── crates/
 │   ├── vor-core/                # World Data Model (§7), sin lógica ni render
 │   ├── vor-import/               # parsers .map / JSON de Azgaar + regeneración de geometría (§3, §8.1)
-│   ├── vor-format/                # serialización .gmap (§8.2)
+│   ├── vor-format/                # serialización .vorn (§8.2)
 │   ├── vor-sim/                    # motor de simulación procedural (§10)
 │   ├── vor-render/                 # pipeline wgpu, capas, cámara (§9)
 │   ├── vor-edit/                    # comandos de edición + undo/redo (§11)
@@ -710,7 +710,7 @@ Separar en crates desde el inicio fuerza los límites de dependencia correctos (
 
 Azgaar mismo advierte a sus usuarios que **si se pierde el archivo `.map`, no hay forma de recuperar el progreso** — esto es una limitación conocida y real, no una suposición. Voronia debe mejorar esto explícitamente:
 
-- Autosave periódico a `.gmap` en una ubicación de datos local (no depende de que el usuario recuerde exportar).
+- Autosave periódico a `.vorn` en una ubicación de datos local (no depende de que el usuario recuerde exportar).
 - Guardado versionado / historial de snapshots (al menos los últimos N autosaves, configurable).
 - Recuperación ante cierre inesperado (detectar sesión anterior no cerrada correctamente al iniciar).
 
@@ -721,7 +721,7 @@ Azgaar mismo advierte a sus usuarios que **si se pierde el archivo `.map`, no ha
 - **Tests unitarios** de cada generador con semilla fija — dado el mismo seed, el output debe ser byte-idéntico entre corridas (regresión).
 - **Tests de import**: cargar mapas reales exportados de Azgaar (varios tamaños/templates) y verificar que la geometría regenerada coincide con lo esperado.
 - **Snapshot testing visual**: renders de referencia (PNG) comparados por diff perceptual, para detectar regresiones visuales en el renderer.
-- **Benchmarks** (`criterion`) sobre: tiempo de generación por tamaño de mapa, tiempo de carga de `.gmap`, FPS de pan/zoom en mapas de referencia (10k/50k/100k celdas).
+- **Benchmarks** (`criterion`) sobre: tiempo de generación por tamaño de mapa, tiempo de carga de `.vorn`, FPS de pan/zoom en mapas de referencia (10k/50k/100k celdas).
 - CI corre benchmarks y falla si hay una regresión de rendimiento mayor a un umbral definido.
 
 ---
@@ -849,7 +849,7 @@ Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de
 - [x] Sistema de toggles de capas.
 - [x] Picking (click → info de celda/entidad).
 
-### Fase 4 — Formato `.gmap` · `M`
+### Fase 4 — Formato `.vorn` · `M`
 - [ ] Definir el esquema completo con `serde` + `bincode`, versión 1.
 - [ ] Save/load, con benchmark de velocidad vs re-importar desde JSON.
 - [ ] Autosave básico (§15).
@@ -893,7 +893,7 @@ Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de
 Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son promesas duras, son metas de diseño:
 
 - Mapas de hasta **100.000 celdas** (el máximo actual que permite Azgaar) renderizando a **60 FPS** de pan/zoom en una RTX 4060 Mobile (8GB) o equivalente.
-- Carga de un `.gmap` de un mapa grande en **menos de 1 segundo**.
+- Carga de un `.vorn` de un mapa grande en **menos de 1 segundo**.
 - Import/conversión desde JSON de Azgaar de un mapa típico (10k–30k celdas) en **menos de 5 segundos** (incluye recomputar geometría, §3).
 - Togglear cualquier capa de renderizado sin frame drop perceptible.
 
@@ -906,7 +906,7 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 | No lograr reproducir bit-exacto la geometría de Azgaar (§3) | Alto — rompe compatibilidad de import | Plan B: soportar solo JSON export reciente, documentar dependencia de versión; invertir tiempo extra en Fase 0/1 antes de seguir |
 | Alcance del motor de generación nativo (Fase 7) subestimado | Alto — es la fase más grande con diferencia | Fases 0-6 ya entregan valor real (visor + editor) sin depender de tener Fase 7 completa; se puede vivir un buen tiempo importando mapas ya generados en Azgaar |
 | Fatiga de proyecto (solo dev, muchas fases) | Medio | Cada fase entrega algo demostrable/usable por sí sola (principio de diseño §4.4); usar Claude Code agresivamente para reducir fricción de escritura de código |
-| Colisión de nombre `.gmap` con formato existente | Bajo | Revisar antes de fijar el nombre definitivo (§8.2, §26) |
+| Colisión de nombre `.vorn` con formato existente | Ninguno | Se verificó contra fileinfo/file-extensions/justsolve: sin colisiones. Decisión: `.vorn` — ver §8.2 |
 | Deriva de la lógica de Azgaar (el proyecto original sigue evolucionando activamente, última release detectada: v1.119) | Bajo-Medio | Fijar la investigación de Fase 0 a una versión/commit específico de Azgaar como referencia, documentarlo, no perseguir cada cambio upstream |
 
 ---
@@ -914,7 +914,7 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 ## 26. Decisiones pendientes
 
 - [x] Nombre del proyecto: `Voronia` (§1.3) — falta solo la verificación final de registro exacto en GitHub/crates.io al crear el repo.
-- [ ] `.gmap` vs `.mapg` vs otro — y confirmar que no colisiona con un formato ya establecido.
+- [x] Nombre del formato binario: `.vorn` (Vorn World File). Verificado sin colisiones. Decisión tomada 27 jul 2026.
 - [ ] ¿`bincode` es suficiente para siempre, o se planifica desde ya la migración a `rkyv`?
 - [x] ¿Soporte a `.map` legacy es un requisito real de v1, o alcanza con JSON export? (afecta el esfuerzo de Fase 1). → **Resuelto (25 jul 2026, Hans)**: Fase 1 scopea solo `.map` legacy (slot-by-slot), JSON export Full DIFERIDO. Validado handshake vs `.map` real Azgaar 1.138.0 (Sorvik). El `.map` legacy queda como vía de import soportada oficial en v1.
 - [ ] Alcance exacto de Fase 8 (qué extensión de §21 se prioriza primero).

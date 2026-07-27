@@ -9,7 +9,7 @@ Import:   .map/JSON (Azgaar) → vor-import (regenera geometría + mapea atribut
 Generate: parámetros/semilla   → vor-sim                                          → World Data Model
 Edit:     input de usuario     → vor-edit (comandos undo/redo-able)               → World Data Model (mutación controlada)
 Render:   World Data Model     → vor-render                                       → GPU → pantalla (solo lectura, nunca escribe)
-Save:     World Data Model     → vor-format                                       → .gmap
+Save:     World Data Model     → vor-format                                       → .vorn
 ```
 
 ## World Data Model (`vor-core`) — campos clave
@@ -32,7 +32,7 @@ Antes de implementar cualquiera de estas entidades a fondo, confirmar el detalle
 ## Formatos de archivo
 
 - **Entrada**: JSON export completo de Azgaar (prioridad 1, más limpio) o `.map` legacy (prioridad 2, incluye un bloque SVG embebido que no aporta datos, solo ruido). En ambos casos, la geometría no viene en el archivo — hay que regenerarla (ver hallazgo crítico).
-- **`.gmap` (formato propio)**: binario, no texto. Cabecera con versión + metadata (nombre, semilla, fecha, versión de Voronia que lo generó) + World Data Model serializado + opcionalmente buffers pre-triangulados listos para GPU. Versionado desde el día 1 (`u16 format_version`) para poder migrar sin romper mapas guardados.
+- **`.vorn` (formato propio — Vorn World File)**: binario, no texto. Cabecera con versión + metadata (nombre, semilla, fecha, versión de Voronia que lo generó) + World Data Model serializado + opcionalmente buffers pre-triangulados listos para GPU. Versionado desde el día 1 (`u16 format_version`) para poder migrar sin romper mapas guardados.
 - **Salida**: PNG a resolución arbitraria, SVG, GeoJSON, y opcionalmente JSON compatible con Azgaar (ida y vuelta entre herramientas).
 
 ## Pipeline de render (`vor-render`)

@@ -1,13 +1,13 @@
 ---
 name: voronia-dev
-description: Contexto experto y siempre vigente del proyecto Voronia (motor nativo en Rust + wgpu para generación y edición de mundos de fantasía, inspirado en Azgaar's Fantasy Map Generator). Usar esta skill SIEMPRE que se trabaje dentro del repo de Voronia o se hable de él — escribir o revisar código Rust de cualquier crate del workspace, tocar el World Data Model, el importador de mapas de Azgaar (.map/JSON), el formato .gmap, el renderer wgpu, el motor de simulación procedural (heightmap, hidrología, culturas, estados, religiones, rutas), la UI egui, o cualquier decisión de arquitectura. También cuando se mencione "Voronia", se pida seguir con "el motor de mapas" o "el world engine", o continuar el roadmap del proyecto, aunque no se use el nombre exacto. Incluye una regla crítica de gestión de contexto: umbral operativo 160K tokens (límite NVIDIA GLM-5.2 ≈170K) con checkpoint obligatorio en agent_state_checkpoint.md y compactación automática. Esta skill es un documento vivo — léela Y actualízala en cada sesión de trabajo relevante (protocolo al final del archivo).
+description: Contexto experto y siempre vigente del proyecto Voronia (motor nativo en Rust + wgpu para generación y edición de mundos de fantasía, inspirado en Azgaar's Fantasy Map Generator). Usar esta skill SIEMPRE que se trabaje dentro del repo de Voronia o se hable de él — escribir o revisar código Rust de cualquier crate del workspace, tocar el World Data Model, el importador de mapas de Azgaar (.map/JSON), el formato .vorn, el renderer wgpu, el motor de simulación procedural (heightmap, hidrología, culturas, estados, religiones, rutas), la UI egui, o cualquier decisión de arquitectura. También cuando se mencione "Voronia", se pida seguir con "el motor de mapas" o "el world engine", o continuar el roadmap del proyecto, aunque no se use el nombre exacto. Incluye una regla crítica de gestión de contexto: umbral operativo 160K tokens (límite NVIDIA GLM-5.2 ≈170K) con checkpoint obligatorio en agent_state_checkpoint.md y compactación automática. Esta skill es un documento vivo — léela Y actualízala en cada sesión de trabajo relevante (protocolo al final del archivo).
 ---
 
 # Voronia — skill de desarrollo
 
 ## Qué es Voronia
 
-Motor nativo (Rust + wgpu), acelerado por GPU, para generar y editar mundos de fantasía. Reescrito desde cero, no un port — pero basado en la lógica y el modelo de datos de **Azgaar's Fantasy Map Generator** (MIT), con atribución explícita. Puede importar mapas generados en Azgaar (`.map`/JSON), los convierte a un formato binario propio (`.gmap`), y va camino a reimplementar y expandir toda la generación procedural de forma nativa. Es de Hans, es de código abierto, y eventualmente se integra con Atenea (su asistente IA local).
+Motor nativo (Rust + wgpu), acelerado por GPU, para generar y editar mundos de fantasía. Reescrito desde cero, no un port — pero basado en la lógica y el modelo de datos de **Azgaar's Fantasy Map Generator** (MIT), con atribución explícita. Puede importar mapas generados en Azgaar (`.map`/JSON), los convierte a un formato binario propio (`.vorn`), y va camino a reimplementar y expandir toda la generación procedural de forma nativa. Es de Hans, es de código abierto, y eventualmente se integra con Atenea (su asistente IA local).
 
 ## Antes de tocar nada: dónde está la verdad
 
@@ -96,7 +96,7 @@ Consecuencia directa para cualquier código de importación: para que esos atrib
 | Grafos/pathfinding | petgraph |
 | RNG determinista | rand + rand_pcg (semilla obligatoria en todo lo generativo) |
 | Serialización import | serde + serde_json |
-| Formato propio `.gmap` | bincode (v1) → evaluar rkyv si hace falta velocidad |
+| Formato propio `.vorn` | bincode (v1) → evaluar rkyv si hace falta velocidad |
 | Texto en GPU | glyphon |
 | Paralelismo CPU | rayon |
 | Errores | anyhow + thiserror |
@@ -110,7 +110,7 @@ No se pinnean versiones exactas de crates acá — usar las últimas estables al
 crates/
 ├── vor-core/     World Data Model puro. Sin lógica, sin render. No depende de nada del resto.
 ├── vor-import/   Parsers .map/JSON de Azgaar + regeneración de geometría (el hallazgo de arriba).
-├── vor-format/   Serialización .gmap.
+├── vor-format/   Serialización .vorn.
 ├── vor-sim/      Motor de simulación procedural.
 ├── vor-render/   Pipeline wgpu, capas, cámara. NUNCA escribe al World Data Model, solo lee.
 ├── vor-edit/     Comandos de edición + undo/redo. Los únicos que mutan el World Data Model además de vor-sim.

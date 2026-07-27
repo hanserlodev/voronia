@@ -25,7 +25,7 @@ See the master plan at [`voronia-plan-proyecto.md`](voronia-plan-proyecto.md) (S
 crates/
 ├── vor-core/     World Data Model (pure data, no logic, no render)
 ├── vor-import/   Azgaar .map / JSON parser + bit-exact geometry regeneration
-├── vor-format/   .gmap native serialization
+├── vor-format/   .vorn native serialization
 ├── vor-sim/       Procedural simulation engine (heightmap, rivers, cultures, states, ...)
 ├── vor-render/   wgpu pipeline, layers, camera (never mutates world data)
 ├── vor-edit/     Edit commands + undo/redo (the only other mutator of world data)

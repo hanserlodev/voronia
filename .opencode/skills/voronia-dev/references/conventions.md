@@ -29,7 +29,7 @@ Antes de escribir código que cruza de un crate a otro, revisá `references/arch
 
 - Todo generador procedural: al menos un test que fija una semilla y verifica que el output es estable entre corridas (regresión — no necesariamente que el resultado sea "correcto" en algún sentido absoluto, sino que no cambió sin querer).
 - Tests de import: contra mapas reales exportados de Azgaar (no solo contra fixtures generados por el propio motor — eso sería circular y no probaría compatibilidad real).
-- Benchmarks (`criterion`) para lo que tiene presupuesto de rendimiento explícito en el plan maestro §24 (carga de `.gmap`, FPS de pan/zoom, tiempo de import) — no hace falta benchmarkear todo, solo lo que tiene un target definido.
+- Benchmarks (`criterion`) para lo que tiene presupuesto de rendimiento explícito en el plan maestro §24 (carga de `.vorn`, FPS de pan/zoom, tiempo de import) — no hace falta benchmarkear todo, solo lo que tiene un target definido.
 
 ## Estilo general
 

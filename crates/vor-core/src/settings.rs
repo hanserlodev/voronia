@@ -55,7 +55,7 @@ pub struct Settings {
     /// Es el resultado del `randomizeOptions()` (primer consumo generativo del PRNG
     /// `aleaPRNG` — NO `Alea@npm`). Si Voronia solo importa mapas ya generados,
     /// este payload se come como opaco y NO se re-genera (ver §13.4 de fase-0).
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub options: serde_json::Value,
     /// Nombre del mapa (slot `[1]` pos `[20]`).
     #[serde(default)]
@@ -68,12 +68,12 @@ pub struct Settings {
     pub style_preset: Option<String>,
     /// Rescalar labels (`[23]` — distinto del slot deprecated `[23]` del top-level .map;
     /// confirmar con parseo real; mantener opaco por ahora).
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub rescale_labels: serde_json::Value,
     /// Densidad urbana (`[24]`).
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub urban_density: serde_json::Value,
     /// Tasa de crecimiento (`[26]`).
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub growth_rate: serde_json::Value,
 }

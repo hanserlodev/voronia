@@ -67,17 +67,17 @@ pub struct World {
     // (re-export sin pérdidas) dentro de `State` o como `serde_json::Value`.
     /// Fonts (slot `[34]`) — Ajgaar guarda config de tipografías; preservar opaco.
     /// No tiene efecto en `vor-render` (Voronia usa sus propias font stacks).
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub fonts: serde_json::Value,
     /// Custom good icons (slot `[45]`) — HTML outer string; preservar opaco.
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub custom_good_icons: serde_json::Value,
     /// Economía: `pack.goods`, `pack.markets`, `pack.deals` (slots `[41]`/`[42]`/`[43]`).
     /// Preservamos como `serde_json::Value` para no modelar el subsistema en Fase 1.
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub goods: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub markets: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub deals: serde_json::Value,
 }

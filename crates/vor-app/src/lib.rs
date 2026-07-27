@@ -111,6 +111,9 @@ struct State {
     world: World,
     layer_flags: LayerFlags,
     picked_cell: Option<usize>,
+    autosave_enabled: bool,
+    autosave_interval: f32,
+    last_autosave: Instant,
 }
 
 async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
@@ -241,6 +244,9 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         world,
         layer_flags: LayerFlags::default(),
         picked_cell: None,
+        autosave_enabled: true,
+        autosave_interval: 60.0,
+        last_autosave: Instant::now(),
     }
 }
 
@@ -371,6 +377,8 @@ impl State {
 
         let pop_rate = world.settings.population_rate;
         let layer_flags = &mut self.layer_flags;
+        let autosave_enabled = &mut self.autosave_enabled;
+        let vorn_save_path = self.map_path.with_extension("vorn");
 
         let panel_w = 220.0; // SidePanel default width
         let output = self.egui_ctx.run(raw_input, |ctx| {
@@ -496,6 +504,19 @@ impl State {
                     } else {
                         ui.label("click derecho → seleccionar");
                     }
+                    ui.separator();
+                    ui.heading("autosave");
+                    ui.checkbox(autosave_enabled, "autosave cada 60s");
+                    if ui.button("save .vorn ahora").clicked() {
+                        match vor_format::save::save_world(&vorn_save_path, world) {
+                            Ok(_) => {
+                                tracing::info!("guardado manual: {}", vorn_save_path.display());
+                            }
+                            Err(e) => {
+                                tracing::warn!("save falló: {e}");
+                            }
+                        }
+                    }
                 });
         });
 
@@ -601,6 +622,23 @@ impl State {
             .submit(std::iter::once(encoder.finish()));
         surface_texture.present();
 
+        // ---- Autosave ----
+        if self.autosave_enabled {
+            let elapsed = self.last_autosave.elapsed().as_secs_f32();
+            if elapsed >= self.autosave_interval {
+                let vorn_path = self.map_path.with_extension("vorn");
+                match vor_format::save::save_world(&vorn_path, &self.world) {
+                    Ok(_) => {
+                        tracing::info!("autosave: {}", vorn_path.display());
+                        self.last_autosave = Instant::now();
+                    }
+                    Err(e) => {
+                        tracing::warn!("autosave falló: {e}");
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -656,8 +694,10 @@ pub fn run_cli() -> anyhow::Result<()> {
         .init();
 
     let args: Vec<String> = std::env::args().collect();
+    let export_only = args.iter().any(|a| a == "--export-vorn");
+
     if args.len() < 2 {
-        anyhow::bail!("uso: vor-cli viewer -- <path-al-.map> (los '--' son opcionales)");
+        anyhow::bail!("uso: vor <path-.map> [--export-vorn]");
     }
     let path_idx = args
         .iter()
@@ -671,6 +711,15 @@ pub fn run_cli() -> anyhow::Result<()> {
         vor_import::mapfile::raw::parse(&bytes).map_err(|e| anyhow::anyhow!("parse .map: {e}"))?;
     let loaded = vor_import::mapfile::Loader::load(&raw)
         .map_err(|e| anyhow::anyhow!("Loader::load: {e}"))?;
+
+    if export_only {
+        let vorn_path = path.with_extension("vorn");
+        vor_format::save::save_world(&vorn_path, &loaded.world)
+            .map_err(|e| anyhow::anyhow!("save .vorn: {e}"))?;
+        info!("exportado: {}", vorn_path.display());
+        return Ok(());
+    }
+
     let mesh = build_mesh(&loaded.world.grid);
     let cfg = ViewerConfig {
         map_path: path,

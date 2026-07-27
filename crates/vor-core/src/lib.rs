@@ -6,7 +6,7 @@
 //! (`Biome`/`NameBase`/`Note`) y la raíz `World` que los reúne.
 //!
 //! **No** vive lógica acá — ni de generación procedural (va a `vor-sim`), ni de
-//! parseo de `.map` (va a `vor-import`), ni de serialización `.gmap` (va a `vor-format`),
+//! parseo de `.map` (va a `vor-import`), ni de serialización `.vorn` (va a `vor-format`),
 //! ni de render (va a `vor-render`). Los límites entre crates están en
 //! `references/architecture.md` §"Workspace y límites".
 //!
@@ -34,6 +34,7 @@ pub mod error;
 pub mod feature;
 pub mod grid;
 pub mod pack;
+pub mod serde_json_string;
 pub mod settings;
 pub mod voronoi;
 pub mod world;

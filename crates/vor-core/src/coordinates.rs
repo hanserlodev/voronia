@@ -24,6 +24,6 @@ pub struct MapCoordinates {
     pub lon_r: f32,
     /// Sub-json opaco de opciones avanzadas (`latBands` etc.) que Azgaar usa para
     /// ajustar la proyección por banda. Voronia v1 no las interpreta; las preserva.
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub extras: serde_json::Value,
 }

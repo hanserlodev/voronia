@@ -80,11 +80,11 @@ pub struct State {
     pub removed: bool,
     /// Diplomacia, guerras/campañas y milicia (`Regiment`/`War`) — propio de Fase 7.
     /// Se preserva opaco al importar para no perder dato; se desempaquetará en Fase 7.
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub diplomacy: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub campaigns: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, with = "crate::serde_json_string")]
     pub military: serde_json::Value,
 }
 
