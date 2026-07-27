@@ -130,6 +130,12 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         .await
         .expect("no wgpu adapter compatible with surface");
 
+    let adapter_info = adapter.get_info();
+    info!(
+        "wgpu adapter selected: {:?} {}",
+        adapter_info.backend, adapter_info.name
+    );
+
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
@@ -323,69 +329,90 @@ impl State {
 
         // ---- Egui frame ----
         let raw_input = self.egui_winit.take_egui_input(self.window.as_ref());
-        let map_path = self.map_path.clone();
-        let camera_center = self.camera.center;
-        let camera_extent_y = self.camera.extent_y;
-        let cursor_screen = self.cursor_screen;
-        let surface_size = {
-            let sz = self.window.inner_size();
-            [sz.width as f32, sz.height as f32]
-        };
-        let world_cursor = self.camera.screen_to_world(cursor_screen, surface_size);
-
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32();
         self.last_frame = now;
         let fps = if dt > 0.0 { 1.0 / dt } else { 0.0 };
 
-        let pack_points = &self.world.pack.points;
-        let pack_cells = &self.world.pack.cells;
-        let biomes = &self.world.biomes;
-        let burgs = &self.world.burgs;
-        let states = &self.world.states;
-        let cultures = &self.world.cultures;
-        let provinces = &self.world.provinces;
-        let rivers = &self.world.rivers;
+        let map_path = self.map_path.clone();
+        let camera_center = self.camera.center;
+        let camera_extent_y = self.camera.extent_y;
+        let cursor_screen = self.cursor_screen;
+        let surface_size = [
+            self.window.inner_size().width as f32,
+            self.window.inner_size().height as f32,
+        ];
+        let world_cursor = self.camera.screen_to_world(cursor_screen, surface_size);
         let picked_cell = self.picked_cell;
-        let layer_flags = &mut self.layer_flags;
+        let world = &self.world;
 
-        // --- Labels data: positions + text for burgs and states ---
-        let labels: Vec<([f32; 2], String, [f32; 3])> = {
-            let mut lbl = Vec::new();
-            // Burg names
-            for burg in burgs.iter() {
-                if burg.name.is_empty() {
-                    continue;
-                }
-                let cell = burg.cell as usize;
-                if let Some(pos) = pack_points.get(cell) {
-                    // Color del estado del burgo
-                    let state_id = pack_cells.state.get(cell).copied().unwrap_or(0);
-                    let color = if state_id > 0 && (state_id as usize) < states.len() {
-                        hex_color_to_linear(&states[state_id as usize].color)
+        let show_labels = self.layer_flags.labels;
+        let label_data: Vec<(f32, f32, String)> = if show_labels {
+            world
+                .burgs
+                .iter()
+                .filter_map(|b| {
+                    let pt = world.pack.points.get(b.cell as usize)?;
+                    let s = self.camera.world_to_screen(*pt, surface_size);
+                    if s[0] >= 0.0
+                        && s[0] <= surface_size[0]
+                        && s[1] >= 0.0
+                        && s[1] <= surface_size[1]
+                    {
+                        Some((s[0], s[1], b.name.clone()))
                     } else {
-                        [0.9, 0.9, 0.9]
-                    };
-                    lbl.push((*pos, burg.name.clone(), color));
-                }
-            }
-            lbl
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
         };
 
+        let pop_rate = world.settings.population_rate;
+        let layer_flags = &mut self.layer_flags;
+
+        let panel_w = 220.0; // SidePanel default width
         let output = self.egui_ctx.run(raw_input, |ctx| {
-            egui::TopBottomPanel::top("vor-app-top").show(ctx, |ui| {
+            // Labels overlay (solo si no caen debajo del panel lateral)
+            let painter = ctx.debug_painter();
+            for (sx, sy, name) in &label_data {
+                if *sx < panel_w + 10.0 {
+                    continue;
+                }
+                painter.text(
+                    egui::pos2(*sx, *sy),
+                    egui::Align2::CENTER_CENTER,
+                    name,
+                    egui::FontId::proportional(10.0),
+                    egui::Color32::WHITE,
+                );
+            }
+
+            egui::TopBottomPanel::top("vor-title").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(format!("Voronia -- {}", map_path.display()));
                 });
             });
 
-            // --- Panel de capas ---
-            egui::Window::new("capas")
-                .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-8.0, 36.0))
-                .collapsible(true)
+            egui::SidePanel::left("vor-panel")
                 .resizable(false)
-                .default_width(160.0)
+                .default_width(220.0)
                 .show(ctx, |ui| {
+                    ui.heading("visor");
+                    ui.label(format!("FPS: {fps:.1}"));
+                    ui.label(format!(
+                        "centro: ({:.0}, {:.0})",
+                        camera_center[0], camera_center[1]
+                    ));
+                    ui.label(format!("zoom: {camera_extent_y:.0}"));
+                    ui.label(format!(
+                        "cursor: ({:.0}, {:.0})",
+                        world_cursor[0], world_cursor[1]
+                    ));
+                    ui.separator();
+
+                    ui.heading("capas");
                     ui.checkbox(&mut layer_flags.heightmap, "heightmap");
                     ui.checkbox(&mut layer_flags.biomes, "biomas");
                     ui.checkbox(&mut layer_flags.rivers, "ríos");
@@ -394,133 +421,96 @@ impl State {
                     ui.checkbox(&mut layer_flags.borders_culture, "fronteras culturas");
                     ui.checkbox(&mut layer_flags.burgs, "burgos");
                     ui.checkbox(&mut layer_flags.labels, "labels");
-                });
-
-            // --- Panel de info ---
-            egui::Window::new("visor")
-                .anchor(egui::Align2::LEFT_TOP, egui::vec2(8.0, 36.0))
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    ui.label(format!("FPS: {fps:.1}"));
-                    ui.label(format!(
-                        "center: ({:.0}, {:.0})",
-                        camera_center[0], camera_center[1]
-                    ));
-                    ui.label(format!("extent_y: {camera_extent_y:.0}"));
-                    ui.label(format!(
-                        "cursor: ({:.0}, {:.0})",
-                        world_cursor[0], world_cursor[1]
-                    ));
                     ui.separator();
 
-                    // --- Info de celda seleccionada ---
                     if let Some(cid) = picked_cell {
-                        let h = pack_cells.height.get(cid).copied().unwrap_or(0);
-                        let bi = pack_cells.biome.get(cid).copied().unwrap_or(0);
-                        let state_id = pack_cells.state.get(cid).copied().unwrap_or(0);
-                        let culture_id = pack_cells.culture.get(cid).copied().unwrap_or(0);
-                        let province_id = pack_cells.province.get(cid).copied().unwrap_or(0);
-                        let burg_id = pack_cells.burg.get(cid).copied().unwrap_or(0);
-                        let river_id = pack_cells.river.get(cid).copied().unwrap_or(0);
-                        let pop = pack_cells.population.get(cid).copied().unwrap_or(0.0);
-
-                        let biome_name = biomes
+                        ui.heading(format!("celda #{cid}"));
+                        let h = world.pack.cells.height.get(cid).copied().unwrap_or(0);
+                        ui.label(format!("altura: {h}"));
+                        let bi = world.pack.cells.biome.get(cid).copied().unwrap_or(0);
+                        let name = world
+                            .biomes
                             .get(bi as usize)
                             .map(|b| b.name.as_str())
                             .unwrap_or("?");
-                        let state_name = if state_id > 0 {
-                            states
-                                .get(state_id as usize)
+                        ui.label(format!("bioma: {name}"));
+                        let sid = world.pack.cells.state.get(cid).copied().unwrap_or(0);
+                        let sname = if sid > 0 {
+                            world
+                                .states
+                                .get(sid as usize)
                                 .map(|s| s.name.as_str())
                                 .unwrap_or("?")
                         } else {
                             "Wildlands"
                         };
-                        let culture_name = if culture_id > 0 {
-                            cultures
-                                .get(culture_id as usize)
+                        ui.label(format!("estado: {sname}"));
+                        let cid2 = world.pack.cells.culture.get(cid).copied().unwrap_or(0);
+                        let cname = if cid2 > 0 {
+                            world
+                                .cultures
+                                .get(cid2 as usize)
                                 .map(|c| c.name.as_str())
                                 .unwrap_or("?")
                         } else {
                             "Wildlands"
                         };
-                        let province_name = if province_id > 0 {
-                            provinces
-                                .get(province_id as usize)
+                        ui.label(format!("cultura: {cname}"));
+                        let pid = world.pack.cells.province.get(cid).copied().unwrap_or(0);
+                        let pname = if pid > 0 {
+                            world
+                                .provinces
+                                .get(pid as usize)
                                 .map(|p| p.name.as_str())
                                 .unwrap_or("?")
                         } else {
                             "\u{2014}"
                         };
-                        let burg_name = if burg_id > 0 {
-                            burgs
+                        ui.label(format!("provincia: {pname}"));
+                        let bid = world.pack.cells.burg.get(cid).copied().unwrap_or(0);
+                        let bname = if bid > 0 {
+                            world
+                                .burgs
                                 .iter()
-                                .find(|b| b.id == burg_id)
+                                .find(|b| b.id == bid)
                                 .map(|b| b.name.as_str())
                                 .unwrap_or("?")
                         } else {
                             "\u{2014}"
                         };
-                        let river_name = if river_id > 0 {
-                            rivers
+                        ui.label(format!("burgo: {bname}"));
+                        let rid = world.pack.cells.river.get(cid).copied().unwrap_or(0);
+                        let rname = if rid > 0 {
+                            world
+                                .rivers
                                 .iter()
-                                .find(|r| r.id == river_id)
+                                .find(|r| r.id == rid)
                                 .map(|r| r.name.as_str())
                                 .unwrap_or("?")
                         } else {
                             "\u{2014}"
                         };
-
-                        ui.separator();
-                        ui.label(format!("celda #{cid}"));
-                        ui.label(format!("altura: {h}"));
-                        ui.label(format!("bioma: {biome_name}"));
-                        ui.label(format!("estado: {state_name}"));
-                        ui.label(format!("cultura: {culture_name}"));
-                        ui.label(format!("provincia: {province_name}"));
-                        ui.label(format!("burgo: {burg_name}"));
-                        ui.label(format!("río: {river_name}"));
-                        ui.label(format!("población: {pop:.0}"));
+                        ui.label(format!("río: {rname}"));
+                        let pop = world.pack.cells.population.get(cid).copied().unwrap_or(0.0);
+                        ui.label(format!("población: {:.0} hab", pop * pop_rate));
                     } else {
-                        ui.label("click der → seleccionar celda");
+                        ui.label("click derecho → seleccionar");
                     }
                 });
-
-            // --- Labels en el mapa (texto en coordenadas de mundo) ---
-            if layer_flags.labels {
-                for (pos, text, color) in &labels {
-                    let screen = self.camera.world_to_screen(*pos, surface_size);
-                    // Solo dibujar si está visible en pantalla
-                    if screen[0] >= 0.0
-                        && screen[0] <= surface_size[0]
-                        && screen[1] >= 0.0
-                        && screen[1] <= surface_size[1]
-                    {
-                        let painter = ctx.layer_painter(egui::LayerId::new(
-                            egui::Order::Foreground,
-                            egui::Id::new("labels"),
-                        ));
-                        let galley = ctx.fonts(|f| {
-                            f.layout_no_wrap(
-                                text.clone(),
-                                egui::FontId::proportional(12.0),
-                                egui::Color32::from_rgb(
-                                    (color[0] * 255.0) as u8,
-                                    (color[1] * 255.0) as u8,
-                                    (color[2] * 255.0) as u8,
-                                ),
-                            )
-                        });
-                        painter.galley(
-                            egui::pos2(screen[0], screen[1]),
-                            galley,
-                            egui::Color32::WHITE,
-                        );
-                    }
-                }
-            }
         });
+
+        // Upload textures (font atlas etc.)
+        for (tex_id, img_delta) in &output.textures_delta.set {
+            self.egui_renderer.update_texture(
+                &self.renderer.device,
+                &self.renderer.queue,
+                *tex_id,
+                img_delta,
+            );
+        }
+        for tex_id in &output.textures_delta.free {
+            self.egui_renderer.free_texture(tex_id);
+        }
 
         let clipped = self
             .egui_ctx
@@ -528,12 +518,11 @@ impl State {
         self.egui_winit
             .handle_platform_output(self.window.as_ref(), output.platform_output);
 
+        let screen_size_px = self.window.inner_size();
+        let pixels_per_point = self.window.scale_factor() as f32;
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
-            size_in_pixels: [
-                self.window.inner_size().width,
-                self.window.inner_size().height,
-            ],
-            pixels_per_point: self.window.scale_factor() as f32,
+            size_in_pixels: [screen_size_px.width, screen_size_px.height],
+            pixels_per_point,
         };
 
         // ---- Wgpu passes ----
