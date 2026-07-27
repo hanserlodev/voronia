@@ -89,6 +89,11 @@ pub struct PackCells {
     /// Layout confirmado contra slot `[36]` de Brample: `{"6":{"7":359, "39":359}, "7":{...}}`
     /// (id de celda origen → {id de celda destino → id de ruta}).
     pub routes: Vec<RoutesFromCell>,
+    /// IDs de celdas pack adyacentes (vecinos interiores, sin boundary).
+    /// Poblado por `vor-import` durante `re_graph` (desde el segundo `calculate_voronoi`).
+    /// No se persiste — es derivable del Delaunay.
+    #[serde(skip)]
+    pub adjacency: Vec<Vec<u32>>,
 }
 
 /// Rutas que parten de una celda. Sub-estructura de `PackCells::routes`.

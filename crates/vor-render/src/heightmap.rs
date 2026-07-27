@@ -40,7 +40,7 @@ pub struct HeightmapMesh {
 
 /// Constructor de vertices de lyon: devuelve un `HeightmapVertex` por cada
 /// vertice generado por el tessellator (con el color fijo de la celda).
-struct ColorCtor([f32; 4]);
+pub(crate) struct ColorCtor(pub(crate) [f32; 4]);
 
 impl FillVertexConstructor<HeightmapVertex> for ColorCtor {
     fn new_vertex(&mut self, vertex: lyon::tessellation::FillVertex<'_>) -> HeightmapVertex {

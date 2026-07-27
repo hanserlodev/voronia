@@ -678,6 +678,7 @@ pub fn parse_rivers(slot32: Option<&str>) -> Result<Vec<River>, CatalogError> {
             discharge_m3s: r.discharge,
             length_km: r.length,
             width_km: r.width,
+            cell_path: Vec::new(), // populated by loader after geometry is available
         })
         .collect())
 }

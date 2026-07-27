@@ -279,6 +279,7 @@ pub fn parse_pack_cells(
         good: parse_u16(slot40_good),
         market: parse_u16(slot44_market),
         routes: parse_routes_map(slot36_routes),
+        adjacency: Vec::new(), // populated by `re_graph`.
     }
 }
 

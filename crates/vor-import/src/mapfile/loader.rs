@@ -239,7 +239,7 @@ impl Loader {
         let burgs = crate::mapfile::catalogs::parse_burgs(raw.get(15))?;
         let religions = crate::mapfile::catalogs::parse_religions(raw.get(29))?;
         let provinces = crate::mapfile::catalogs::parse_provinces(raw.get(30))?;
-        let rivers = crate::mapfile::catalogs::parse_rivers(raw.get(32))?;
+        let mut rivers = crate::mapfile::catalogs::parse_rivers(raw.get(32))?;
         let markers = crate::mapfile::catalogs::parse_markers(raw.get(35))?;
         let routes = crate::mapfile::catalogs::parse_routes(raw.get(37))?;
         let zones = crate::mapfile::catalogs::parse_zones(raw.get(38))?;
@@ -253,6 +253,14 @@ impl Loader {
         let markets = parse_json_opaque(raw.get(42));
         let deals = parse_json_opaque(raw.get(43));
         let custom_good_icons = parse_string_opaque(raw.get(45));
+
+        // --- Trazar path de cada río (cell_path desde source hasta mouth) ---
+        trace_river_paths(
+            &mut rivers,
+            &pack.cells.river,
+            &pack.cells.adjacency,
+            &pack.cells.height,
+        );
 
         // --- features van al pack ---
         pack.features = features;
@@ -288,6 +296,55 @@ impl Loader {
             world,
             pack_new_points_f64: new_points_f64,
         })
+    }
+}
+
+/// Traza el `cell_path` de cada río siguiendo el flujo downhill.
+///
+/// Para cada río con id > 0, parte de `source_cell` y recorre celdas adyacentes
+/// con el mismo `river_id` y altura decreciente hasta llegar a `mouth_cell`.
+fn trace_river_paths(
+    rivers: &mut [vor_core::entities::river::River],
+    pack_river: &[u16],
+    adjacency: &[Vec<u32>],
+    height: &[u8],
+) {
+    for river in rivers.iter_mut() {
+        if river.id == 0 {
+            continue;
+        }
+        let rid = river.id;
+        let source = river.source_cell as usize;
+        let mouth = river.mouth_cell as usize;
+        let mut path = Vec::new();
+        let mut current = source;
+        // Safety valve: max iterations = all pack cells.
+        let max_steps = pack_river.len();
+        for _ in 0..max_steps {
+            path.push(current as u32);
+            if current == mouth {
+                break;
+            }
+            let current_h = height.get(current).copied().unwrap_or(0);
+            // Busca el vecino con menor altura que también tenga este river_id
+            let next = adjacency.get(current).and_then(|neighbors| {
+                neighbors
+                    .iter()
+                    .filter(|&&n| {
+                        let n = n as usize;
+                        n < pack_river.len()
+                            && pack_river[n] == rid
+                            && height.get(n).copied().unwrap_or(0) < current_h
+                    })
+                    .min_by_key(|&&n| height.get(n as usize).copied().unwrap_or(0))
+                    .copied()
+            });
+            match next {
+                Some(n) => current = n as usize,
+                None => break, // dead end, no se completa el path
+            }
+        }
+        river.cell_path = path;
     }
 }
 

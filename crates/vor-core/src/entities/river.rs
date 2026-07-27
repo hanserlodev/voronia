@@ -29,4 +29,9 @@ pub struct River {
     /// Ancho medio en km.
     #[serde(default)]
     pub width_km: f32,
+    /// Camino de celdas pack que recorre el río (desde `source_cell` hasta `mouth_cell`).
+    /// Poblado por `vor-import` durante la carga. No se persiste (derivable de `river` ids
+    /// + adyacencia + flujo).
+    #[serde(skip)]
+    pub cell_path: Vec<u32>,
 }

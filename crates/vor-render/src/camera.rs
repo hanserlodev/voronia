@@ -86,6 +86,17 @@ impl Camera {
         CameraUniform { view_proj: cols }
     }
 
+    /// Pasa de coordenada de mundo (pixels, +Y abajo, origen TL) a pixel de pantalla.
+    pub fn world_to_screen(&self, world: [f32; 2], surface_size: [f32; 2]) -> [f32; 2] {
+        let (sw, sh) = (surface_size[0], surface_size[1]);
+        if sw <= 0.0 || sh <= 0.0 {
+            return [0.0, 0.0];
+        }
+        let nx = (world[0] - self.center[0]) / self.extent_x() + 0.5;
+        let ny = (world[1] - self.center[1]) / self.extent_y + 0.5;
+        [nx * sw, ny * sh]
+    }
+
     /// Pasa de coordenada de pantalla (pixels de superficie, +Y abajo, origen TL)
     /// a coordenada de mundo (pixels, +Y abajo, origen TL).
     pub fn screen_to_world(&self, screen_px: [f32; 2], surface_size: [f32; 2]) -> [f32; 2] {

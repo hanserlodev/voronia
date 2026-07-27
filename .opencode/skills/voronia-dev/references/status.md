@@ -2,9 +2,11 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 26 julio 2026 (Fase 2 registrada en `docs/fase-2.md`)
+**Última actualización**: 27 julio 2026 (Fase 3 implementada y validada contra Sorvik)
 
 ## Fase actual del roadmap
+
+**Fase 3 — Capas completas de renderizado**: ✓ **IMPLEMENTADA**. Todas las capas de render funcionando: heightmap, biomas, ríos (polilíneas con grosor variable según caudal), fronteras de estados/provincias/culturas, burgos (triángulos), labels básicos (nombres de burgo en egui overlay). Sistema de toggles por capa en panel egui derecho. Picking con click derecho → panel de info con celda seleccionada (altura, bioma, estado, cultura, provincia, burgo, río, población). 48 tests verdes (sin regresión), clippy clean (1 warning dead_code en mesh_bounds), fmt clean. Bin `vor` carga Sorvik y muestra capas correctamente. Ver `docs/fase-3.md`.
 
 **Fase 2 — Visor GPU mínimo**: ✓ **COMPLETADA**. Ventana winit 0.30 + wgpu 22 + cámara ortográfica 2D con pan/zoom + capa heightmap (triangulación con lyon, color por altura) + overlay egui 0.29 (FPS, cursor, info cámara, path del mapa). Bin `vor` que carga `.map` reales y abre el visor. 48 tests verdes, clippy clean, fmt clean. Documento de fase: `docs/fase-2.md`.
 

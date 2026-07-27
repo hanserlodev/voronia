@@ -141,12 +141,13 @@ pub fn re_graph(
         area_px.push(capped);
     }
 
-    // Poblar `PackCells`. Solo `grid_id`, `height`, `area_px` — los demás quedan vacíos
-    // (la parser los completa) y los defaults de `Default` para `Vec<T>` son vacíos.
+    // Poblar `PackCells`. Solo `grid_id`, `height`, `area_px`, `adjacency` — los demás
+    // quedan vacíos (la parser los completa) y los defaults de `Default` para `Vec<T>` son vacíos.
     let pack_cells = PackCells {
         grid_id: new_g,
         height: new_h,
         area_px,
+        adjacency: voronoi.cells.c.clone(),
         ..Default::default()
     };
 

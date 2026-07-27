@@ -5,7 +5,12 @@ use std::time::Instant;
 use thiserror::Error;
 use tracing::info;
 use vor_core::World;
+use vor_render::biome::{biome_colors_from_catalog, build_biome_mesh};
+use vor_render::border::{build_border_mesh, BorderKind};
+use vor_render::burg::build_burg_mesh;
 use vor_render::heightmap::{build_mesh, HeightmapMesh};
+use vor_render::layers::LayerFlags;
+use vor_render::river::build_river_mesh;
 use vor_render::{Camera, Renderer};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -103,6 +108,9 @@ struct State {
     pan_active: bool,
     pan_last: Option<[f32; 2]>,
     last_frame: Instant,
+    world: World,
+    layer_flags: LayerFlags,
+    picked_cell: Option<usize>,
 }
 
 async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
@@ -163,6 +171,37 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     let mesh_bounds_min = cfg.mesh.bounds_min;
     let mesh_bounds_max = cfg.mesh.bounds_max;
 
+    let world = cfg.world;
+
+    // --- Construir capas adicionales ---
+    let biome_colors = biome_colors_from_catalog(&world.biomes);
+    let biome_mesh = build_biome_mesh(&world.pack, &biome_colors);
+    let river_mesh = build_river_mesh(&world.pack.points, &world.rivers);
+    let border_state_mesh = build_border_mesh(&world.pack, BorderKind::State);
+    let border_province_mesh = build_border_mesh(&world.pack, BorderKind::Province);
+    let border_culture_mesh = build_border_mesh(&world.pack, BorderKind::Culture);
+    let burg_mesh = build_burg_mesh(&world.pack);
+
+    info!(
+        "meshes: biomes={}v/{}i, rivers={}v/{}i, borders(s/p/c)=({}/{}/{}), burgs={}v/{}i",
+        biome_mesh.vertices.len(),
+        biome_mesh.indices.len(),
+        river_mesh.vertices.len(),
+        river_mesh.indices.len(),
+        border_state_mesh.vertices.len(),
+        border_province_mesh.vertices.len(),
+        border_culture_mesh.vertices.len(),
+        burg_mesh.vertices.len(),
+        burg_mesh.indices.len(),
+    );
+
+    let _l_biomes = renderer.add_layer_mesh(&biome_mesh);
+    let _l_rivers = renderer.add_layer_mesh(&river_mesh);
+    let _l_borders = renderer.add_layer_mesh(&border_state_mesh);
+    let _l_bprov = renderer.add_layer_mesh(&border_province_mesh);
+    let _l_bcult = renderer.add_layer_mesh(&border_culture_mesh);
+    let _l_burgs = renderer.add_layer_mesh(&burg_mesh);
+
     let mut camera = Camera::new([0.0, 0.0], 1000.0, size.width, size.height);
     camera.frame_bounds(mesh_bounds_min, mesh_bounds_max);
 
@@ -193,6 +232,9 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         pan_active: false,
         pan_last: None,
         last_frame: Instant::now(),
+        world,
+        layer_flags: LayerFlags::default(),
+        picked_cell: None,
     }
 }
 
@@ -238,6 +280,14 @@ impl State {
                         self.pan_last = None;
                     }
                 }
+                if *button == MouseButton::Right && *state == ElementState::Pressed {
+                    let size = [
+                        self.window.inner_size().width as f32,
+                        self.window.inner_size().height as f32,
+                    ];
+                    let world = self.camera.screen_to_world(self.cursor_screen, size);
+                    self.picked_cell = pick_cell(world, &self.world.pack.points);
+                }
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let pixels = match delta {
@@ -282,13 +332,45 @@ impl State {
             [sz.width as f32, sz.height as f32]
         };
         let world_cursor = self.camera.screen_to_world(cursor_screen, surface_size);
-        let mesh_min = self.mesh_bounds_min;
-        let mesh_max = self.mesh_bounds_max;
 
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32();
         self.last_frame = now;
         let fps = if dt > 0.0 { 1.0 / dt } else { 0.0 };
+
+        let pack_points = &self.world.pack.points;
+        let pack_cells = &self.world.pack.cells;
+        let biomes = &self.world.biomes;
+        let burgs = &self.world.burgs;
+        let states = &self.world.states;
+        let cultures = &self.world.cultures;
+        let provinces = &self.world.provinces;
+        let rivers = &self.world.rivers;
+        let picked_cell = self.picked_cell;
+        let layer_flags = &mut self.layer_flags;
+
+        // --- Labels data: positions + text for burgs and states ---
+        let labels: Vec<([f32; 2], String, [f32; 3])> = {
+            let mut lbl = Vec::new();
+            // Burg names
+            for burg in burgs.iter() {
+                if burg.name.is_empty() {
+                    continue;
+                }
+                let cell = burg.cell as usize;
+                if let Some(pos) = pack_points.get(cell) {
+                    // Color del estado del burgo
+                    let state_id = pack_cells.state.get(cell).copied().unwrap_or(0);
+                    let color = if state_id > 0 && (state_id as usize) < states.len() {
+                        hex_color_to_linear(&states[state_id as usize].color)
+                    } else {
+                        [0.9, 0.9, 0.9]
+                    };
+                    lbl.push((*pos, burg.name.clone(), color));
+                }
+            }
+            lbl
+        };
 
         let output = self.egui_ctx.run(raw_input, |ctx| {
             egui::TopBottomPanel::top("vor-app-top").show(ctx, |ui| {
@@ -296,7 +378,26 @@ impl State {
                     ui.label(format!("Voronia -- {}", map_path.display()));
                 });
             });
-            egui::Window::new("visor / Fase 2")
+
+            // --- Panel de capas ---
+            egui::Window::new("capas")
+                .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-8.0, 36.0))
+                .collapsible(true)
+                .resizable(false)
+                .default_width(160.0)
+                .show(ctx, |ui| {
+                    ui.checkbox(&mut layer_flags.heightmap, "heightmap");
+                    ui.checkbox(&mut layer_flags.biomes, "biomas");
+                    ui.checkbox(&mut layer_flags.rivers, "ríos");
+                    ui.checkbox(&mut layer_flags.borders_state, "fronteras estados");
+                    ui.checkbox(&mut layer_flags.borders_province, "fronteras provincias");
+                    ui.checkbox(&mut layer_flags.borders_culture, "fronteras culturas");
+                    ui.checkbox(&mut layer_flags.burgs, "burgos");
+                    ui.checkbox(&mut layer_flags.labels, "labels");
+                });
+
+            // --- Panel de info ---
+            egui::Window::new("visor")
                 .anchor(egui::Align2::LEFT_TOP, egui::vec2(8.0, 36.0))
                 .collapsible(false)
                 .resizable(false)
@@ -308,11 +409,117 @@ impl State {
                     ));
                     ui.label(format!("extent_y: {camera_extent_y:.0}"));
                     ui.label(format!(
-                        "cursor world: ({:.0}, {:.0})",
+                        "cursor: ({:.0}, {:.0})",
                         world_cursor[0], world_cursor[1]
                     ));
-                    ui.label(format!("mesh bbox: {mesh_min:?} -> {mesh_max:?}"));
+                    ui.separator();
+
+                    // --- Info de celda seleccionada ---
+                    if let Some(cid) = picked_cell {
+                        let h = pack_cells.height.get(cid).copied().unwrap_or(0);
+                        let bi = pack_cells.biome.get(cid).copied().unwrap_or(0);
+                        let state_id = pack_cells.state.get(cid).copied().unwrap_or(0);
+                        let culture_id = pack_cells.culture.get(cid).copied().unwrap_or(0);
+                        let province_id = pack_cells.province.get(cid).copied().unwrap_or(0);
+                        let burg_id = pack_cells.burg.get(cid).copied().unwrap_or(0);
+                        let river_id = pack_cells.river.get(cid).copied().unwrap_or(0);
+                        let pop = pack_cells.population.get(cid).copied().unwrap_or(0.0);
+
+                        let biome_name = biomes
+                            .get(bi as usize)
+                            .map(|b| b.name.as_str())
+                            .unwrap_or("?");
+                        let state_name = if state_id > 0 {
+                            states
+                                .get(state_id as usize)
+                                .map(|s| s.name.as_str())
+                                .unwrap_or("?")
+                        } else {
+                            "Wildlands"
+                        };
+                        let culture_name = if culture_id > 0 {
+                            cultures
+                                .get(culture_id as usize)
+                                .map(|c| c.name.as_str())
+                                .unwrap_or("?")
+                        } else {
+                            "Wildlands"
+                        };
+                        let province_name = if province_id > 0 {
+                            provinces
+                                .get(province_id as usize)
+                                .map(|p| p.name.as_str())
+                                .unwrap_or("?")
+                        } else {
+                            "\u{2014}"
+                        };
+                        let burg_name = if burg_id > 0 {
+                            burgs
+                                .iter()
+                                .find(|b| b.id == burg_id)
+                                .map(|b| b.name.as_str())
+                                .unwrap_or("?")
+                        } else {
+                            "\u{2014}"
+                        };
+                        let river_name = if river_id > 0 {
+                            rivers
+                                .iter()
+                                .find(|r| r.id == river_id)
+                                .map(|r| r.name.as_str())
+                                .unwrap_or("?")
+                        } else {
+                            "\u{2014}"
+                        };
+
+                        ui.separator();
+                        ui.label(format!("celda #{cid}"));
+                        ui.label(format!("altura: {h}"));
+                        ui.label(format!("bioma: {biome_name}"));
+                        ui.label(format!("estado: {state_name}"));
+                        ui.label(format!("cultura: {culture_name}"));
+                        ui.label(format!("provincia: {province_name}"));
+                        ui.label(format!("burgo: {burg_name}"));
+                        ui.label(format!("río: {river_name}"));
+                        ui.label(format!("población: {pop:.0}"));
+                    } else {
+                        ui.label("click der → seleccionar celda");
+                    }
                 });
+
+            // --- Labels en el mapa (texto en coordenadas de mundo) ---
+            if layer_flags.labels {
+                for (pos, text, color) in &labels {
+                    let screen = self.camera.world_to_screen(*pos, surface_size);
+                    // Solo dibujar si está visible en pantalla
+                    if screen[0] >= 0.0
+                        && screen[0] <= surface_size[0]
+                        && screen[1] >= 0.0
+                        && screen[1] <= surface_size[1]
+                    {
+                        let painter = ctx.layer_painter(egui::LayerId::new(
+                            egui::Order::Foreground,
+                            egui::Id::new("labels"),
+                        ));
+                        let galley = ctx.fonts(|f| {
+                            f.layout_no_wrap(
+                                text.clone(),
+                                egui::FontId::proportional(12.0),
+                                egui::Color32::from_rgb(
+                                    (color[0] * 255.0) as u8,
+                                    (color[1] * 255.0) as u8,
+                                    (color[2] * 255.0) as u8,
+                                ),
+                            )
+                        });
+                        painter.galley(
+                            egui::pos2(screen[0], screen[1]),
+                            galley,
+                            egui::Color32::WHITE,
+                        );
+                    }
+                }
+            }
         });
 
         let clipped = self
@@ -342,10 +549,10 @@ impl State {
                     label: Some("vor-frame"),
                 });
 
-        // Pass 1: heightmap (clear background)
+        // Pass 1: capas de mapa (clear background + todas las capas activas)
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("vor-heightmap"),
+                label: Some("vor-map"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
@@ -364,16 +571,12 @@ impl State {
                 occlusion_query_set: None,
             });
 
-            if let (Some(vbo), Some(ibo)) = (&self.renderer.vertex_buf, &self.renderer.index_buf) {
-                pass.set_pipeline(&self.renderer.heightmap_pipeline);
-                pass.set_bind_group(0, &self.renderer.camera_bind, &[]);
-                pass.set_vertex_buffer(0, vbo.slice(..));
-                pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..self.renderer.index_count, 0, 0..1);
+            for layer_idx in self.layer_flags.active_indices() {
+                self.renderer.draw_layer(&mut pass, layer_idx);
             }
         }
 
-        // Update egui buffers (pobla vertex/index buffers internos de egui-wgpu).
+        // Update egui buffers
         self.egui_renderer.update_buffers(
             &self.renderer.device,
             &self.renderer.queue,
@@ -420,6 +623,39 @@ async fn list_adapters() -> Vec<String> {
         .iter()
         .map(|a| format!("{:?} {}", a.get_info().backend, a.get_info().name))
         .collect()
+}
+
+/// Encuentra la celda pack más cercana a una coordenada de mundo.
+/// Retorna `None` si la distancia supera `threshold*threshold`.
+fn pick_cell(world: [f32; 2], points: &[[f32; 2]]) -> Option<usize> {
+    let threshold = 400.0; // 20 px de radio al cuadrado
+    points
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let d2 = (p[0] - world[0]).powi(2) + (p[1] - world[1]).powi(2);
+            (i, d2)
+        })
+        .filter(|&(_, d2)| d2 < threshold)
+        .min_by(|&(_, a), &(_, b)| a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(i, _)| i)
+}
+
+/// Color hex (#rrggbb) a [f32; 3] lineal aprox.
+fn hex_color_to_linear(hex: &str) -> [f32; 3] {
+    let hex = hex.trim_start_matches('#');
+    let r = u8::from_str_radix(hex.get(0..2).unwrap_or("00"), 16).unwrap_or(0);
+    let g = u8::from_str_radix(hex.get(2..4).unwrap_or("00"), 16).unwrap_or(0);
+    let b = u8::from_str_radix(hex.get(4..6).unwrap_or("00"), 16).unwrap_or(0);
+    fn srgb_to_linear(c: u8) -> f32 {
+        let c = c as f32 / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)]
 }
 
 pub fn run_cli() -> anyhow::Result<()> {

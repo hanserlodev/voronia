@@ -844,10 +844,10 @@ Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de
 - [ ] Render de una sola capa: terreno (color por altura), vía triangulación con `lyon`.
 - [ ] Esto ya es demostrable: "cargar un mapa real de Azgaar y verlo en un visor nativo GPU".
 
-### Fase 3 — Capas completas de renderizado · `L`
-- [ ] Ríos, fronteras de estados/provincias/culturas, biomas, burgos, labels básicos.
-- [ ] Sistema de toggles de capas.
-- [ ] Picking (click → info de celda/entidad).
+### Fase 3 — Capas completas de renderizado · `L` ✓ COMPLETADA (commit pending, 27 jul 2026)
+- [x] Ríos, fronteras de estados/provincias/culturas, biomas, burgos, labels básicos.
+- [x] Sistema de toggles de capas.
+- [x] Picking (click → info de celda/entidad).
 
 ### Fase 4 — Formato `.gmap` · `M`
 - [ ] Definir el esquema completo con `serde` + `bincode`, versión 1.

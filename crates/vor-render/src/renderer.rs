@@ -15,13 +15,24 @@ use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 use thiserror::Error;
 use wgpu::util::DeviceExt;
 
+/// Recursos de GPU para una capa de render (vertex/index buffers).
+#[derive(Debug)]
+pub struct LayerBuffer {
+    pub vertex_buf: Option<wgpu::Buffer>,
+    pub index_buf: Option<wgpu::Buffer>,
+    pub index_count: u32,
+}
+
 #[derive(Debug, Error)]
 pub enum RenderError {
     #[error("wgpu: sin surface texture ({0})")]
     SurfaceAcquire(String),
 }
 
-/// Renderer wgpu con una sola capa (heightmap).
+/// Renderer wgpu con pipeline compartido para capas de mapa.
+///
+/// La capa 0 es heightmap (mantenida en `vertex_buf`/`index_buf`/`index_count`).
+/// Las capas adicionales (Fase 3+) viven en `layers`.
 pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -34,9 +45,13 @@ pub struct Renderer {
     pub camera_bind: wgpu::BindGroup,
     pub heightmap_pipeline: wgpu::RenderPipeline,
 
+    // Capa 0: heightmap (backward compat)
     pub vertex_buf: Option<wgpu::Buffer>,
     pub index_buf: Option<wgpu::Buffer>,
     pub index_count: u32,
+
+    // Capas adicionales (Fase 3)
+    pub layers: Vec<LayerBuffer>,
 }
 
 impl Renderer {
@@ -166,6 +181,7 @@ impl Renderer {
             vertex_buf: None,
             index_buf: None,
             index_count: 0,
+            layers: Vec::new(),
         }
     }
 
@@ -198,6 +214,57 @@ impl Renderer {
         self.index_count = mesh.indices.len() as u32;
         self.vertex_buf = Some(vertex_buf);
         self.index_buf = Some(index_buf);
+    }
+
+    /// Agrega una capa adicional de mesh. Retorna el índice de la capa (para usar
+    /// con `draw_layer`). La capa 0 es heightmap (vertex_buf/index_buf); las capas
+    /// adicionales empiezan en 1.
+    pub fn add_layer_mesh(&mut self, mesh: &HeightmapMesh) -> usize {
+        let idx = self.layers.len();
+        let vertex_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("vor-layer-{idx}-vbo")),
+                contents: bytemuck::cast_slice(&mesh.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("vor-layer-{idx}-ibo")),
+                contents: bytemuck::cast_slice(&mesh.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+        self.layers.push(LayerBuffer {
+            vertex_buf: Some(vertex_buf),
+            index_buf: Some(index_buf),
+            index_count: mesh.indices.len() as u32,
+        });
+        idx + 1 // 0-indexed, +1 porque layer 0 es heightmap
+    }
+
+    /// Dibuja una capa en el render pass. `layer_index=0` → heightmap;
+    /// `layer_index≥1` → capas adicionales registradas con `add_layer_mesh`.
+    pub fn draw_layer<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, layer_index: usize) {
+        let (vbo, ibo, count) = if layer_index == 0 {
+            (&self.vertex_buf, &self.index_buf, self.index_count)
+        } else {
+            let idx = layer_index - 1;
+            match self.layers.get(idx) {
+                Some(l) => (&l.vertex_buf, &l.index_buf, l.index_count),
+                None => return,
+            }
+        };
+        if let (Some(vbo), Some(ibo)) = (vbo, ibo) {
+            if count == 0 {
+                return;
+            }
+            pass.set_pipeline(&self.heightmap_pipeline);
+            pass.set_bind_group(0, &self.camera_bind, &[]);
+            pass.set_vertex_buffer(0, vbo.slice(..));
+            pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..count, 0, 0..1);
+        }
     }
 
     /// Renderiza un frame con la camara dada. Limpia con `clear_color` y dibuja
