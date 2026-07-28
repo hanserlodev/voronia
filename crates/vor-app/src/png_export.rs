@@ -26,9 +26,9 @@ pub fn export_png(
     let device = &renderer.device;
     let queue = &renderer.queue;
 
-    // Offscreen texture: mismo formato que la surface (RENDER_ATTACHMENT + COPY_SRC)
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("vor-export-png-tex"),
+    // Offscreen texture resolve target: single-sample, COPY_SRC para readback
+    let resolve_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("vor-export-png-resolve"),
         size: wgpu::Extent3d {
             width: export_width,
             height: export_height,
@@ -41,7 +41,24 @@ pub fn export_png(
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    // Offscreen MSAA 4x texture (render target)
+    let msaa_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("vor-export-png-msaa"),
+        size: wgpu::Extent3d {
+            width: export_width,
+            height: export_height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: renderer.msaa_count,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
     // Calcular camera uniform para el tamaño de exportación (misma vista, distinto aspect)
     // Necesito recrear la cámara con el nuevo viewport o escalar el uniform manual.
@@ -65,13 +82,13 @@ pub fn export_png(
         bytemuck::cast_slice(&[export_uniform]),
     );
 
-    // Render pass a offscreen texture
+    // Render pass a MSAA 4x offscreen, resuelve a resolve_texture
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vor-export-png-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
+                view: &msaa_view,
+                resolve_target: Some(&resolve_view),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.02,
@@ -113,7 +130,7 @@ pub fn export_png(
     };
     encoder.copy_texture_to_buffer(
         wgpu::ImageCopyTexture {
-            texture: &texture,
+            texture: &resolve_texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
