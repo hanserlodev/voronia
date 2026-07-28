@@ -73,7 +73,7 @@ pub fn build_lake_mesh(pack: &Pack) -> HeightmapMesh {
         }
     }
 
-    if !bounds_min[0].is_finite() {
+    if !bounds_min.iter().all(|v| v.is_finite()) {
         bounds_min = [0.0; 2];
         bounds_max = [0.0; 2];
     }

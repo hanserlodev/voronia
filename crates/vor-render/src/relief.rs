@@ -61,7 +61,7 @@ pub fn build_relief_mesh(pack: &Pack) -> HeightmapMesh {
         bounds_max[0] = bounds_max[0].max(v.pos[0]);
         bounds_max[1] = bounds_max[1].max(v.pos[1]);
     }
-    if !bounds_min[0].is_finite() {
+    if !bounds_min.iter().all(|v| v.is_finite()) {
         bounds_min = [0.0; 2];
         bounds_max = [0.0; 2];
     }

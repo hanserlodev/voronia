@@ -428,7 +428,10 @@ impl Renderer {
         let resolve_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let msaa_view = self.msaa_view.as_ref().expect("msaa_view presente en uso normal");
+        let msaa_view = self
+            .msaa_view
+            .as_ref()
+            .expect("msaa_view presente en uso normal");
 
         let mut encoder = self
             .device

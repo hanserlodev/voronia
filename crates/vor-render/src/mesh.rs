@@ -1,6 +1,7 @@
 use lyon::geom::point;
 use lyon::path::Path;
 use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator, VertexBuffers};
+use vor_core::feature::Feature;
 use vor_core::voronoi::VoronoiVertices;
 
 use crate::heightmap::{ColorCtor, HeightmapMesh, HeightmapVertex};
@@ -90,7 +91,11 @@ pub fn build_pack_mesh(
         builder.begin(point(first_pos[0], first_pos[1]));
         for &t in ann.iter().skip(1) {
             let ti = t as usize;
-            let pos = smooth_vertices.positions.get(ti).copied().unwrap_or([0.0, 0.0]);
+            let pos = smooth_vertices
+                .positions
+                .get(ti)
+                .copied()
+                .unwrap_or([0.0, 0.0]);
             builder.line_to(point(pos[0], pos[1]));
         }
         builder.end(true);
@@ -119,7 +124,116 @@ pub fn build_pack_mesh(
         }
     }
 
-    if !result.bounds_min[0].is_finite() {
+    if !result.bounds_min.iter().all(|v| v.is_finite()) {
+        result.bounds_min = [0.0, 0.0];
+        result.bounds_max = [0.0, 0.0];
+    }
+
+    result
+}
+
+/// Subdivide un polígono cerrado con Catmull-Rom cúbico uniforme (α=0).
+/// Cada arista produce `subdivisions` puntos a lo largo de la curva.
+/// Usa 3 subdivisiones por defecto para un suavizado tipo Azgaar.
+fn catmull_rom_closed(points: &[[f32; 2]], subdivisions: usize) -> Vec<[f32; 2]> {
+    let n = points.len();
+    if n < 4 || subdivisions == 0 {
+        return points.to_vec();
+    }
+    let mut result = Vec::with_capacity(n * subdivisions);
+    for i in 0..n {
+        let p0 = points[(i + n - 1) % n];
+        let p1 = points[i];
+        let p2 = points[(i + 1) % n];
+        let p3 = points[(i + 2) % n];
+        for j in 0..subdivisions {
+            let t = j as f32 / subdivisions as f32;
+            let tt = t * t;
+            let ttt = tt * t;
+            let x = 0.5
+                * (2.0 * p1[0]
+                    + (-p0[0] + p2[0]) * t
+                    + (2.0 * p0[0] - 5.0 * p1[0] + 4.0 * p2[0] - p3[0]) * tt
+                    + (-p0[0] + 3.0 * p1[0] - 3.0 * p2[0] + p3[0]) * ttt);
+            let y = 0.5
+                * (2.0 * p1[1]
+                    + (-p0[1] + p2[1]) * t
+                    + (2.0 * p0[1] - 5.0 * p1[1] + 4.0 * p2[1] - p3[1]) * tt
+                    + (-p0[1] + 3.0 * p1[1] - 3.0 * p2[1] + p3[1]) * ttt);
+            result.push([x, y]);
+        }
+    }
+    result
+}
+
+/// Construye la malla base del mapa a partir de **features** (continentes/islas),
+/// NO del grid de celdas Voronoi. El perímetro de cada feature se suaviza con
+/// Catmull-Rom para costas naturales, y toda la masa terrestre se colorea con
+/// `color_fn(feature)`.
+///
+/// El océano no se renderiza acá — se usa el color de fondo (clear color) del
+/// render pass.
+pub fn build_landmass_mesh(
+    vertices: &VoronoiVertices,
+    features: &[Feature],
+    color_fn: impl Fn(&Feature) -> [f32; 4],
+) -> HeightmapMesh {
+    let mut result = HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [f32::INFINITY, f32::INFINITY],
+        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+    };
+
+    let mut tess = FillTessellator::new();
+
+    for feat in features {
+        if !feat.is_land || feat.perimeter_vertices.len() < 3 {
+            continue;
+        }
+        let raw: Vec<[f32; 2]> = feat
+            .perimeter_vertices
+            .iter()
+            .filter_map(|&vi| vertices.positions.get(vi as usize).copied())
+            .collect();
+        if raw.len() < 3 {
+            continue;
+        }
+        let smooth = catmull_rom_closed(&raw, 3);
+        let color = color_fn(feat);
+
+        let mut builder = Path::builder();
+        if let Some(first) = smooth.first() {
+            builder.begin(point(first[0], first[1]));
+            for pt in smooth.iter().skip(1) {
+                builder.line_to(point(pt[0], pt[1]));
+            }
+            builder.end(true);
+        }
+        let path = builder.build();
+
+        let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+        let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));
+        let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+        if tess
+            .tessellate_path(&path, &opts, &mut buffer_builder)
+            .is_err()
+        {
+            continue;
+        }
+
+        let base = result.vertices.len() as u32;
+        result.vertices.extend_from_slice(&mesh.vertices);
+        result.indices.extend(mesh.indices.iter().map(|i| i + base));
+        for v in &mesh.vertices {
+            result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+            result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+            result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+            result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+        }
+    }
+
+    if !result.bounds_min.iter().all(|v| v.is_finite()) {
         result.bounds_min = [0.0, 0.0];
         result.bounds_max = [0.0, 0.0];
     }

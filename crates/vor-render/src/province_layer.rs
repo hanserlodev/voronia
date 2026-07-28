@@ -1,6 +1,6 @@
 use vor_core::entities::province::Province;
-use vor_core::Pack;
 use vor_core::voronoi::VoronoiVertices;
+use vor_core::Pack;
 
 use crate::biome::hex_color_to_linear;
 use crate::heightmap::HeightmapMesh;

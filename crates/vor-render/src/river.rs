@@ -65,7 +65,7 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
         }
     }
 
-    if !bounds_min[0].is_finite() {
+    if !bounds_min.iter().all(|v| v.is_finite()) {
         bounds_min = [0.0, 0.0];
         bounds_max = [0.0, 0.0];
     }

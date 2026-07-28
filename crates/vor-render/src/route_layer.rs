@@ -35,10 +35,15 @@ pub fn build_route_mesh(routes: &[Route]) -> HeightmapMesh {
         bounds_max[0] = bounds_max[0].max(v.pos[0]);
         bounds_max[1] = bounds_max[1].max(v.pos[1]);
     }
-    if !bounds_min[0].is_finite() {
+    if !bounds_min.iter().all(|v| v.is_finite()) {
         bounds_min = [0.0; 2];
         bounds_max = [0.0; 2];
     }
 
-    HeightmapMesh { vertices: verts, indices: idx, bounds_min, bounds_max }
+    HeightmapMesh {
+        vertices: verts,
+        indices: idx,
+        bounds_min,
+        bounds_max,
+    }
 }

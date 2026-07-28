@@ -11,7 +11,7 @@ pub struct TextureOverlay {
 }
 
 impl TextureOverlay {
-    const VERTICES: &'static [f32] = &[
+    const VERTICES: &'static [f32; 24] = &[
         // position (x2) + uv (x2) = 6 vertices * 4 floats
         -1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0, 1.0,
         -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
@@ -40,7 +40,7 @@ impl TextureOverlay {
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("vor-texture-bgl"),
-            entries: &[
+            entries: &[ 
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,

@@ -7,14 +7,14 @@ use crate::mesh::build_pack_mesh;
 
 fn spectral_color(t: f32) -> [f32; 4] {
     let t = t.clamp(0.0, 1.0);
-    let stops: [(f32, [f32; 3]); 5] = [
-        (0.00, [0.23, 0.30, 0.67]),
-        (0.25, [0.20, 0.63, 0.78]),
-        (0.50, [0.96, 0.96, 0.70]),
-        (0.75, [0.96, 0.55, 0.26]),
-        (1.00, [0.62, 0.04, 0.19]),
+    let stops = [
+        (0.00_f32, [0.23_f32, 0.30_f32, 0.67_f32]),
+        (0.25_f32, [0.20_f32, 0.63_f32, 0.78_f32]),
+        (0.50_f32, [0.96_f32, 0.96_f32, 0.70_f32]),
+        (0.75_f32, [0.96_f32, 0.55_f32, 0.26_f32]),
+        (1.00_f32, [0.62_f32, 0.04_f32, 0.19_f32]),
     ];
-    let mut prev = stops[0];
+    let mut prev = stops.iter().copied().next().unwrap();
     for &s in &stops[1..] {
         if t <= s.0 {
             let span = (s.0 - prev.0).max(1e-6);
@@ -26,7 +26,7 @@ fn spectral_color(t: f32) -> [f32; 4] {
         }
         prev = s;
     }
-    let last = stops[stops.len() - 1].1;
+    let last = stops.iter().copied().last().unwrap().1;
     [last[0], last[1], last[2], 0.85]
 }
 

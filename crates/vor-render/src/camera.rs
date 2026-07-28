@@ -145,10 +145,14 @@ impl Camera {
     pub fn frame_bounds(&mut self, min: [f32; 2], max: [f32; 2]) {
         self.bounds_min = min;
         self.bounds_max = max;
-        let cx = (min[0] + max[0]) * 0.5;
-        let cy = (min[1] + max[1]) * 0.5;
-        let w = (max[0] - min[0]).max(1.0);
-        let h = (max[1] - min[1]).max(1.0);
+        if !min[0].is_finite() || !min[1].is_finite() || max[0] <= min[0] || max[1] <= min[1] {
+            self.bounds_min = [0.0, 0.0];
+            self.bounds_max = [1000.0, 1000.0];
+        }
+        let cx = (self.bounds_min[0] + self.bounds_max[0]) * 0.5;
+        let cy = (self.bounds_min[1] + self.bounds_max[1]) * 0.5;
+        let w = (self.bounds_max[0] - self.bounds_min[0]).max(1.0);
+        let h = (self.bounds_max[1] - self.bounds_min[1]).max(1.0);
         let pad = 1.10;
         let w_needed = w * pad;
         let h_needed = h * pad;
@@ -186,7 +190,7 @@ impl Camera {
         }
 
         let min_ext = (map_w.min(map_h) * 0.005).max(4.0);
-        let max_ext = map_w.max(map_h) * 3.0;
+        let max_ext = map_w.max(map_h).max(min_ext) * 3.0;
         self.extent_y = self.extent_y.clamp(min_ext, max_ext);
     }
 

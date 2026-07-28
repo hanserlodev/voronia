@@ -1,8 +1,8 @@
 //! Parseo de los slots de catálogos JSON del `.map`:
 //! - `[3]` biomas (pipe-CSV de 3 sub-campos: colors, habitability, names).
 //! - `[4]` notes (JSON).
-//! - `[12]` features (JSON; **no** mapeamos todos los campos — vértices/shoreline
-//!   son too heavy en Fase 1, se preservan opacos).
+//! - `[12]` features (JSON; mapeamos tipo fuerte, vértices del perímetro, y
+//!   grupos tierra/lago; opacos como shore/area/height preservados como fallback).
 //! - `[13]` cultures; `[14]` states; `[15]` burgs; `[29]` religions; `[30]` provinces;
 //!   `[32]` rivers; `[35]` markers; `[37]` routes; `[38]` zones; `[39]` ice;
 //!   `[46]` measurers.
@@ -35,7 +35,7 @@ use vor_core::entities::{
     state::State,
     zone::Zone,
 };
-use vor_core::feature::{Feature, FeatureType};
+use vor_core::feature::{Feature, FeatureType, LandGroup, LakeGroup};
 
 #[derive(Debug, Error)]
 pub enum CatalogError {
@@ -99,6 +99,8 @@ pub struct FeatureRaw {
     #[serde(rename = "firstCell", default)]
     pub first_cell: u32,
     #[serde(default)]
+    pub group: String,
+    #[serde(default)]
     pub vertices: serde_json::Value,
     #[serde(default)]
     pub area: serde_json::Value,
@@ -138,14 +140,31 @@ pub fn parse_features(slot12: Option<&str>) -> Result<Vec<Feature>, CatalogError
             touches_border: fr.border,
             kind,
             land_group: if fr.land {
-                Some(vor_core::feature::LandGroup::Island)
+                match fr.group.as_str() {
+                    "continent" => Some(LandGroup::Continent),
+                    "isle" => Some(LandGroup::Isle),
+                    "island" => Some(LandGroup::Island),
+                    "lake_island" => Some(LandGroup::LakeIsland),
+                    _ => Some(LandGroup::Island),
+                }
             } else {
                 None
             },
-            lake_group: None,
+            lake_group: if kind == FeatureType::Lake {
+                match fr.group.as_str() {
+                    "freshwater" => Some(LakeGroup::Freshwater),
+                    "salt" => Some(LakeGroup::Salt),
+                    "dry" => Some(LakeGroup::Dry),
+                    "sinkhole" => Some(LakeGroup::Sinkhole),
+                    "lava" => Some(LakeGroup::Lava),
+                    _ => None,
+                }
+            } else {
+                None
+            },
             cell_count: fr.cells,
             first_cell: fr.first_cell,
-            perimeter_vertices: Vec::new(),
+            perimeter_vertices: serde_json::from_value(fr.vertices).unwrap_or_default(),
             name: fr.name,
         });
     }
