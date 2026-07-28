@@ -678,9 +678,11 @@ impl State {
 
         // ---- Wgpu passes ----
         let surface_texture = self.renderer.surface.get_current_texture()?;
-        let view = surface_texture
+        let resolve_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let msaa_view = self.renderer.msaa_view.as_ref()
+            .expect("msaa_view presente si renderer se creó con MSAA");
 
         let mut encoder =
             self.renderer
@@ -689,13 +691,13 @@ impl State {
                     label: Some("vor-frame"),
                 });
 
-        // Pass 1: capas de mapa
+        // Pass 1: capas de mapa (renderiza a MSAA 4x, resuelve a surface)
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("vor-map"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
+                    view: msaa_view,
+                    resolve_target: Some(&resolve_view),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.02,
@@ -737,13 +739,13 @@ impl State {
             }
         }
 
-        // Pass 1.5: texture overlay (multiply blend over map)
+        // Pass 1.5: texture overlay (multiply blend over resolved surface)
         if self.layer_flags.texture {
             if let Some(ref tex) = self.texture_overlay {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("vor-texture"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
+                        view: &resolve_view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
@@ -767,13 +769,13 @@ impl State {
             &screen_descriptor,
         );
 
-        // Pass 2: egui overlay
+        // Pass 2: egui overlay (sobre la surface ya resuelta)
         {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("vor-egui"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
+                        view: &resolve_view,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,

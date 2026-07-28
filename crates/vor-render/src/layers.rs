@@ -45,25 +45,22 @@ pub struct LayerFlags {
 impl Default for LayerFlags {
     fn default() -> Self {
         Self {
-            // Landmass — Pure Landmass preset
+            // Natural-looking default: terrain + texture + water, no technical overlays
             texture: true,
             heightmap: true,
             relief: true,
-            cells: true,
-            grid: true,
-            contours: true,
-            coordinates: true,
-            // Water & climate — off
-            lakes: false,
-            rivers: false,
+            cells: false,
+            grid: false,
+            contours: false,
+            coordinates: false,
+            lakes: true,
+            rivers: true,
             temperature: false,
             precipitation: false,
             ice: false,
-            // Biosphere — off
             biomes: false,
             goods: false,
             routes: false,
-            // Human geography — off
             states: false,
             provinces: false,
             zones: false,
@@ -73,11 +70,9 @@ impl Default for LayerFlags {
             burgs: false,
             markets: false,
             trade: false,
-            // Borders — off
             borders_state: false,
             borders_province: false,
             borders_culture: false,
-            // Overlay — minimal
             markers: false,
             icons: false,
             emblems: false,

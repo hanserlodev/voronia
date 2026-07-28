@@ -33,6 +33,8 @@ pub enum RenderError {
 ///
 /// La capa 0 es heightmap (mantenida en `vertex_buf`/`index_buf`/`index_count`).
 /// Las capas adicionales (Fase 3+) viven en `layers`.
+///
+/// Usa MSAA 4x para suavizado de bordes (elimina el serrado de triángulos Voronoi).
 pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -45,6 +47,11 @@ pub struct Renderer {
     pub camera_bind: wgpu::BindGroup,
     pub heightmap_pipeline: wgpu::RenderPipeline,
     pub line_pipeline: wgpu::RenderPipeline,
+
+    // MSAA 4x
+    pub msaa_count: u32,
+    pub msaa_texture: Option<wgpu::Texture>,
+    pub msaa_view: Option<wgpu::TextureView>,
 
     // Capa 0: heightmap (backward compat)
     pub vertex_buf: Option<wgpu::Buffer>,
@@ -67,6 +74,7 @@ impl Renderer {
         size: (u32, u32),
         format: wgpu::TextureFormat,
     ) -> Self {
+        let msaa_count = 4;
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -78,6 +86,22 @@ impl Renderer {
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &surface_config);
+
+        let msaa_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vor-msaa-buffer"),
+            size: wgpu::Extent3d {
+                width: size.0.max(1),
+                height: size.1.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: msaa_count,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let msaa_view = Some(msaa_texture.create_view(&wgpu::TextureViewDescriptor::default()));
 
         // Uniform buffer de camara (matriz 4x4 = 64 bytes).
         let camera_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -143,6 +167,12 @@ impl Renderer {
             attributes: &vertex_attrs,
         };
 
+        let multisample = wgpu::MultisampleState {
+            count: msaa_count,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        };
+
         let color_targets = [Some(wgpu::ColorTargetState {
             format,
             blend: Some(wgpu::BlendState::REPLACE),
@@ -171,7 +201,7 @@ impl Renderer {
                 ..Default::default()
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
+            multisample,
             multiview: None,
             cache: None,
         });
@@ -204,7 +234,7 @@ impl Renderer {
                 ..Default::default()
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
+            multisample,
             multiview: None,
             cache: None,
         });
@@ -220,6 +250,9 @@ impl Renderer {
             camera_bind,
             heightmap_pipeline,
             line_pipeline,
+            msaa_count,
+            msaa_texture: Some(msaa_texture),
+            msaa_view,
             vertex_buf: None,
             index_buf: None,
             index_count: 0,
@@ -236,6 +269,22 @@ impl Renderer {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
+        let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vor-msaa-buffer"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: self.msaa_count,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        self.msaa_view = Some(tex.create_view(&wgpu::TextureViewDescriptor::default()));
+        self.msaa_texture = Some(tex);
     }
 
     /// Sube la malla triangulada del heightmap a GPU.
@@ -376,9 +425,10 @@ impl Renderer {
             .surface
             .get_current_texture()
             .map_err(|e| RenderError::SurfaceAcquire(e.to_string()))?;
-        let view = surface_texture
+        let resolve_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let msaa_view = self.msaa_view.as_ref().expect("msaa_view presente en uso normal");
 
         let mut encoder = self
             .device
@@ -389,8 +439,8 @@ impl Renderer {
         {
             let [r, g, b, a] = clear_color;
             let color_attachments = [Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
+                view: msaa_view,
+                resolve_target: Some(&resolve_view),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a }),
                     store: wgpu::StoreOp::Store,
@@ -417,6 +467,22 @@ impl Renderer {
         self.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();
         Ok(())
+    }
+
+    /// Retorna un `TextureView` de la surface (resolve target) para que vor-app
+    /// lo use en sus passes de overlay/egui después de dibujar capas MSAA.
+    pub fn resolve_view<'a>(
+        &'a self,
+        surface_texture: &'a wgpu::SurfaceTexture,
+    ) -> wgpu::TextureView {
+        surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default())
+    }
+
+    /// Retorna referencia al MSAA TextureView.
+    pub fn msaa_view(&self) -> Option<&wgpu::TextureView> {
+        self.msaa_view.as_ref()
     }
 
     /// Bind group layout de camara (para que vor-app pueda mapear el mismo layout
