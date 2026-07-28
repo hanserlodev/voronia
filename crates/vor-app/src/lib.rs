@@ -1,3 +1,7 @@
+mod png_export;
+mod svg_export;
+mod ui;
+
 use egui_wgpu::Renderer as EguiRenderer;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -5,12 +9,29 @@ use std::time::Instant;
 use thiserror::Error;
 use tracing::info;
 use vor_core::World;
+use vor_edit::EditBuffer;
 use vor_render::biome::{biome_colors_from_catalog, build_biome_mesh};
 use vor_render::border::{build_border_mesh, BorderKind};
 use vor_render::burg::build_burg_mesh;
+use vor_render::cells::build_cell_wireframe;
+use vor_render::contour::build_contour_lines;
+use vor_render::coordinates::build_coordinate_lines;
+use vor_render::culture_layer::build_culture_mesh;
+use vor_render::grid::build_grid_lines;
 use vor_render::heightmap::{build_mesh, HeightmapMesh};
+use vor_render::ice_layer::build_ice_mesh;
+use vor_render::lakes::build_lake_mesh;
 use vor_render::layers::LayerFlags;
+use vor_render::population_layer::build_population_mesh;
+use vor_render::precipitation::build_precipitation_mesh;
+use vor_render::province_layer::build_province_mesh;
+use vor_render::relief::build_relief_mesh;
+use vor_render::religion_layer::build_religion_mesh;
 use vor_render::river::build_river_mesh;
+use vor_render::route_layer::build_route_mesh;
+use vor_render::state_layer::build_state_mesh;
+use vor_render::temperature::build_temperature_mesh;
+use vor_render::zone_layer::build_zone_mesh;
 use vor_render::{Camera, Renderer};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -35,6 +56,8 @@ pub struct ViewerConfig {
     pub world: World,
     pub mesh: HeightmapMesh,
 }
+
+const PANEL_WIDTH: f32 = 240.0;
 
 pub fn run(cfg: ViewerConfig) -> Result<(), AppError> {
     let event_loop = EventLoop::new().map_err(|e| AppError::Winit(e.to_string()))?;
@@ -114,6 +137,22 @@ struct State {
     autosave_enabled: bool,
     autosave_interval: f32,
     last_autosave: Instant,
+    edit_buffer: EditBuffer,
+    dirty: bool,
+    active_tab: ui::TabId,
+    show_export_modal: bool,
+    show_save_modal: bool,
+    show_load_modal: bool,
+    show_new_modal: bool,
+    texture_name: String,
+    texture_overlay: Option<vor_render::TextureOverlay>,
+
+    // Indices de capas de líneas en renderer.line_layers
+    line_cells_idx: usize,
+    line_grid_idx: usize,
+    line_contours_idx: usize,
+    line_coordinates_idx: usize,
+    line_routes_idx: usize,
 }
 
 async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
@@ -189,7 +228,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     let border_state_mesh = build_border_mesh(&world.pack, BorderKind::State);
     let border_province_mesh = build_border_mesh(&world.pack, BorderKind::Province);
     let border_culture_mesh = build_border_mesh(&world.pack, BorderKind::Culture);
-    let burg_mesh = build_burg_mesh(&world.pack);
+    let burg_mesh = build_burg_mesh(&world.pack, &world.states);
 
     info!(
         "meshes: biomes={}v/{}i, rivers={}v/{}i, borders(s/p/c)=({}/{}/{}), burgs={}v/{}i",
@@ -211,6 +250,114 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     let _l_bcult = renderer.add_layer_mesh(&border_culture_mesh);
     let _l_burgs = renderer.add_layer_mesh(&burg_mesh);
 
+    // --- Human Geography layers ---
+    let state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states);
+    info!("state fill mesh: {}v/{}i", state_mesh.vertices.len(), state_mesh.indices.len());
+    let _l_state = renderer.add_layer_mesh(&state_mesh);
+
+    let province_mesh = build_province_mesh(&world.pack.vertices, &world.pack, &world.provinces);
+    info!("province fill mesh: {}v/{}i", province_mesh.vertices.len(), province_mesh.indices.len());
+    let _l_province = renderer.add_layer_mesh(&province_mesh);
+
+    let culture_mesh = build_culture_mesh(&world.pack.vertices, &world.pack, &world.cultures);
+    info!("culture fill mesh: {}v/{}i", culture_mesh.vertices.len(), culture_mesh.indices.len());
+    let _l_culture = renderer.add_layer_mesh(&culture_mesh);
+
+    let religion_mesh = build_religion_mesh(&world.pack.vertices, &world.pack, &world.religions);
+    info!("religion fill mesh: {}v/{}i", religion_mesh.vertices.len(), religion_mesh.indices.len());
+    let _l_religion = renderer.add_layer_mesh(&religion_mesh);
+
+    let population_mesh = build_population_mesh(&world.pack.vertices, &world.pack);
+    info!("population mesh: {}v/{}i", population_mesh.vertices.len(), population_mesh.indices.len());
+    let _l_population = renderer.add_layer_mesh(&population_mesh);
+
+    let zone_mesh = build_zone_mesh(&world.pack.vertices, &world.pack, &world.zones);
+    info!("zone mesh: {}v/{}i", zone_mesh.vertices.len(), zone_mesh.indices.len());
+    let _l_zones = renderer.add_layer_mesh(&zone_mesh);
+
+    // --- Relief layer (triangle) ---
+    let relief_mesh = build_relief_mesh(&world.pack);
+    info!(
+        "relief mesh: {}v/{}i",
+        relief_mesh.vertices.len(),
+        relief_mesh.indices.len()
+    );
+    let _l_relief = renderer.add_layer_mesh(&relief_mesh);
+
+    // --- Water & Climate layers ---
+    let lake_mesh = build_lake_mesh(&world.pack);
+    info!(
+        "lake mesh: {}v/{}i",
+        lake_mesh.vertices.len(),
+        lake_mesh.indices.len()
+    );
+    let _l_lakes = renderer.add_layer_mesh(&lake_mesh);
+
+    let temp_mesh = build_temperature_mesh(&world.pack.vertices, &world.pack, &world.grid);
+    info!(
+        "temperature mesh: {}v/{}i",
+        temp_mesh.vertices.len(),
+        temp_mesh.indices.len()
+    );
+    let _l_temp = renderer.add_layer_mesh(&temp_mesh);
+
+    let prec_mesh = build_precipitation_mesh(&world.pack.vertices, &world.pack, &world.grid);
+    info!(
+        "precipitation mesh: {}v/{}i",
+        prec_mesh.vertices.len(),
+        prec_mesh.indices.len()
+    );
+    let _l_prec = renderer.add_layer_mesh(&prec_mesh);
+
+    let ice_mesh = build_ice_mesh(&world.ice);
+    info!(
+        "ice mesh: {}v/{}i",
+        ice_mesh.vertices.len(),
+        ice_mesh.indices.len()
+    );
+    let _l_ice = renderer.add_layer_mesh(&ice_mesh);
+
+    // --- Line layers (cells, grid, contours, coordinates) ---
+    let cells_mesh = build_cell_wireframe(&world.pack.vertices, world.pack.points_n());
+    info!(
+        "cells wireframe: {}v/{}i",
+        cells_mesh.vertices.len(),
+        cells_mesh.indices.len()
+    );
+    let line_cells_idx = renderer.add_line_layer(&cells_mesh);
+
+    let grid_mesh = build_grid_lines(mesh_bounds_min, mesh_bounds_max);
+    info!(
+        "grid lines: {}v/{}i",
+        grid_mesh.vertices.len(),
+        grid_mesh.indices.len()
+    );
+    let line_grid_idx = renderer.add_line_layer(&grid_mesh);
+
+    let contour_mesh = build_contour_lines(&world.grid);
+    info!(
+        "contour lines: {}v/{}i",
+        contour_mesh.vertices.len(),
+        contour_mesh.indices.len()
+    );
+    let line_contours_idx = renderer.add_line_layer(&contour_mesh);
+
+    let coord_mesh = build_coordinate_lines(mesh_bounds_min, mesh_bounds_max);
+    info!(
+        "coordinate lines: {}v/{}i",
+        coord_mesh.vertices.len(),
+        coord_mesh.indices.len()
+    );
+    let line_coordinates_idx = renderer.add_line_layer(&coord_mesh);
+
+    let route_mesh = build_route_mesh(&world.routes);
+    info!(
+        "route lines: {}v/{}i",
+        route_mesh.vertices.len(),
+        route_mesh.indices.len()
+    );
+    let line_routes_idx = renderer.add_line_layer(&route_mesh);
+
     let mut camera = Camera::new([0.0, 0.0], 1000.0, size.width, size.height);
     camera.frame_bounds(mesh_bounds_min, mesh_bounds_max);
 
@@ -226,6 +373,17 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     );
 
     let egui_renderer = EguiRenderer::new(&renderer.device, surface_format, None, 1, false);
+
+    let edit_buffer = EditBuffer::default();
+
+    // Load default texture
+    let texture_name = "marble-big".to_string();
+    let texture_overlay = load_texture(
+        &renderer.device,
+        &renderer.queue,
+        surface_format,
+        &texture_name,
+    );
 
     State {
         window,
@@ -247,6 +405,20 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         autosave_enabled: true,
         autosave_interval: 60.0,
         last_autosave: Instant::now(),
+        edit_buffer,
+        dirty: false,
+        texture_name,
+        texture_overlay,
+        line_cells_idx,
+        line_grid_idx,
+        line_contours_idx,
+        line_coordinates_idx,
+        line_routes_idx,
+        active_tab: ui::TabId::Layers,
+        show_export_modal: false,
+        show_save_modal: false,
+        show_load_modal: false,
+        show_new_modal: false,
     }
 }
 
@@ -350,7 +522,7 @@ impl State {
         ];
         let world_cursor = self.camera.screen_to_world(cursor_screen, surface_size);
         let picked_cell = self.picked_cell;
-        let world = &self.world;
+        let world = &mut self.world;
 
         let show_labels = self.layer_flags.labels;
         let label_data: Vec<(f32, f32, String)> = if show_labels {
@@ -375,17 +547,31 @@ impl State {
             Vec::new()
         };
 
-        let pop_rate = world.settings.population_rate;
-        let layer_flags = &mut self.layer_flags;
-        let autosave_enabled = &mut self.autosave_enabled;
         let vorn_save_path = self.map_path.with_extension("vorn");
 
-        let panel_w = 220.0; // SidePanel default width
+        // Destructure mutable refs to pass into the FnOnce closure
+        let last_texture = self.texture_name.clone();
+        let texture_name = &mut self.texture_name;
+        let _texture_overlay = &mut self.texture_overlay;
+        let active_tab = &mut self.active_tab;
+        let layer_flags = &mut self.layer_flags;
+        let edit_buffer = &mut self.edit_buffer;
+        let dirty = &mut self.dirty;
+        let show_export = &mut self.show_export_modal;
+        let show_save = &mut self.show_save_modal;
+        let show_load = &mut self.show_load_modal;
+        let show_new = &mut self.show_new_modal;
+        let autosave_enabled = &mut self.autosave_enabled;
+        let camera = &mut self.camera;
+        let renderer = &self.renderer;
+        let mesh_bounds_min = self.mesh_bounds_min;
+        let mesh_bounds_max = self.mesh_bounds_max;
+
         let output = self.egui_ctx.run(raw_input, |ctx| {
-            // Labels overlay (solo si no caen debajo del panel lateral)
+            // Labels overlay (clip below sidebar)
             let painter = ctx.debug_painter();
             for (sx, sy, name) in &label_data {
-                if *sx < panel_w + 10.0 {
+                if *sx < PANEL_WIDTH + 10.0 {
                     continue;
                 }
                 painter.text(
@@ -397,127 +583,89 @@ impl State {
                 );
             }
 
+            // TopBar
             egui::TopBottomPanel::top("vor-title").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(format!("Voronia -- {}", map_path.display()));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(format!("FPS: {fps:.1}"));
+                        ui.label(format!("zoom: {camera_extent_y:.0}"));
+                    });
                 });
             });
 
+            // SidePanel with tabs
             egui::SidePanel::left("vor-panel")
                 .resizable(false)
-                .default_width(220.0)
+                .default_width(PANEL_WIDTH)
                 .show(ctx, |ui| {
-                    ui.heading("visor");
-                    ui.label(format!("FPS: {fps:.1}"));
+                    // --- Tab bar ---
+                    ui.horizontal(|ui| {
+                        for tab in &ui::TabId::ALL {
+                            let selected = *active_tab == *tab;
+                            if ui.selectable_label(selected, tab.label()).clicked() {
+                                *active_tab = *tab;
+                            }
+                        }
+                    });
+                    ui.separator();
+
+                    // --- Tab content ---
+                    match *active_tab {
+                        ui::TabId::Layers => ui::layers_tab(ui, layer_flags),
+                        ui::TabId::Info => ui::info_tab(ui, picked_cell, world, edit_buffer, dirty),
+                        ui::TabId::Tools => ui::tools_tab(ui, world, dirty),
+                        ui::TabId::Options => ui::options_tab(ui),
+                        ui::TabId::Style => ui::style_tab(ui, texture_name),
+                        ui::TabId::About => ui::about_tab(ui),
+                    }
+
+                    // --- Debug info ---
+                    ui.separator();
                     ui.label(format!(
-                        "centro: ({:.0}, {:.0})",
+                        "center: ({:.0}, {:.0})",
                         camera_center[0], camera_center[1]
                     ));
-                    ui.label(format!("zoom: {camera_extent_y:.0}"));
                     ui.label(format!(
                         "cursor: ({:.0}, {:.0})",
                         world_cursor[0], world_cursor[1]
                     ));
-                    ui.separator();
 
-                    ui.heading("capas");
-                    ui.checkbox(&mut layer_flags.heightmap, "heightmap");
-                    ui.checkbox(&mut layer_flags.biomes, "biomas");
-                    ui.checkbox(&mut layer_flags.rivers, "ríos");
-                    ui.checkbox(&mut layer_flags.borders_state, "fronteras estados");
-                    ui.checkbox(&mut layer_flags.borders_province, "fronteras provincias");
-                    ui.checkbox(&mut layer_flags.borders_culture, "fronteras culturas");
-                    ui.checkbox(&mut layer_flags.burgs, "burgos");
-                    ui.checkbox(&mut layer_flags.labels, "labels");
-                    ui.separator();
-
-                    if let Some(cid) = picked_cell {
-                        ui.heading(format!("celda #{cid}"));
-                        let h = world.pack.cells.height.get(cid).copied().unwrap_or(0);
-                        ui.label(format!("altura: {h}"));
-                        let bi = world.pack.cells.biome.get(cid).copied().unwrap_or(0);
-                        let name = world
-                            .biomes
-                            .get(bi as usize)
-                            .map(|b| b.name.as_str())
-                            .unwrap_or("?");
-                        ui.label(format!("bioma: {name}"));
-                        let sid = world.pack.cells.state.get(cid).copied().unwrap_or(0);
-                        let sname = if sid > 0 {
-                            world
-                                .states
-                                .get(sid as usize)
-                                .map(|s| s.name.as_str())
-                                .unwrap_or("?")
-                        } else {
-                            "Wildlands"
-                        };
-                        ui.label(format!("estado: {sname}"));
-                        let cid2 = world.pack.cells.culture.get(cid).copied().unwrap_or(0);
-                        let cname = if cid2 > 0 {
-                            world
-                                .cultures
-                                .get(cid2 as usize)
-                                .map(|c| c.name.as_str())
-                                .unwrap_or("?")
-                        } else {
-                            "Wildlands"
-                        };
-                        ui.label(format!("cultura: {cname}"));
-                        let pid = world.pack.cells.province.get(cid).copied().unwrap_or(0);
-                        let pname = if pid > 0 {
-                            world
-                                .provinces
-                                .get(pid as usize)
-                                .map(|p| p.name.as_str())
-                                .unwrap_or("?")
-                        } else {
-                            "\u{2014}"
-                        };
-                        ui.label(format!("provincia: {pname}"));
-                        let bid = world.pack.cells.burg.get(cid).copied().unwrap_or(0);
-                        let bname = if bid > 0 {
-                            world
-                                .burgs
-                                .iter()
-                                .find(|b| b.id == bid)
-                                .map(|b| b.name.as_str())
-                                .unwrap_or("?")
-                        } else {
-                            "\u{2014}"
-                        };
-                        ui.label(format!("burgo: {bname}"));
-                        let rid = world.pack.cells.river.get(cid).copied().unwrap_or(0);
-                        let rname = if rid > 0 {
-                            world
-                                .rivers
-                                .iter()
-                                .find(|r| r.id == rid)
-                                .map(|r| r.name.as_str())
-                                .unwrap_or("?")
-                        } else {
-                            "\u{2014}"
-                        };
-                        ui.label(format!("río: {rname}"));
-                        let pop = world.pack.cells.population.get(cid).copied().unwrap_or(0.0);
-                        ui.label(format!("población: {:.0} hab", pop * pop_rate));
-                    } else {
-                        ui.label("click derecho → seleccionar");
-                    }
-                    ui.separator();
-                    ui.heading("autosave");
-                    ui.checkbox(autosave_enabled, "autosave cada 60s");
-                    if ui.button("save .vorn ahora").clicked() {
-                        match vor_format::save::save_world(&vorn_save_path, world) {
-                            Ok(_) => {
-                                tracing::info!("guardado manual: {}", vorn_save_path.display());
-                            }
-                            Err(e) => {
-                                tracing::warn!("save falló: {e}");
-                            }
-                        }
-                    }
+                    // --- Sticky footer ---
+                    ui::footer_bar(
+                        ui,
+                        show_export,
+                        show_save,
+                        show_load,
+                        show_new,
+                        camera,
+                        mesh_bounds_min,
+                        mesh_bounds_max,
+                        &surface_size,
+                    );
                 });
+
+            // --- Modals (outside sidebar, centered) ---
+            if *show_export {
+                ui::export_modal(
+                    ctx,
+                    show_export,
+                    renderer,
+                    camera,
+                    layer_flags,
+                    &vorn_save_path,
+                    world,
+                );
+            }
+            if *show_save {
+                ui::save_modal(ctx, show_save, world, &vorn_save_path, autosave_enabled);
+            }
+            if *show_load {
+                ui::load_modal(ctx, show_load);
+            }
+            if *show_new {
+                ui::new_map_modal(ctx, show_new);
+            }
         });
 
         // Upload textures (font atlas etc.)
@@ -559,7 +707,7 @@ impl State {
                     label: Some("vor-frame"),
                 });
 
-        // Pass 1: capas de mapa (clear background + todas las capas activas)
+        // Pass 1: capas de mapa
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("vor-map"),
@@ -584,6 +732,48 @@ impl State {
             for layer_idx in self.layer_flags.active_indices() {
                 self.renderer.draw_layer(&mut pass, layer_idx);
             }
+
+            // Line layers
+            if self.layer_flags.cells {
+                self.renderer
+                    .draw_line_layer(&mut pass, self.line_cells_idx);
+            }
+            if self.layer_flags.grid {
+                self.renderer.draw_line_layer(&mut pass, self.line_grid_idx);
+            }
+            if self.layer_flags.contours {
+                self.renderer
+                    .draw_line_layer(&mut pass, self.line_contours_idx);
+            }
+            if self.layer_flags.coordinates {
+                self.renderer
+                    .draw_line_layer(&mut pass, self.line_coordinates_idx);
+            }
+            if self.layer_flags.routes {
+                self.renderer
+                    .draw_line_layer(&mut pass, self.line_routes_idx);
+            }
+        }
+
+        // Pass 1.5: texture overlay (multiply blend over map)
+        if self.layer_flags.texture {
+            if let Some(ref tex) = self.texture_overlay {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("vor-texture"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                tex.draw(&mut pass);
+            }
         }
 
         // Update egui buffers
@@ -595,7 +785,7 @@ impl State {
             &screen_descriptor,
         );
 
-        // Pass 2: egui overlay (load from prev pass)
+        // Pass 2: egui overlay
         {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -621,6 +811,16 @@ impl State {
             .queue
             .submit(std::iter::once(encoder.finish()));
         surface_texture.present();
+
+        // ---- Texture reload (if name changed) ----
+        if self.texture_name != last_texture {
+            self.texture_overlay = load_texture(
+                &self.renderer.device,
+                &self.renderer.queue,
+                self.renderer.format,
+                &self.texture_name,
+            );
+        }
 
         // ---- Autosave ----
         if self.autosave_enabled {
@@ -652,10 +852,8 @@ async fn list_adapters() -> Vec<String> {
         .collect()
 }
 
-/// Encuentra la celda pack más cercana a una coordenada de mundo.
-/// Retorna `None` si la distancia supera `threshold*threshold`.
 fn pick_cell(world: [f32; 2], points: &[[f32; 2]]) -> Option<usize> {
-    let threshold = 400.0; // 20 px de radio al cuadrado
+    let threshold = 400.0;
     points
         .iter()
         .enumerate()
@@ -668,7 +866,7 @@ fn pick_cell(world: [f32; 2], points: &[[f32; 2]]) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
-/// Color hex (#rrggbb) a [f32; 3] lineal aprox.
+#[allow(dead_code)]
 fn hex_color_to_linear(hex: &str) -> [f32; 3] {
     let hex = hex.trim_start_matches('#');
     let r = u8::from_str_radix(hex.get(0..2).unwrap_or("00"), 16).unwrap_or(0);
@@ -683,6 +881,84 @@ fn hex_color_to_linear(hex: &str) -> [f32; 3] {
         }
     }
     [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)]
+}
+
+/// Texture names available as map overlays.
+/// "none" means no texture (disabled).
+pub const TEXTURES: &[&str] = &[
+    "none",
+    "marble-big",
+    "marble-small",
+    "gray-paper",
+    "folded-paper-big",
+    "folded-paper-small",
+    "soiled-paper",
+    "antique-big",
+    "antique-small",
+    "ocean",
+];
+
+/// Loads a texture from assets/textures/, returning None if name is "none" or loading fails.
+fn load_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    format: wgpu::TextureFormat,
+    name: &str,
+) -> Option<vor_render::TextureOverlay> {
+    if name == "none" {
+        return None;
+    }
+    let asset_path: PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "assets",
+        "textures",
+        &format!("{}.jpg", name),
+    ]
+    .iter()
+    .collect();
+    let asset_path = if asset_path.exists() {
+        asset_path
+    } else {
+        // Try .png
+        let png: PathBuf = [
+            env!("CARGO_MANIFEST_DIR"),
+            "..",
+            "..",
+            "assets",
+            "textures",
+            &format!("{}.png", name),
+        ]
+        .iter()
+        .collect();
+        if png.exists() {
+            png
+        } else {
+            tracing::warn!("texture not found: {name}");
+            return None;
+        }
+    };
+    match image::ImageReader::open(&asset_path) {
+        Ok(reader) => match reader.decode() {
+            Ok(img) => {
+                let rgba = img.to_rgba8();
+                let (w, h) = rgba.dimensions();
+                tracing::info!("loaded texture: {name} ({w}x{h})");
+                Some(vor_render::TextureOverlay::new(
+                    device, queue, format, w, h, &rgba,
+                ))
+            }
+            Err(e) => {
+                tracing::warn!("failed to decode texture {name}: {e}");
+                None
+            }
+        },
+        Err(e) => {
+            tracing::warn!("failed to open texture {name}: {e}");
+            None
+        }
+    }
 }
 
 pub fn run_cli() -> anyhow::Result<()> {

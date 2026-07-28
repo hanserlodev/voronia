@@ -1,10 +1,12 @@
+use vor_core::entities::state::State;
 use vor_core::pack::Pack;
 
+use crate::biome::hex_color_to_linear;
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 
-/// Construye la malla de burgos: un triángulo equilátero pequeño en la posición
-/// de cada burgo.
-pub fn build_burg_mesh(pack: &Pack) -> HeightmapMesh {
+/// Construye la malla de burgos: un triángulo en la posición de cada burgo,
+/// coloreado según el estado al que pertenece.
+pub fn build_burg_mesh(pack: &Pack, states: &[State]) -> HeightmapMesh {
     let n = pack.points_n();
     let mut vertices: Vec<HeightmapVertex> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
@@ -19,12 +21,14 @@ pub fn build_burg_mesh(pack: &Pack) -> HeightmapMesh {
         }
         added += 1;
         let center = pack.points.get(p).copied().unwrap_or([0.0, 0.0]);
-        // Color por id de estado o fijo
-        let color = [0.9, 0.2, 0.1, 1.0];
+        let sid = pack.cells.state.get(p).copied().unwrap_or(0) as usize;
+        let color = match states.get(sid) {
+            Some(s) if !s.color.is_empty() => hex_color_to_linear(&s.color),
+            _ => [0.7, 0.7, 0.7, 1.0],
+        };
 
         let size = 4.0;
         let base = vertices.len() as u32;
-        // Triángulo apuntando arriba
         vertices.push(HeightmapVertex {
             pos: [center[0], center[1] + size],
             color,
@@ -50,7 +54,6 @@ pub fn build_burg_mesh(pack: &Pack) -> HeightmapMesh {
         }
     }
 
-    // Si no hay burgos, devolvemos mesh vacío con bounds default
     if added == 0 {
         return HeightmapMesh {
             vertices,
