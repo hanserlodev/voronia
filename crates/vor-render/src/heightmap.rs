@@ -19,6 +19,8 @@ use lyon::tessellation::{
 };
 use vor_core::Grid;
 
+use crate::mesh::laplacian_smooth_vertices;
+
 /// Un vertice del buffer de terreno: posicion (pixeles de mundo) + color (linear RGBA).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Debug, Default)]
@@ -62,6 +64,10 @@ impl FillVertexConstructor<HeightmapVertex> for ColorCtor {
 ///
 /// Celdas con `cell_rings[p]` vacio (boundary mal formado) se saltan.
 pub fn build_mesh(grid: &Grid) -> HeightmapMesh {
+    // Suavizado Laplaciano de la malla Voronoi: redondea las celdas sin romper
+    // la estanqueidad (vértices compartidos → sin huecos entre celdas adyacentes).
+    let smooth_vertices = laplacian_smooth_vertices(&grid.vertices, 0.2, 2);
+
     let n_cells = grid.points_n();
     let mut vertices: Vec<HeightmapVertex> = Vec::with_capacity(n_cells * 6);
     let mut indices: Vec<u32> = Vec::with_capacity(n_cells * 9);
@@ -78,10 +84,9 @@ pub fn build_mesh(grid: &Grid) -> HeightmapMesh {
         let h = grid.cells.height.get(p).copied().unwrap_or(0);
         let color = height_color(h);
 
-        // Path del poligono cerrado en orden CCW (el orden dado por `edgesAroundPoint`).
+        // Path del poligono cerrado usando posiciones suavizadas.
         let first_t = ann[0] as usize;
-        let first_pos = grid
-            .vertices
+        let first_pos = smooth_vertices
             .positions
             .get(first_t)
             .copied()
@@ -90,8 +95,7 @@ pub fn build_mesh(grid: &Grid) -> HeightmapMesh {
         builder.begin(point(first_pos[0], first_pos[1]));
         for &t in ann.iter().skip(1) {
             let ti = t as usize;
-            let pos = grid
-                .vertices
+            let pos = smooth_vertices
                 .positions
                 .get(ti)
                 .copied()

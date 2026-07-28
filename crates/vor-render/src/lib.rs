@@ -63,7 +63,7 @@ pub use heightmap::{build_mesh, HeightmapMesh};
 pub use ice_layer::build_ice_mesh;
 pub use lakes::build_lake_mesh;
 pub use layers::LayerFlags;
-pub use mesh::build_pack_mesh;
+pub use mesh::{build_pack_mesh, laplacian_smooth_vertices};
 pub use population_layer::build_population_mesh;
 pub use precipitation::build_precipitation_mesh;
 pub use province_layer::build_province_mesh;
