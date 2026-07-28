@@ -221,101 +221,83 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
 
     let world = cfg.world;
 
-    // --- Construir capas adicionales ---
-    let biome_colors = biome_colors_from_catalog(&world.biomes);
-    let biome_mesh = build_biome_mesh(&world.pack, &biome_colors);
-    let river_mesh = build_river_mesh(&world.pack.points, &world.rivers);
-    let border_state_mesh = build_border_mesh(&world.pack, BorderKind::State);
-    let border_province_mesh = build_border_mesh(&world.pack, BorderKind::Province);
-    let border_culture_mesh = build_border_mesh(&world.pack, BorderKind::Culture);
-    let burg_mesh = build_burg_mesh(&world.pack, &world.states);
+    // --- Capas adicionales (orden de dibujo: bottom→top) ---
 
-    info!(
-        "meshes: biomes={}v/{}i, rivers={}v/{}i, borders(s/p/c)=({}/{}/{}), burgs={}v/{}i",
-        biome_mesh.vertices.len(),
-        biome_mesh.indices.len(),
-        river_mesh.vertices.len(),
-        river_mesh.indices.len(),
-        border_state_mesh.vertices.len(),
-        border_province_mesh.vertices.len(),
-        border_culture_mesh.vertices.len(),
-        burg_mesh.vertices.len(),
-        burg_mesh.indices.len(),
-    );
-
-    let _l_biomes = renderer.add_layer_mesh(&biome_mesh);
-    let _l_rivers = renderer.add_layer_mesh(&river_mesh);
-    let _l_borders = renderer.add_layer_mesh(&border_state_mesh);
-    let _l_bprov = renderer.add_layer_mesh(&border_province_mesh);
-    let _l_bcult = renderer.add_layer_mesh(&border_culture_mesh);
-    let _l_burgs = renderer.add_layer_mesh(&burg_mesh);
-
-    // --- Human Geography layers ---
-    let state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states);
-    info!("state fill mesh: {}v/{}i", state_mesh.vertices.len(), state_mesh.indices.len());
-    let _l_state = renderer.add_layer_mesh(&state_mesh);
-
-    let province_mesh = build_province_mesh(&world.pack.vertices, &world.pack, &world.provinces);
-    info!("province fill mesh: {}v/{}i", province_mesh.vertices.len(), province_mesh.indices.len());
-    let _l_province = renderer.add_layer_mesh(&province_mesh);
-
-    let culture_mesh = build_culture_mesh(&world.pack.vertices, &world.pack, &world.cultures);
-    info!("culture fill mesh: {}v/{}i", culture_mesh.vertices.len(), culture_mesh.indices.len());
-    let _l_culture = renderer.add_layer_mesh(&culture_mesh);
-
-    let religion_mesh = build_religion_mesh(&world.pack.vertices, &world.pack, &world.religions);
-    info!("religion fill mesh: {}v/{}i", religion_mesh.vertices.len(), religion_mesh.indices.len());
-    let _l_religion = renderer.add_layer_mesh(&religion_mesh);
-
-    let population_mesh = build_population_mesh(&world.pack.vertices, &world.pack);
-    info!("population mesh: {}v/{}i", population_mesh.vertices.len(), population_mesh.indices.len());
-    let _l_population = renderer.add_layer_mesh(&population_mesh);
-
-    let zone_mesh = build_zone_mesh(&world.pack.vertices, &world.pack, &world.zones);
-    info!("zone mesh: {}v/{}i", zone_mesh.vertices.len(), zone_mesh.indices.len());
-    let _l_zones = renderer.add_layer_mesh(&zone_mesh);
-
-    // --- Relief layer (triangle) ---
+    // 1. Relief (landmass shading)
     let relief_mesh = build_relief_mesh(&world.pack);
-    info!(
-        "relief mesh: {}v/{}i",
-        relief_mesh.vertices.len(),
-        relief_mesh.indices.len()
-    );
+    info!("relief mesh: {}v/{}i", relief_mesh.vertices.len(), relief_mesh.indices.len());
     let _l_relief = renderer.add_layer_mesh(&relief_mesh);
 
-    // --- Water & Climate layers ---
-    let lake_mesh = build_lake_mesh(&world.pack);
-    info!(
-        "lake mesh: {}v/{}i",
-        lake_mesh.vertices.len(),
-        lake_mesh.indices.len()
-    );
-    let _l_lakes = renderer.add_layer_mesh(&lake_mesh);
+    // 2. Biomes (landmass color)
+    let biome_colors = biome_colors_from_catalog(&world.biomes);
+    let biome_mesh = build_biome_mesh(&world.pack, &biome_colors);
+    info!("biomes mesh: {}v/{}i", biome_mesh.vertices.len(), biome_mesh.indices.len());
+    let _l_biomes = renderer.add_layer_mesh(&biome_mesh);
 
+    // 3. Climate: temperature, precipitation, ice
     let temp_mesh = build_temperature_mesh(&world.pack.vertices, &world.pack, &world.grid);
-    info!(
-        "temperature mesh: {}v/{}i",
-        temp_mesh.vertices.len(),
-        temp_mesh.indices.len()
-    );
+    info!("temperature mesh: {}v/{}i", temp_mesh.vertices.len(), temp_mesh.indices.len());
     let _l_temp = renderer.add_layer_mesh(&temp_mesh);
 
     let prec_mesh = build_precipitation_mesh(&world.pack.vertices, &world.pack, &world.grid);
-    info!(
-        "precipitation mesh: {}v/{}i",
-        prec_mesh.vertices.len(),
-        prec_mesh.indices.len()
-    );
+    info!("precipitation mesh: {}v/{}i", prec_mesh.vertices.len(), prec_mesh.indices.len());
     let _l_prec = renderer.add_layer_mesh(&prec_mesh);
 
     let ice_mesh = build_ice_mesh(&world.ice);
-    info!(
-        "ice mesh: {}v/{}i",
-        ice_mesh.vertices.len(),
-        ice_mesh.indices.len()
-    );
+    info!("ice mesh: {}v/{}i", ice_mesh.vertices.len(), ice_mesh.indices.len());
     let _l_ice = renderer.add_layer_mesh(&ice_mesh);
+
+    // 4. Water: lakes, rivers
+    let lake_mesh = build_lake_mesh(&world.pack);
+    info!("lake mesh: {}v/{}i", lake_mesh.vertices.len(), lake_mesh.indices.len());
+    let _l_lakes = renderer.add_layer_mesh(&lake_mesh);
+
+    let river_mesh = build_river_mesh(&world.pack.points, &world.rivers);
+    info!("rivers mesh: {}v/{}i", river_mesh.vertices.len(), river_mesh.indices.len());
+    let _l_rivers = renderer.add_layer_mesh(&river_mesh);
+
+    // 5. Human geography fills: states, provinces, cultures, religions, population, zones
+    let state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states);
+    info!("state fill: {}v/{}i", state_mesh.vertices.len(), state_mesh.indices.len());
+    let _l_state = renderer.add_layer_mesh(&state_mesh);
+
+    let province_mesh = build_province_mesh(&world.pack.vertices, &world.pack, &world.provinces);
+    info!("province fill: {}v/{}i", province_mesh.vertices.len(), province_mesh.indices.len());
+    let _l_province = renderer.add_layer_mesh(&province_mesh);
+
+    let culture_mesh = build_culture_mesh(&world.pack.vertices, &world.pack, &world.cultures);
+    info!("culture fill: {}v/{}i", culture_mesh.vertices.len(), culture_mesh.indices.len());
+    let _l_culture = renderer.add_layer_mesh(&culture_mesh);
+
+    let religion_mesh = build_religion_mesh(&world.pack.vertices, &world.pack, &world.religions);
+    info!("religion fill: {}v/{}i", religion_mesh.vertices.len(), religion_mesh.indices.len());
+    let _l_religion = renderer.add_layer_mesh(&religion_mesh);
+
+    let population_mesh = build_population_mesh(&world.pack.vertices, &world.pack);
+    info!("population: {}v/{}i", population_mesh.vertices.len(), population_mesh.indices.len());
+    let _l_population = renderer.add_layer_mesh(&population_mesh);
+
+    let zone_mesh = build_zone_mesh(&world.pack.vertices, &world.pack, &world.zones);
+    info!("zones: {}v/{}i", zone_mesh.vertices.len(), zone_mesh.indices.len());
+    let _l_zones = renderer.add_layer_mesh(&zone_mesh);
+
+    // 6. Borders & markers on top
+    let border_state_mesh = build_border_mesh(&world.pack, BorderKind::State);
+    let border_province_mesh = build_border_mesh(&world.pack, BorderKind::Province);
+    let border_culture_mesh = build_border_mesh(&world.pack, BorderKind::Culture);
+    info!(
+        "borders (state/province/culture): {}v/{}i / {}v/{}i / {}v/{}i",
+        border_state_mesh.vertices.len(), border_state_mesh.indices.len(),
+        border_province_mesh.vertices.len(), border_province_mesh.indices.len(),
+        border_culture_mesh.vertices.len(), border_culture_mesh.indices.len(),
+    );
+    let _l_borders = renderer.add_layer_mesh(&border_state_mesh);
+    let _l_bprov = renderer.add_layer_mesh(&border_province_mesh);
+    let _l_bcult = renderer.add_layer_mesh(&border_culture_mesh);
+
+    let burg_mesh = build_burg_mesh(&world.pack, &world.states);
+    info!("burgs: {}v/{}i", burg_mesh.vertices.len(), burg_mesh.indices.len());
+    let _l_burgs = renderer.add_layer_mesh(&burg_mesh);
 
     // --- Line layers (cells, grid, contours, coordinates) ---
     let cells_mesh = build_cell_wireframe(&world.pack.vertices, world.pack.points_n());
