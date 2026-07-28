@@ -9,3 +9,11 @@ description = "Comandos de edición y undo/redo de Voronia. Los únicos, además
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+vor-core = { path = "../vor-core" }
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

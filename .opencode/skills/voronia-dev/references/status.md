@@ -2,11 +2,13 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 27 julio 2026 (Fase 4 completada — formato `.vorn` implementado)
+**Última actualización**: 27 julio 2026 (Fase 5 completada — UI de edición)
 
 ## Fase actual del roadmap
 
-**Fase 3 — Capas completas de renderizado**: ✓ **COMPLETADA**.
+**Fase 5 — UI de edición**: ✓ **COMPLETADA** (27 jul 2026). `vor-edit` crate implementado (state/burg/province rename/recolor, mutación directa). Panel de editor de entidad integrado en SidePanel (inspector de celda → editor de estado/burgo/provincia con campos nombre + hex color + botón aplicar). Paneles de exportación colapsables: save .vorn, PNG (snapshot GPU via wgpu readback + image crate), SVG (polígonos Voronoi + ríos + fronteras + burgos). Fix de lookup de estados/provincias (de `get(sid)` a `find(|s| s.id == sid)`). 14 tests nuevos en vor-edit. 67 tests total workspace, clippy/fmt clean.
+
+**Fase 4 — Formato `.vorn`**: ✓ **COMPLETADA** (27 jul 2026). Nombre: `.vorn` (Vorn World File). Esquema serde + bincode v1 en `vor-format` con header de 16 bytes (magic VORN + version + metadata_len + compression flag), metadata versionada. Load 2.4× más rápido que re-importar desde `.map` (Sorvik: 37ms vs 90ms). Save: 18ms. Autosave periódico integrado en vor-app (toggle en panel lateral, default cada 60s, guarda a `<source>.vorn`). 5 tests de formato nuevos, 53 tests total workspace, clippy/fmt clean.
 
 **Fase 4 — Formato `.vorn`**: ✓ **COMPLETADA** (27 jul 2026). Nombre: `.vorn` (Vorn World File). Esquema serde + bincode v1 en `vor-format` con header de 16 bytes (magic VORN + version + metadata_len + compression flag), metadata versionada. Load 2.4× más rápido que re-importar desde `.map` (Sorvik: 37ms vs 90ms). Save: 18ms. Autosave periódico integrado en vor-app (toggle en panel lateral, default cada 60s, guarda a `<source>.vorn`). 5 tests de formato nuevos, 53 tests total workspace, clippy/fmt clean.
 

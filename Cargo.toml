@@ -47,6 +47,7 @@ egui-winit = { version = "0.29", default-features = false, features = ["wayland"
 pollster = "0.3"
 bytemuck = { version = "1.21", features = ["derive"] }
 raw-window-handle = "0.6"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [profile.dev]
 panic = "abort"

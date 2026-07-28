@@ -844,19 +844,19 @@ Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de
 - [ ] Render de una sola capa: terreno (color por altura), vía triangulación con `lyon`.
 - [ ] Esto ya es demostrable: "cargar un mapa real de Azgaar y verlo en un visor nativo GPU".
 
-### Fase 3 — Capas completas de renderizado · `L` ✓ COMPLETADA (commit pending, 27 jul 2026)
+### Fase 3 — Capas completas de renderizado · `L` ✓ COMPLETADA (commit dc9596c, 27 jul 2026)
 - [x] Ríos, fronteras de estados/provincias/culturas, biomas, burgos, labels básicos.
 - [x] Sistema de toggles de capas.
 - [x] Picking (click → info de celda/entidad).
 
-### Fase 4 — Formato `.vorn` · `M`
-- [ ] Definir el esquema completo con `serde` + `bincode`, versión 1.
-- [ ] Save/load, con benchmark de velocidad vs re-importar desde JSON.
-- [ ] Autosave básico (§15).
+### Fase 4 — Formato `.vorn` · `M` ✓ COMPLETADA (commit pending, 27 jul 2026)
+- [x] Definir el esquema completo con `serde` + `bincode`, versión 1.
+- [x] Save/load, con benchmark de velocidad vs re-importar desde JSON.
+- [x] Autosave básico (§15).
 
-### Fase 5 — UI de edición · `M`
-- [ ] Paneles egui: capas, inspector de entidad, opciones de exportación.
-- [ ] Selección y edición básica de atributos de una entidad (renombrar, recolorear).
+### Fase 5 — UI de edición · `M` ✓ COMPLETADA (commit pending, 27 jul 2026)
+- [x] Paneles egui: capas, inspector de entidad, opciones de exportación.
+- [x] Selección y edición básica de atributos de una entidad (renombrar, recolorear).
 
 ### Fase 6 — Edición avanzada · `L`
 - [ ] Undo/redo (patrón Command).

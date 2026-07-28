@@ -19,6 +19,7 @@ vor-core = { path = "../vor-core" }
 vor-format = { path = "../vor-format" }
 vor-import = { path = "../vor-import" }
 vor-render = { path = "../vor-render" }
+vor-edit = { path = "../vor-edit" }
 wgpu.workspace = true
 winit.workspace = true
 egui.workspace = true
@@ -31,3 +32,4 @@ thiserror.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+image.workspace = true

@@ -44,14 +44,18 @@ pub struct Renderer {
     pub camera_bind_layout: wgpu::BindGroupLayout,
     pub camera_bind: wgpu::BindGroup,
     pub heightmap_pipeline: wgpu::RenderPipeline,
+    pub line_pipeline: wgpu::RenderPipeline,
 
     // Capa 0: heightmap (backward compat)
     pub vertex_buf: Option<wgpu::Buffer>,
     pub index_buf: Option<wgpu::Buffer>,
     pub index_count: u32,
 
-    // Capas adicionales (Fase 3)
+    // Capas adicionales (Fase 3) — pipeline TriangleList
     pub layers: Vec<LayerBuffer>,
+
+    // Capas de líneas — pipeline LineList con alpha blending
+    pub line_layers: Vec<LayerBuffer>,
 }
 
 impl Renderer {
@@ -133,7 +137,7 @@ impl Renderer {
                 format: wgpu::VertexFormat::Float32x4,
             },
         ];
-        let vertex_layout = wgpu::VertexBufferLayout {
+        let vertex_layout = || wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<HeightmapVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &vertex_attrs,
@@ -151,7 +155,7 @@ impl Renderer {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[vertex_layout],
+                buffers: &[vertex_layout()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -172,6 +176,39 @@ impl Renderer {
             cache: None,
         });
 
+        let line_color_targets = [Some(wgpu::ColorTargetState {
+            format,
+            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+
+        let line_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("vor-line-pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[vertex_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &line_color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::LineList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
         Self {
             device,
             queue,
@@ -182,10 +219,12 @@ impl Renderer {
             camera_bind_layout,
             camera_bind,
             heightmap_pipeline,
+            line_pipeline,
             vertex_buf: None,
             index_buf: None,
             index_count: 0,
             layers: Vec::new(),
+            line_layers: Vec::new(),
         }
     }
 
@@ -269,6 +308,49 @@ impl Renderer {
             pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..count, 0, 0..1);
         }
+    }
+
+    /// Agrega una capa de líneas. Retorna el índice dentro de `line_layers`.
+    pub fn add_line_layer(&mut self, mesh: &HeightmapMesh) -> usize {
+        let idx = self.line_layers.len();
+        let vertex_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("vor-line-{idx}-vbo")),
+                contents: bytemuck::cast_slice(&mesh.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("vor-line-{idx}-ibo")),
+                contents: bytemuck::cast_slice(&mesh.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+        self.line_layers.push(LayerBuffer {
+            vertex_buf: Some(vertex_buf),
+            index_buf: Some(index_buf),
+            index_count: mesh.indices.len() as u32,
+        });
+        idx
+    }
+
+    /// Dibuja una capa de líneas en el render pass usando `line_pipeline`.
+    pub fn draw_line_layer<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, layer_idx: usize) {
+        let Some(layer) = self.line_layers.get(layer_idx) else {
+            return;
+        };
+        let (Some(vbo), Some(ibo)) = (&layer.vertex_buf, &layer.index_buf) else {
+            return;
+        };
+        if layer.index_count == 0 {
+            return;
+        }
+        pass.set_pipeline(&self.line_pipeline);
+        pass.set_bind_group(0, &self.camera_bind, &[]);
+        pass.set_vertex_buffer(0, vbo.slice(..));
+        pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..layer.index_count, 0, 0..1);
     }
 
     pub fn layer_vertex_count(&self, layer_index: usize) -> usize {

@@ -33,6 +33,9 @@ pub struct Camera {
     pub extent_y: f32,
     /// Aspect del viewport (ancho / alto en pixels de superficie).
     pub aspect: f32,
+    /// Limites del mapa (min_x, min_y, max_x, max_y). Se setean con `frame_bounds`.
+    pub bounds_min: [f32; 2],
+    pub bounds_max: [f32; 2],
 }
 
 impl Camera {
@@ -47,6 +50,8 @@ impl Camera {
             center,
             extent_y: extent_y.max(1.0),
             aspect,
+            bounds_min: [0.0, 0.0],
+            bounds_max: [1000.0, 1000.0],
         }
     }
 
@@ -121,6 +126,7 @@ impl Camera {
         let world_after = self.screen_to_world(cursor_screen, surface_size);
         self.center[0] += world_before[0] - world_after[0];
         self.center[1] += world_before[1] - world_after[1];
+        self.constrain();
     }
 
     /// Pan por delta en pixels de superficie (arrastrar el mapa).
@@ -132,10 +138,13 @@ impl Camera {
         let frac_y = delta_px[1] / surface_size[1];
         self.center[0] -= frac_x * self.extent_x();
         self.center[1] -= frac_y * self.extent_y;
+        self.constrain();
     }
 
     /// Centra la camara en un bounding box de mundo (pixels) para encuadre inicial.
     pub fn frame_bounds(&mut self, min: [f32; 2], max: [f32; 2]) {
+        self.bounds_min = min;
+        self.bounds_max = max;
         let cx = (min[0] + max[0]) * 0.5;
         let cy = (min[1] + max[1]) * 0.5;
         let w = (max[0] - min[0]).max(1.0);
@@ -147,6 +156,38 @@ impl Camera {
         let extent_y = h_needed.max(h_for_w);
         self.center = [cx, cy];
         self.extent_y = extent_y.clamp(Self::MIN_EXTENT, Self::MAX_EXTENT);
+        self.constrain();
+    }
+
+    /// Restringe centro y zoom para no salirse del mapa.
+    fn constrain(&mut self) {
+        let half_w = self.extent_x() * 0.5;
+        let half_h = self.extent_y * 0.5;
+        let map_w = self.bounds_max[0] - self.bounds_min[0];
+        let map_h = self.bounds_max[1] - self.bounds_min[1];
+        let margin_x = map_w * 0.3;
+        let margin_y = map_h * 0.3;
+
+        if half_w < map_w * 0.5 + margin_x {
+            self.center[0] = self.center[0].clamp(
+                self.bounds_min[0] - margin_x + half_w,
+                self.bounds_max[0] + margin_x - half_w,
+            );
+        } else {
+            self.center[0] = (self.bounds_min[0] + self.bounds_max[0]) * 0.5;
+        }
+        if half_h < map_h * 0.5 + margin_y {
+            self.center[1] = self.center[1].clamp(
+                self.bounds_min[1] - margin_y + half_h,
+                self.bounds_max[1] + margin_y - half_h,
+            );
+        } else {
+            self.center[1] = (self.bounds_min[1] + self.bounds_max[1]) * 0.5;
+        }
+
+        let min_ext = (map_w.min(map_h) * 0.005).max(4.0);
+        let max_ext = map_w.max(map_h) * 3.0;
+        self.extent_y = self.extent_y.clamp(min_ext, max_ext);
     }
 
     const MIN_EXTENT: f32 = 4.0;
