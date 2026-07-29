@@ -5,15 +5,16 @@ use vor_core::feature::{FeatureType, LakeGroup};
 use vor_core::Pack;
 
 use crate::heightmap::{ColorCtor, HeightmapMesh, HeightmapVertex};
+use crate::mesh::catmull_rom_closed;
 
 fn lake_color(group: Option<LakeGroup>) -> [f32; 4] {
     match group {
-        Some(LakeGroup::Freshwater) => [0.65, 0.76, 0.99, 0.5],
-        Some(LakeGroup::Salt) => [0.25, 0.61, 0.54, 0.5],
-        Some(LakeGroup::Dry) => [0.79, 0.75, 0.65, 1.0],
-        Some(LakeGroup::Sinkhole) => [0.36, 0.79, 0.99, 1.0],
-        Some(LakeGroup::Lava) => [0.56, 0.15, 0.05, 0.7],
-        None => [0.65, 0.76, 0.99, 0.5],
+        Some(LakeGroup::Freshwater) => [0.25, 0.50, 0.85, 1.0],
+        Some(LakeGroup::Salt) => [0.15, 0.55, 0.45, 1.0],
+        Some(LakeGroup::Dry) => [0.70, 0.65, 0.50, 1.0],
+        Some(LakeGroup::Sinkhole) => [0.10, 0.60, 0.90, 1.0],
+        Some(LakeGroup::Lava) => [0.70, 0.25, 0.10, 1.0],
+        None => [0.25, 0.50, 0.85, 1.0],
     }
 }
 
@@ -29,28 +30,24 @@ pub fn build_lake_mesh(pack: &Pack) -> HeightmapMesh {
             continue;
         }
         let color = lake_color(feature.lake_group);
-        let perim = &feature.perimeter_vertices;
-        if perim.len() < 3 {
+        let raw: Vec<[f32; 2]> = feature
+            .perimeter_vertices
+            .iter()
+            .filter_map(|&vi| pack.vertices.positions.get(vi as usize).copied())
+            .collect();
+        if raw.len() < 3 {
             continue;
         }
-        let first_pos = pack
-            .vertices
-            .positions
-            .get(perim[0] as usize)
-            .copied()
-            .unwrap_or([0.0; 2]);
+        let smooth = catmull_rom_closed(&raw, 3);
+
         let mut builder = Path::builder();
-        builder.begin(point(first_pos[0], first_pos[1]));
-        for &v in perim.iter().skip(1) {
-            let pos = pack
-                .vertices
-                .positions
-                .get(v as usize)
-                .copied()
-                .unwrap_or([0.0; 2]);
-            builder.line_to(point(pos[0], pos[1]));
+        if let Some(first) = smooth.first() {
+            builder.begin(point(first[0], first[1]));
+            for pt in smooth.iter().skip(1) {
+                builder.line_to(point(pt[0], pt[1]));
+            }
+            builder.end(true);
         }
-        builder.end(true);
         let path = builder.build();
 
         let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();

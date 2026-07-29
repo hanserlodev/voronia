@@ -1,9 +1,10 @@
 use vor_core::entities::river::River;
 
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
+use crate::mesh::catmull_rom_open;
 
-/// Construye la malla de ríos: segmentos de polilínea (quads) entre celdas
-/// consecutivas del `cell_path` de cada río.
+/// Construye la malla de ríos: segmentos de polilínea suavizada (quads) a lo largo
+/// del `cell_path` de cada río, con Catmull-Rom para curvas orgánicas.
 pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh {
     let mut vertices: Vec<HeightmapVertex> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
@@ -15,18 +16,25 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
         if path.len() < 2 {
             continue;
         }
+        let raw: Vec<[f32; 2]> = path
+            .iter()
+            .filter_map(|&ci| points.get(ci as usize).copied())
+            .collect();
+        if raw.len() < 2 {
+            continue;
+        }
+        let smooth = catmull_rom_open(&raw, 3);
 
-        // Ancho base según caudal relativo (1-4 px)
-        let width = (r.discharge_m3s / 5000.0).clamp(1.0, 6.0);
+        // Ancho base según caudal relativo
+        let width = (r.discharge_m3s / 3000.0).clamp(0.8, 5.0);
 
         // Color azul río
-        let color = [0.2, 0.4, 0.8, 0.85];
+        let color = [0.15, 0.45, 0.85, 1.0];
 
-        for pair in path.windows(2) {
-            let a = points.get(pair[0] as usize).copied().unwrap_or([0.0, 0.0]);
-            let b = points.get(pair[1] as usize).copied().unwrap_or([0.0, 0.0]);
+        for pair in smooth.windows(2) {
+            let a = pair[0];
+            let b = pair[1];
 
-            // Quad orientado perpendicular al segmento
             let dx = b[0] - a[0];
             let dy = b[1] - a[1];
             let len = (dx * dx + dy * dy).sqrt();
