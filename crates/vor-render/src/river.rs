@@ -1,10 +1,9 @@
 use vor_core::entities::river::River;
-use vor_core::Pack;
 
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 use crate::mesh::catmull_rom_open;
 
-pub fn build_river_mesh(pack: &Pack, rivers: &[River]) -> HeightmapMesh {
+pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh {
     let mut vertices: Vec<HeightmapVertex> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut bounds_min = [f32::INFINITY, f32::INFINITY];
@@ -15,9 +14,9 @@ pub fn build_river_mesh(pack: &Pack, rivers: &[River]) -> HeightmapMesh {
         if path.len() < 2 {
             continue;
         }
-        let mut raw: Vec<[f32; 2]> = path
+        let raw: Vec<[f32; 2]> = path
             .iter()
-            .filter_map(|&ci| pack.points.get(ci as usize).copied())
+            .filter_map(|&ci| points.get(ci as usize).copied())
             .collect();
         if raw.len() < 2 {
             continue;
