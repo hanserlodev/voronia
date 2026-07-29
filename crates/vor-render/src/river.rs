@@ -5,6 +5,10 @@ use crate::mesh::catmull_rom_open;
 
 /// Construye la malla de ríos: segmentos de polilínea suavizada (quads) a lo largo
 /// del `cell_path` de cada río, con Catmull-Rom para curvas orgánicas.
+///
+/// Si el río no alcanza su `mouth_cell` (porque el path tracing usa celdas pack
+/// pero mouth_cell está en namespace grid), extiende el último segmento hacia el
+/// océano para que la desembocadura sea visible.
 pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh {
     let mut vertices: Vec<HeightmapVertex> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
@@ -16,14 +20,25 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
         if path.len() < 2 {
             continue;
         }
-        let raw: Vec<[f32; 2]> = path
+        let mut raw: Vec<[f32; 2]> = path
             .iter()
             .filter_map(|&ci| points.get(ci as usize).copied())
             .collect();
         if raw.len() < 2 {
             continue;
         }
-        let smooth = catmull_rom_open(&raw, 12);
+
+        // Extender el último segmento hacia el océano (20 px) para que la
+        // desembocadura no quede oculta en la costa.
+        let last = raw.last().copied().unwrap_or([0.0; 2]);
+        let prev = raw[raw.len().saturating_sub(2)];
+        let dx = last[0] - prev[0];
+        let dy = last[1] - prev[1];
+        let len = (dx * dx + dy * dy).sqrt().max(1.0);
+        let extend = 20.0;
+        raw.push([last[0] + dx / len * extend, last[1] + dy / len * extend]);
+
+        let smooth = catmull_rom_open(&raw, 20);
 
         // Ancho base según caudal relativo
         let width = (r.discharge_m3s / 3000.0).clamp(0.8, 5.0);
@@ -37,12 +52,12 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
 
             let dx = b[0] - a[0];
             let dy = b[1] - a[1];
-            let len = (dx * dx + dy * dy).sqrt();
-            if len < 0.001 {
+            let seg_len = (dx * dx + dy * dy).sqrt();
+            if seg_len < 0.001 {
                 continue;
             }
-            let nx = -dy / len * width;
-            let ny = dx / len * width;
+            let nx = -dy / seg_len * width;
+            let ny = dx / seg_len * width;
 
             let base = vertices.len() as u32;
             vertices.push(HeightmapVertex {

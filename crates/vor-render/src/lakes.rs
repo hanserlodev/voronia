@@ -38,7 +38,7 @@ pub fn build_lake_mesh(pack: &Pack) -> HeightmapMesh {
         if raw.len() < 3 {
             continue;
         }
-        let smooth = catmull_rom_closed(&raw, 5);
+        let smooth = catmull_rom_closed(&raw, 6);
 
         let mut builder = Path::builder();
         if let Some(first) = smooth.first() {
