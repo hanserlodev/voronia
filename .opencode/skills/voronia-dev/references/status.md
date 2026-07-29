@@ -2,17 +2,19 @@
 
 > Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
 
-**Última actualización**: 27 julio 2026 (Fase 5 completada — UI de edición)
+**Última actualización**: 28 julio 2026 (Fase 6 iniciada — Overhaul de visualización)
 
 ## Fase actual del roadmap
 
-**Fase 5 — UI de edición**: ✓ **COMPLETADA** (27 jul 2026). `vor-edit` crate implementado (state/burg/province rename/recolor, mutación directa). Panel de editor de entidad integrado en SidePanel (inspector de celda → editor de estado/burgo/provincia con campos nombre + hex color + botón aplicar). Paneles de exportación colapsables: save .vorn, PNG (snapshot GPU via wgpu readback + image crate), SVG (polígonos Voronoi + ríos + fronteras + burgos). Fix de lookup de estados/provincias (de `get(sid)` a `find(|s| s.id == sid)`). 14 tests nuevos en vor-edit. 67 tests total workspace, clippy/fmt clean.
+**Fase 6 — Overhaul de visualización**: ⏳ **EN PROGRESO** (28 jul 2026). Landmass basado en features con líneas de costa suaves (Catmull-Rom), ríos con StrokeTessellator + grosor por caudal + caps redondos, lagos con Catmull-Rom splines. La capital está completa.
 
-**Fase 4 — Formato `.vorn`**: ✓ **COMPLETADA** (27 jul 2026). Nombre: `.vorn` (Vorn World File). Esquema serde + bincode v1 en `vor-format` con header de 16 bytes (magic VORN + version + metadata_len + compression flag), metadata versionada. Load 2.4× más rápido que re-importar desde `.map` (Sorvik: 37ms vs 90ms). Save: 18ms. Autosave periódico integrado en vor-app (toggle en panel lateral, default cada 60s, guarda a `<source>.vorn`). 5 tests de formato nuevos, 53 tests total workspace, clippy/fmt clean.
+**Bug conocido — desembocaduras**: los ríos se cortan en la costa, no llegan al océano. Causa raíz: `mouth_cell` está en espacio GRID, `adjacency` en espacio PACK, nunca calzan. El path termina en la última celda pack con river_id (dead-end). Ver `docs/fase-6.md §5` para detalle completo.
 
-**Fase 4 — Formato `.vorn`**: ✓ **COMPLETADA** (27 jul 2026). Nombre: `.vorn` (Vorn World File). Esquema serde + bincode v1 en `vor-format` con header de 16 bytes (magic VORN + version + metadata_len + compression flag), metadata versionada. Load 2.4× más rápido que re-importar desde `.map` (Sorvik: 37ms vs 90ms). Save: 18ms. Autosave periódico integrado en vor-app (toggle en panel lateral, default cada 60s, guarda a `<source>.vorn`). 5 tests de formato nuevos, 53 tests total workspace, clippy/fmt clean.
+**Fase 5 — UI de edición**: ✓ **COMPLETADA** (27 jul 2026). `vor-edit` crate implementado (state/burg/province rename/recolor, mutación directa). Panel de editor de entidad integrado en SidePanel. Paneles de exportación colapsables: save .vorn, PNG, SVG. 67 tests total workspace, clippy/fmt clean.
 
-Todas las capas de render funcionando: heightmap, biomas, ríos (polilíneas con grosor variable según caudal), fronteras de estados/provincias/culturas, burgos (triángulos), labels de nombres de burgo en overlay egui con skip de panel. Sistema de toggles por capa en SidePanel izquierdo. Picking con click derecho → panel de info con celda seleccionada (altura, bioma, estado, cultura, provincia, burgo, río, población real = pts * population_rate). Población se muestra en habitantes (multiplicada por `population_rate` del .map, default 1000). Panel muestra FPS, coordenadas cámara, cursor mundo. 47 tests verdes, clippy/fmt clean. Bin `vor` carga Sorvik y muestra TODAS las capas.
+**Fase 4 — Formato `.vorn`**: ✓ **COMPLETADA** (27 jul 2026). Nombre: `.vorn` (Vorn World File). Esquema serde + bincode v1. Load 2.4× más rápido que re-importar, Save 18ms. Autosave periódico.
+
+Todas las capas de render funcionando: heightmap por features, biomas, ríos (StrokeTessellator con grosor), fronteras, burgos, labels. Picking, FPS, panel de info.
 
 **Fix crítico 1 — egui texture upload (26 jul 2026)**: faltaba llamar a `egui_renderer.update_texture()` con `output.textures_delta`. Sin eso, el font atlas nunca se subía a GPU.
 

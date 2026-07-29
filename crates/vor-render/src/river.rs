@@ -20,13 +20,29 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
         if path.len() < 2 {
             continue;
         }
-        let raw: Vec<[f32; 2]> = path
+        let mut raw: Vec<[f32; 2]> = path
             .iter()
             .filter_map(|&ci| points.get(ci as usize).copied())
             .collect();
         if raw.len() < 2 {
             continue;
         }
+        // Extend river past the last land cell into the sea
+        // Direction = last segment, length = 40% of that segment
+        let ext = {
+            let last = raw.last().copied().unwrap();
+            let prev = raw[raw.len() - 2];
+            let dx = last[0] - prev[0];
+            let dy = last[1] - prev[1];
+            let d = (dx * dx + dy * dy).sqrt();
+            if d > 0.0 {
+                let scale = (d * 0.4).max(2.0);
+                [last[0] + dx / d * scale, last[1] + dy / d * scale]
+            } else {
+                last
+            }
+        };
+        raw.push(ext);
         let smooth = catmull_rom_open(&raw, 4);
 
         let mut builder = Path::builder();

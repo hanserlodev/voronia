@@ -76,7 +76,7 @@ impl Default for LayerFlags {
             icons: false,
             emblems: false,
             rulers: false,
-            labels: true,
+            labels: false,
             wind_rose: true,
             scale_bar: true,
             vignette: false,
