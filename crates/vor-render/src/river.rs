@@ -1,13 +1,19 @@
+use lyon::geom::point;
+use lyon::path::Path;
+use lyon::tessellation::{BuffersBuilder, StrokeOptions, StrokeTessellator, VertexBuffers};
 use vor_core::entities::river::River;
 
-use crate::heightmap::{HeightmapMesh, HeightmapVertex};
+use crate::heightmap::{HeightmapMesh, HeightmapVertex, StrokeCtor};
 use crate::mesh::catmull_rom_open;
 
 pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh {
-    let mut vertices: Vec<HeightmapVertex> = Vec::new();
-    let mut indices: Vec<u32> = Vec::new();
-    let mut bounds_min = [f32::INFINITY, f32::INFINITY];
-    let mut bounds_max = [f32::NEG_INFINITY, f32::NEG_INFINITY];
+    let mut result = HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [f32::INFINITY, f32::INFINITY],
+        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+    };
+    let mut tess = StrokeTessellator::new();
 
     for r in rivers.iter() {
         let path = &r.cell_path;
@@ -21,62 +27,45 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
         if raw.len() < 2 {
             continue;
         }
-
         let smooth = catmull_rom_open(&raw, 4);
+
+        let mut builder = Path::builder();
+        if let Some(first) = smooth.first() {
+            builder.begin(point(first[0], first[1]));
+            for pt in smooth.iter().skip(1) {
+                builder.line_to(point(pt[0], pt[1]));
+            }
+        }
+        let path = builder.build();
 
         let width = (r.discharge_m3s / 3000.0).clamp(0.8, 5.0);
         let color = [0.15, 0.45, 0.85, 1.0];
 
-        for pair in smooth.windows(2) {
-            let a = pair[0];
-            let b = pair[1];
-            let dx = b[0] - a[0];
-            let dy = b[1] - a[1];
-            let seg_len = (dx * dx + dy * dy).sqrt();
-            if seg_len < 0.001 {
-                continue;
-            }
-            let nx = -dy / seg_len * width;
-            let ny = dx / seg_len * width;
+        let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+        let mut buffer_builder = BuffersBuilder::new(&mut mesh, StrokeCtor(color));
+        let opts = StrokeOptions::default()
+            .with_line_width(width)
+            .with_line_cap(lyon::tessellation::LineCap::Round)
+            .with_line_join(lyon::tessellation::LineJoin::Round);
+        if tess.tessellate_path(&path, &opts, &mut buffer_builder).is_err() {
+            continue;
+        }
 
-            let base = vertices.len() as u32;
-            vertices.push(HeightmapVertex {
-                pos: [a[0] + nx, a[1] + ny],
-                color,
-            });
-            vertices.push(HeightmapVertex {
-                pos: [a[0] - nx, a[1] - ny],
-                color,
-            });
-            vertices.push(HeightmapVertex {
-                pos: [b[0] + nx, b[1] + ny],
-                color,
-            });
-            vertices.push(HeightmapVertex {
-                pos: [b[0] - nx, b[1] - ny],
-                color,
-            });
-
-            indices.extend_from_slice(&[base, base + 1, base + 2, base + 1, base + 3, base + 2]);
-
-            for v in &vertices[base as usize..][..4] {
-                bounds_min[0] = bounds_min[0].min(v.pos[0]);
-                bounds_min[1] = bounds_min[1].min(v.pos[1]);
-                bounds_max[0] = bounds_max[0].max(v.pos[0]);
-                bounds_max[1] = bounds_max[1].max(v.pos[1]);
-            }
+        let base = result.vertices.len() as u32;
+        result.vertices.extend_from_slice(&mesh.vertices);
+        result.indices.extend(mesh.indices.iter().map(|i| i + base));
+        for v in &mesh.vertices {
+            result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+            result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+            result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+            result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
         }
     }
 
-    if !bounds_min.iter().all(|v| v.is_finite()) {
-        bounds_min = [0.0, 0.0];
-        bounds_max = [0.0, 0.0];
+    if !result.bounds_min[0].is_finite() {
+        result.bounds_min = [0.0, 0.0];
+        result.bounds_max = [0.0, 0.0];
     }
 
-    HeightmapMesh {
-        vertices,
-        indices,
-        bounds_min,
-        bounds_max,
-    }
+    result
 }

@@ -15,7 +15,8 @@ use bytemuck::{Pod, Zeroable};
 use lyon::geom::point;
 use lyon::path::Path;
 use lyon::tessellation::{
-    BuffersBuilder, FillOptions, FillTessellator, FillVertexConstructor, VertexBuffers,
+    BuffersBuilder, FillOptions, FillTessellator, FillVertexConstructor, StrokeVertex,
+    StrokeVertexConstructor, VertexBuffers,
 };
 use vor_core::Grid;
 
@@ -46,6 +47,18 @@ pub(crate) struct ColorCtor(pub(crate) [f32; 4]);
 
 impl FillVertexConstructor<HeightmapVertex> for ColorCtor {
     fn new_vertex(&mut self, vertex: lyon::tessellation::FillVertex<'_>) -> HeightmapVertex {
+        let p = vertex.position();
+        HeightmapVertex {
+            pos: [p.x, p.y],
+            color: self.0,
+        }
+    }
+}
+
+pub(crate) struct StrokeCtor(pub(crate) [f32; 4]);
+
+impl StrokeVertexConstructor<HeightmapVertex> for StrokeCtor {
+    fn new_vertex(&mut self, vertex: StrokeVertex) -> HeightmapVertex {
         let p = vertex.position();
         HeightmapVertex {
             pos: [p.x, p.y],
