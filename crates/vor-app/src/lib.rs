@@ -22,7 +22,7 @@ use vor_render::heightmap::HeightmapMesh;
 use vor_render::ice_layer::build_ice_mesh;
 use vor_render::lakes::build_lake_mesh;
 use vor_render::layers::LayerFlags;
-use vor_render::mesh::build_landmass_mesh;
+use vor_render::coastline::{build_fractal_landmass_mesh, FractalSettings};
 use vor_render::mesh::build_pack_mesh;
 use vor_render::population_layer::build_population_mesh;
 use vor_render::precipitation::build_precipitation_mesh;
@@ -1061,10 +1061,16 @@ pub fn run_cli() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let landmass_mesh = build_landmass_mesh(
+    let landmass_mesh = build_fractal_landmass_mesh(
         &loaded.world.pack.vertices,
         &loaded.world.pack.features,
+        loaded.world.grid.width,
+        loaded.world.grid.height,
         |_feat| [1.0, 1.0, 1.0, 1.0],
+        &FractalSettings {
+            seed: loaded.world.header.map_id.wrapping_add(2654435761),
+            ..Default::default()
+        },
     );
     info!(
         "landmass mesh (features): {} vertices, {} indices",
