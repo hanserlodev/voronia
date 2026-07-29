@@ -28,17 +28,18 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
             continue;
         }
 
-        // Extender el último segmento hacia el océano (20 px) para que la
-        // desembocadura no quede oculta en la costa.
+        // Extender el último segmento hasta la costa: media celda más allá
+        // del último centro de celda (donde el path tracing se queda corto porque
+        // mouth_cell está en namespace grid y no calza con pack).
         let last = raw.last().copied().unwrap_or([0.0; 2]);
         let prev = raw[raw.len().saturating_sub(2)];
         let dx = last[0] - prev[0];
         let dy = last[1] - prev[1];
-        let len = (dx * dx + dy * dy).sqrt().max(1.0);
-        let extend = 20.0;
-        raw.push([last[0] + dx / len * extend, last[1] + dy / len * extend]);
+        let seg_len = (dx * dx + dy * dy).sqrt().max(1.0);
+        let extend = seg_len * 0.3;
+        raw.push([last[0] + dx / seg_len * extend, last[1] + dy / seg_len * extend]);
 
-        let smooth = catmull_rom_open(&raw, 20);
+        let smooth = catmull_rom_open(&raw, 30);
 
         // Ancho base según caudal relativo
         let width = (r.discharge_m3s / 3000.0).clamp(0.8, 5.0);
