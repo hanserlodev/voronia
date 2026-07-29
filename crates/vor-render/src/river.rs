@@ -23,7 +23,7 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
         if raw.len() < 2 {
             continue;
         }
-        let smooth = catmull_rom_open(&raw, 3);
+        let smooth = catmull_rom_open(&raw, 12);
 
         // Ancho base según caudal relativo
         let width = (r.discharge_m3s / 3000.0).clamp(0.8, 5.0);
