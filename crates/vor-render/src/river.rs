@@ -35,6 +35,7 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
             for pt in smooth.iter().skip(1) {
                 builder.line_to(point(pt[0], pt[1]));
             }
+            builder.end(false);
         }
         let path = builder.build();
 
