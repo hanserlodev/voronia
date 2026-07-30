@@ -224,7 +224,7 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
             let dy = last[1] - prev[1];
             let d = (dx * dx + dy * dy).sqrt();
             if d > 0.0 {
-                let scale = (d * 0.4).max(2.0);
+                let scale = (d * 0.4).max(10.0);
                 [last[0] + dx / d * scale, last[1] + dy / d * scale]
             } else {
                 last
