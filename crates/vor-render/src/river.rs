@@ -216,38 +216,16 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
             continue;
         }
         // Extend river past the last land cell into the sea
-        // Direction = average of last 2 segments, length = 1.5x avg (min 8px)
+        // Direction = last segment, length = 40% of that segment
         let ext = {
             let last = raw.last().copied().unwrap();
-            let n_raw = raw.len();
-            let mut dx_sum = 0.0;
-            let mut dy_sum = 0.0;
-            let mut seg_count = 0;
-            for j in (1.max(n_raw.saturating_sub(3))..n_raw).rev() {
-                let dx = raw[j][0] - raw[j - 1][0];
-                let dy = raw[j][1] - raw[j - 1][1];
-                if dx != 0.0 || dy != 0.0 {
-                    let d = (dx * dx + dy * dy).sqrt();
-                    dx_sum += dx / d;
-                    dy_sum += dy / d;
-                    seg_count += 1;
-                }
-            }
-            if seg_count > 0 {
-                let avg_len = {
-                    let mut len_sum = 0.0;
-                    let mut cnt = 0;
-                    for j in (1.max(n_raw.saturating_sub(3))..n_raw).rev() {
-                        let dx = raw[j][0] - raw[j - 1][0];
-                        let dy = raw[j][1] - raw[j - 1][1];
-                        len_sum += (dx * dx + dy * dy).sqrt();
-                        cnt += 1;
-                    }
-                    len_sum / cnt as f32
-                };
-                let scale = (avg_len * 1.5).max(8.0);
-                let norm = (dx_sum * dx_sum + dy_sum * dy_sum).sqrt();
-                [last[0] + dx_sum / norm * scale, last[1] + dy_sum / norm * scale]
+            let prev = raw[raw.len() - 2];
+            let dx = last[0] - prev[0];
+            let dy = last[1] - prev[1];
+            let d = (dx * dx + dy * dy).sqrt();
+            if d > 0.0 {
+                let scale = (d * 0.4).max(2.0);
+                [last[0] + dx / d * scale, last[1] + dy / d * scale]
             } else {
                 last
             }
@@ -265,10 +243,8 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
         let wf = r.width_factor.max(0.1);
         let sw = r.source_width_km.max(0.05);
         let k2p = km_per_px.recip();
-        let cell_count = raw.len();
 
-        // Azgaar's exact getOffset/getWidth per vertex, converted to pixel units.
-        // Use effective cell index (based on t × cell_count) instead of smooth index i.
+        // Azgaar's exact getOffset/getWidth per vertex, converted to pixel units
         let mut left_bank: Vec<[f32; 2]> = Vec::with_capacity(n);
         let mut right_bank: Vec<[f32; 2]> = Vec::with_capacity(n);
 
@@ -279,8 +255,7 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
 
             let t = i as f32 / (n - 1).max(1) as f32;
             let flux = discharge * (0.1 + 0.9 * t);
-            let cell_idx = ((cell_count - 1) as f32 * t).round() as usize;
-            let offset = get_offset(flux, cell_idx, wf, sw);
+            let offset = get_offset(flux, i, wf, sw);
             let width = get_width(offset) * k2p;
 
             let sin_o = angle.sin() * width;
