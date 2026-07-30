@@ -238,7 +238,7 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
             continue;
         }
 
-        let color = [0.30, 0.60, 0.95, 1.0];
+        let color = [0.20, 0.45, 0.80, 1.0];
         let discharge = r.discharge_m3s.max(1.0);
         let wf = r.width_factor.max(0.1);
         let sw = r.source_width_km.max(0.05);

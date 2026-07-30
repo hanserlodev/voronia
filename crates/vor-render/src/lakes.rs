@@ -9,12 +9,12 @@ use crate::mesh::catmull_rom_closed;
 
 fn lake_color(group: Option<LakeGroup>) -> [f32; 4] {
     match group {
-        Some(LakeGroup::Freshwater) => [0.25, 0.50, 0.85, 1.0],
-        Some(LakeGroup::Salt) => [0.15, 0.55, 0.45, 1.0],
+        Some(LakeGroup::Freshwater) => [0.20, 0.45, 0.80, 1.0],
+        Some(LakeGroup::Salt) => [0.20, 0.45, 0.80, 1.0],
         Some(LakeGroup::Dry) => [0.70, 0.65, 0.50, 1.0],
-        Some(LakeGroup::Sinkhole) => [0.10, 0.60, 0.90, 1.0],
+        Some(LakeGroup::Sinkhole) => [0.20, 0.45, 0.80, 1.0],
         Some(LakeGroup::Lava) => [0.70, 0.25, 0.10, 1.0],
-        None => [0.25, 0.50, 0.85, 1.0],
+        None => [0.20, 0.45, 0.80, 1.0],
     }
 }
 
