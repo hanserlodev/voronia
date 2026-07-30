@@ -158,6 +158,27 @@ fn relax_acute_angles(points: &mut [[f32; 2]], anchor_indices: &[usize]) {
     }
 }
 
+// Azgaar's exact width formulas (getOffset + getWidth from width.ts)
+const FLUX_FACTOR: f32 = 500.0;
+const MAX_FLUX_WIDTH: f32 = 1.0;
+const LENGTH_STEP_WIDTH: f32 = 0.04;
+const LENGTH_PROGRESSION: [f32; 9] = [0.0, 0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4];
+
+fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_width: f32) -> f32 {
+    if point_index == 0 {
+        return starting_width;
+    }
+    let flux_width = (flux / FLUX_FACTOR).powf(0.7).min(MAX_FLUX_WIDTH);
+    let prog_idx = point_index.min(LENGTH_PROGRESSION.len() - 1);
+    let length_width =
+        point_index as f32 * LENGTH_STEP_WIDTH + LENGTH_PROGRESSION[prog_idx];
+    width_factor * (length_width + flux_width) + starting_width
+}
+
+fn get_width(offset: f32) -> f32 {
+    (offset / 1.5).powf(1.8)
+}
+
 fn acute_cost_vec(pos: &[[f32; 2]], i: usize, flipped: [f32; 2], flip_idx: usize) -> f32 {
     if i == 0 || i >= pos.len() - 1 {
         return 0.0;
@@ -215,8 +236,10 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
 
         let color = [0.15, 0.45, 0.85, 1.0];
         let discharge = r.discharge_m3s.max(1.0);
+        let wf = r.width_factor.max(0.1);
+        let sw = r.source_width_km.max(0.05);
 
-        // Left and right river banks at each smooth point
+        // Azgaar's exact getOffset/getWidth per vertex
         let mut left_bank: Vec<[f32; 2]> = Vec::with_capacity(n);
         let mut right_bank: Vec<[f32; 2]> = Vec::with_capacity(n);
 
@@ -227,8 +250,8 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
 
             let t = i as f32 / (n - 1).max(1) as f32;
             let flux = discharge * (0.1 + 0.9 * t);
-            let offset = (flux / 1000.0).powf(0.7) * 0.5 + 0.3;
-            let width = offset.clamp(0.3, 6.0);
+            let offset = get_offset(flux, i, wf, sw);
+            let width = get_width(offset);
 
             let sin_o = angle.sin() * width;
             let cos_o = angle.cos() * width;
