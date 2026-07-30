@@ -159,10 +159,14 @@ fn relax_acute_angles(points: &mut [[f32; 2]], anchor_indices: &[usize]) {
 }
 
 // Azgaar's exact width formulas (getOffset + getWidth from width.ts)
+// LENGTH_PROGRESSION = Fibonacci / 200: [0.005, 0.005, 0.01, 0.015, 0.025, 0.04, 0.065, 0.105, 0.17]
 const FLUX_FACTOR: f32 = 500.0;
 const MAX_FLUX_WIDTH: f32 = 1.0;
-const LENGTH_STEP_WIDTH: f32 = 0.04;
-const LENGTH_PROGRESSION: [f32; 9] = [0.0, 0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4];
+const LENGTH_STEP_WIDTH: f32 = 1.0 / 200.0;
+const LENGTH_PROGRESSION: [f32; 9] = [
+    1.0 / 200.0, 1.0 / 200.0, 2.0 / 200.0, 3.0 / 200.0,
+    5.0 / 200.0, 8.0 / 200.0, 13.0 / 200.0, 21.0 / 200.0, 34.0 / 200.0,
+];
 
 fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_width: f32) -> f32 {
     if point_index == 0 {
@@ -190,7 +194,7 @@ fn acute_cost_vec(pos: &[[f32; 2]], i: usize, flipped: [f32; 2], flip_idx: usize
     if cos > 0.0 { cos } else { 0.0 }
 }
 
-pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh {
+pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -> HeightmapMesh {
     let mut result = HeightmapMesh {
         vertices: Vec::new(),
         indices: Vec::new(),
@@ -238,8 +242,9 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
         let discharge = r.discharge_m3s.max(1.0);
         let wf = r.width_factor.max(0.1);
         let sw = r.source_width_km.max(0.05);
+        let k2p = km_per_px.recip();
 
-        // Azgaar's exact getOffset/getWidth per vertex
+        // Azgaar's exact getOffset/getWidth per vertex, converted to pixel units
         let mut left_bank: Vec<[f32; 2]> = Vec::with_capacity(n);
         let mut right_bank: Vec<[f32; 2]> = Vec::with_capacity(n);
 
@@ -251,7 +256,7 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River]) -> HeightmapMesh 
             let t = i as f32 / (n - 1).max(1) as f32;
             let flux = discharge * (0.1 + 0.9 * t);
             let offset = get_offset(flux, i, wf, sw);
-            let width = get_width(offset);
+            let width = get_width(offset) * k2p;
 
             let sin_o = angle.sin() * width;
             let cos_o = angle.cos() * width;

@@ -295,7 +295,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     );
     let _l_lakes = renderer.add_layer_mesh(&lake_mesh);
 
-    let river_mesh = build_river_mesh(&world.pack.points, &world.rivers);
+    let river_mesh = build_river_mesh(&world.pack.points, &world.rivers, world.settings.distance_scale);
     info!(
         "rivers mesh: {}v/{}i",
         river_mesh.vertices.len(),
