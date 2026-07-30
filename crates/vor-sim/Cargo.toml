@@ -9,3 +9,12 @@ description = "Motor de simulación procedural de Voronia: heightmap, hidrologí
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+vor-core = { path = "../vor-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+rand_pcg = { workspace = true }
+thiserror = { workspace = true }

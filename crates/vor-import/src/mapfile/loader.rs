@@ -206,6 +206,16 @@ impl Loader {
         pack.cells.market = std::mem::take(&mut pack_cells.market);
         pack.cells.routes = std::mem::take(&mut pack_cells.routes);
 
+        // Populate feature_id for pack cells from grid cells via grid_id mapping
+        pack.cells.feature_id = pack.cells
+            .grid_id
+            .iter()
+            .map(|&gid| {
+                let idx = gid as usize;
+                grid_cells.feature_id.get(idx).copied().unwrap_or(0)
+            })
+            .collect();
+
         // --- Grid model — la topología Voronoi no se persiste en vor-core::Grid
         // (derivableavana), solo atributos serializados. Mantenemos points/boundary/cells/vertices.
         let grid = Grid {

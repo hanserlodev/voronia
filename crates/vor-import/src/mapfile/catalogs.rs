@@ -166,6 +166,13 @@ pub fn parse_features(slot12: Option<&str>) -> Result<Vec<Feature>, CatalogError
             first_cell: fr.first_cell,
             perimeter_vertices: serde_json::from_value(fr.vertices).unwrap_or_default(),
             name: fr.name,
+            shoreline: serde_json::from_value(fr.shoreline).unwrap_or_default(),
+            lake_height: fr.height.as_f64().unwrap_or(0.0) as f32,
+            inlets: Vec::new(),
+            outlet_river: None,
+            entering_flux: 0.0,
+            closed: false,
+            out_cell: None,
         });
     }
     Ok(out)
@@ -679,6 +686,17 @@ pub struct RiverRaw {
     pub length: f32,
     #[serde(default)]
     pub width: f32,
+    #[serde(default)]
+    pub widthFactor: f32,
+    #[serde(default)]
+    pub sourceWidth: f32,
+    #[serde(default)]
+    #[serde(alias = "type")]
+    pub r#type: String,
+    #[serde(default)]
+    pub cells: Vec<i32>,
+    #[serde(default)]
+    pub points: Vec<[f32; 2]>,
 }
 
 pub fn parse_rivers(slot32: Option<&str>) -> Result<Vec<River>, CatalogError> {
@@ -697,7 +715,11 @@ pub fn parse_rivers(slot32: Option<&str>) -> Result<Vec<River>, CatalogError> {
             discharge_m3s: r.discharge,
             length_km: r.length,
             width_km: r.width,
-            cell_path: Vec::new(), // populated by loader after geometry is available
+            width_factor: r.widthFactor,
+            source_width_km: r.sourceWidth,
+            type_name: r.r#type.clone(),
+            cell_path: r.cells.iter().map(|&c| if c < 0 { u32::MAX } else { c as u32 }).collect(),
+            meandered_points: r.points.clone(),
         })
         .collect())
 }

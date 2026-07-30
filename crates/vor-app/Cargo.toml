@@ -20,6 +20,7 @@ vor-format = { path = "../vor-format" }
 vor-import = { path = "../vor-import" }
 vor-render = { path = "../vor-render" }
 vor-edit = { path = "../vor-edit" }
+vor-sim = { path = "../vor-sim" }
 wgpu.workspace = true
 winit.workspace = true
 egui.workspace = true

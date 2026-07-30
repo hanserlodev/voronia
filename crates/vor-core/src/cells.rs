@@ -89,6 +89,9 @@ pub struct PackCells {
     /// Layout confirmado contra slot `[36]` de Brample: `{"6":{"7":359, "39":359}, "7":{...}}`
     /// (id de celda origen → {id de celda destino → id de ruta}).
     pub routes: Vec<RoutesFromCell>,
+    /// Id de la feature (isla/lago/océano) a la que pertenece la celda.
+    /// Poblado por `vor-import` desde `re_graph` + grid feature mapping.
+    pub feature_id: Vec<u16>,
     /// IDs de celdas pack adyacentes (vecinos interiores, sin boundary).
     /// Poblado por `vor-import` durante `re_graph` (desde el segundo `calculate_voronoi`).
     /// No se persiste — es derivable del Delaunay.

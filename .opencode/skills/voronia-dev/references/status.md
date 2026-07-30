@@ -1,98 +1,53 @@
-# Voronia — estado actual
+**Última actualización**: 30 julio 2026 — Port del sistema de ríos de Azgaar COMPLETO
 
-> Este archivo se actualiza en cada sesión de trabajo donde pase algo relevante (ver protocolo de mantenimiento en `SKILL.md`). Mantenelo corto — es para orientarse rápido al empezar una sesión, no para llevar el historial completo (eso vive en `git log` y en el plan maestro).
+## Fase actual
 
-**Última actualización**: 28 julio 2026 (Fase 6 iniciada — Overhaul de visualización)
+**Fase 7 — Motor de generación procedural nativo**: ⏳ **EN PROGRESO** (30 jul 2026). Hidrología (ríos) completa.
 
-## Fase actual del roadmap
+## Port de ríos — Estado final
 
-**Fase 6 — Overhaul de visualización**: ⏳ **EN PROGRESO** (28 jul 2026). Landmass basado en features con líneas de costa suaves (Catmull-Rom), ríos con StrokeTessellator + grosor por caudal + caps redondos, lagos con Catmull-Rom splines. La capital está completa.
+### vor-core
+- **River model**: `width_factor`, `source_width_km`, `type_name`, `meandered_points` añadidos
+- **PackCells**: `feature_id: Vec<u16>` añadido
+- **Feature**: `shoreline`, `lake_height`, `inlets`, `outlet_river`, `entering_flux`, `closed`, `out_cell` — todos los campos de lago necesarios para hidrología
 
-**Bug conocido — desembocaduras**: los ríos se cortan en la costa, no llegan al océano. Causa raíz: `mouth_cell` está en espacio GRID, `adjacency` en espacio PACK, nunca calzan. El path termina en la última celda pack con river_id (dead-end). Ver `docs/fase-6.md §5` para detalle completo.
+### vor-import
+- **RiverRaw**: parsea `widthFactor`, `sourceWidth`, `type`, `cells` (con `-1`→`u32::MAX`), `points`
+- **FeatureRaw**: `shoreline` y `height` mapeados a Feature
+- **PackCells feature_id**: poblado desde grid cells via `grid_id` mapping
 
-**Fase 5 — UI de edición**: ✓ **COMPLETADA** (27 jul 2026). `vor-edit` crate implementado (state/burg/province rename/recolor, mutación directa). Panel de editor de entidad integrado en SidePanel. Paneles de exportación colapsables: save .vorn, PNG, SVG. 67 tests total workspace, clippy/fmt clean.
+### vor-sim (motor de simulación procedural)
 
-**Fase 4 — Formato `.vorn`**: ✓ **COMPLETADA** (27 jul 2026). Nombre: `.vorn` (Vorn World File). Esquema serde + bincode v1. Load 2.4× más rápido que re-importar, Save 18ms. Autosave periódico.
+| Módulo | Azgaar | Voronia |
+|--------|--------|---------|
+| hydrology | `alterHeights()` | ✅ |
+| | `resolveDepressions()` | ✅ (Priority-Flood) |
+| | `Lakes.defineClimateData()` | ✅ (Penman evaporation) |
+| | `Lakes.detectCloseLakes()` | ✅ (BFS desde shoreline) |
+| | `drainWater()` + lake outlets | ✅ |
+| | `flowDown()` + confluencias | ✅ |
+| width | `getOffset()`, `getSourceWidth()`, `getWidth()` | ✅ fórmulas exactas |
+| meander | `meander()`, `relaxAcuteAngles()`, `addMeandering()` | ✅ |
+| river_def | `defineRivers()`, `calculateConfluenceFlux()` | ✅ |
+| | `downcutRivers()` | ✅ |
+| specify | `specify()`, `getParent()`, `getBasin()`, `getName()`, `getType()` | ✅ simplificado |
+| | `remove()`, `getNextId()`, `getApproximateLength()` | ✅ |
+| resolve | `resolveLakeDrainFeature()`, `resolveDrainFeature()` | ✅ |
+| | `isNavigable()` | ✅ |
 
-Todas las capas de render funcionando: heightmap por features, biomas, ríos (StrokeTessellator con grosor), fronteras, burgos, labels. Picking, FPS, panel de info.
+### Constantes de Azgaar replicadas
+`MIN_FLUX_TO_FORM_RIVER=30`, `MIN_NAVIGABLE_FLUX=100`, `FLUX_FACTOR=500`, `MAX_FLUX_WIDTH=1`, `LENGTH_FACTOR=200`, `MAX_DOWNCUT=5`, `WATER_MEANDER_SCALE=0.25`
 
-**Fix crítico 1 — egui texture upload (26 jul 2026)**: faltaba llamar a `egui_renderer.update_texture()` con `output.textures_delta`. Sin eso, el font atlas nunca se subía a GPU.
+### Tests
+**79 tests total** (67 existentes + 12 nuevos de vor-sim).
+- width: fórmulas getOffset/getSourceWidth/getWidth
+- meander: 2 puntos, 1 punto sin cambios
+- specify: getApproximateLength, getNextId
+- rn: redondeo estilo JS Math.round
+- Todos los tests de importación (Sorvik) verdes
 
-**Fix crítico 2 — cull_mode (27 jul 2026)**: la proyección ortográfica 2D invierte Y (`bottom > top` en `orthographic_rh`). El pipeline usaba `cull_mode: Some(Face::Back)` con `front_face: Ccw`. Los quads de ríos/bordes/burgos se construyen en CCW, pero tras la proyección con Y-flip, algunos triángulos quedaban CW y se cullingaban (desaparecían). La altura/biomas funcionaban porque lyon tesela los polígonos de Voronoi en CW, sobreviviendo al flip. Fix: `cull_mode: None` — un viewer 2D no necesita back-face culling.
-
-**Fase 2 — Visor GPU mínimo**: ✓ **COMPLETADA**. Ventana winit 0.30 + wgpu 22 + cámara ortográfica 2D con pan/zoom + capa heightmap (triangulación con lyon, color por altura) + overlay egui 0.29 (FPS, cursor, info cámara, path del mapa). Bin `vor` que carga `.map` reales y abre el visor. 48 tests verdes, clippy clean, fmt clean. Documento de fase: `docs/fase-2.md`.
-
-**Fase 1 — Regeneración de geometría + parser de datos**: ✓ **COMPLETADA**. Parser del `.map` bit-exacto y handshake end-to-end contra Sorvik (`.map` real generado por Azgaar 1.138.0 — 47 slots, 10000 grid cells, 7268 pack cells post-reGraph, 19 features, 16 culturas, 14 estados, 1010 burgos, 24 religiones, 226 provincias, 141 ríos, 815 rutas, 13 zonas, 4 ice, 83 markers, 1 measurer — todos los counts calcen con el dump del archivo). Documento de fase congelado: `docs/fase-1.md`.
-
-**Fase 0 — Investigación y sentado de bases**: ✓ COMPLETADA. Documentación consolidada en `docs/fase-0-investigacion.md` (PRNG exacto, Delaunay/Voronoi con trampa de `Math.floor`, repacking grid→pack, parser `.map` slot-by-slot, validación empírica contra el archivo real "Brample"). Workspace de Cargo inicializado y los tipos base del World Data Model ya están commiteados.
-
-## Progreso de la Fase 1 (plan maestro §23)
-
-- [x] Clonar/revisar Azgaar para identificar algoritmos de geom + PRNG (hecho en Fase 0 — ver `docs/fase-0-investigacion.md`).
-- [x] Diseccionar `.map` real ("Brample") — estructura de 47 slots confirmada (fase-0 §12.3).
-- [x] **Setup Cargo workspace + crates vacíos** (commit `3d688a0`); fix `Cargo.toml` con `\n` literal roto + workspace inheritance (commit `dd9d378`).
-- [x] **Trackear la skill en el repo** (commit `dc011e9`) — `.gitignore` con `.opencode/*` + `!.opencode/skills/` (resolución del "PENDIENTE DE CONFIRMACIÓN DE HANS" que vivía abajo).
-- [x] **`vor-core` con tipos base del World Data Model** (commit `dd9d378`) — `Grid`/`Pack`/`GridCells`/`PackCells`/`VoronoiVertices`/`Feature`/entidades/`Settings`/`MapHeader`/`MapCoordinates`/`World` + `error::CoreError`. SoA estricto, enums fuertes, `serde_json::Value` opaco para subsistemas que no se modelan en Fase 1 (economía/milicia → Fase 7). `cargo check` + `clippy` + `fmt` limpios.
-- [x] **Portear `Alea@1.0.1`** (npm, Johannes Baagøe) en `vor-import` (commit `eaabd5e`) — módulo `prng::alea`. 1100 floats validados bit-a-bit Rust↔JS. Fixtures como bits (vía `BigUint64Array`).
-- [x] **Helpers numéricos de Azgaar** — `rn(v, decimals)` (commit `482cdff`) con `js_math_round = floor(x + 0.5)` para replicar ties-hacia-+∞ de `Math.round` JS.
-- [x] **`getBoundaryPoints` + `getJitteredGrid`/`placePoints`** (`graphUtils.ts:17-98`) (commit `f30357f`) — fila-mayor, x-interno, jitter via `Alea` re-seedeada, `rn(.,2)`, `Math.min` clamp. Test bit-exacto contra fixture self-reference.
-- [x] **Validar `delaunator` bit-exacto** contra `delaunator@5.1.0` (npm) — descartado el crate `delaunator = "1.1"` (Rust) por divergencia en casos degenerate (6280 entradas en `triangles` sobre los 10000 puntos jittered). Porte manual bit-exacto desde `delaunator-5.1.0.js` en `crates/vor-import/src/geometry/delaunay.rs` (incluye los robust predicates de Shewchuk inline). Test bit-exacto en `tests/delaunay_bit_exact.rs` con fixture self-reference.
-- [x] **Portear `Voronoi` class** (`voronoi.ts`) en `crates/vor-import/src/geometry/voronoi.rs` — `cells.v/c/b`, `vertices.p/v/c`, helpers `edgesAroundPoint` (cap 20 half-edges), `nextHalfedge`/`triangleOfEdge`/`edgesOfTriangle` (estos últimos expuestos como `pub fn` en `delaunay.rs`). `circumcenter` usa `f64::floor()` para reproducir `Math.floor` de Azgaar bit-exacto (fase-0 §6.3) — importante: replicamos `(1/D) * numerator` en vez de `numerator / D` para preservar el doble redondeo de f64 que hace el JS. Test bit-exacto en `tests/voronoi_bit_exact.rs` con fixture self-reference (`voronoi_grid_2000x2000_c10k_seed_861039636_selfref.json`, 5.2MB): valida `cells.v`/`cells.c`/`cells.b`/`vertices.p`/`vertices.v`/`vertices.c` bit-a-bit contra la `Voronoi` class JS (replicada vanilla en `generate_voronoi_fixture.js`) sobre los mismos 10200 puntos. 19 tests en `cargo test --workspace`, clippy + fmt clean.
-- [x] **Portear `reGraph`** (`main.js:1157-1209`) en `crates/vor-import/src/regraph.rs` — descartes (`height<20` no-costero, `type=-2` con `i.is_multiple_of(4)` o feature lake), puntos extra costeros (`i>e`, mismo tipo, `dist>=spacing`, punto medio `rn(.,1)`), segundo `calculateVoronoi` sobre `newCells.p`, `pack.cells.g/h/area`. Helper `polygon_area_signed` (shoelace vía `d3-polygon@3.0.1`). `re_graph` retorna `(Pack, Vec<[f64; 2]>)` — los `new_points` en f64 (antes del cast a f32 del storage `vor-core::Pack::points`), útil para bit-exactitud completa; `pack.points` se castea a `f32` por el cap fijo del model. Conversión `Voronoi`→`VoronoiVertices` del `vor-core` con `-1` para `EMPTY`. Tests unitarios (path deep ocean, path interior land, determinismo, shoelace) + test bit-exacto en `tests/regraph_bit_exact.rs` con fixture synthetic `h=50 t=2` (`regraph_h50_t2_grid_2000x2000_c10k_seed_861039636_selfref.json`, 4MB): valida `pack.points`/`grid_id`/`height`/`area_px` (con truncation ToUint32 + bitand 0xFFFF para replicar `createTypedArray({maxValue:65535}).map(...)`) y `vertices.p/v/c` bit-a-bit. 22 tests en `cargo test --workspace`, clippy + fmt clean.
-- [x] **Parser raw del `.map`** (`vor-import::mapfile::raw`) — `RawMap { slots: Vec<String> }` + `parse(bytes)` con detección gzip opcional, SVG CRLF rescue (reemplaza `\r\n` por `\n` dentro de `<svg id="map"...</svg>`), split por `\r\n`. 5 tests unitarios.
-- [x] **Loader orquestador** (`vor-import::mapfile::loader`) — `Loader::load(&RawMap) -> LoadResult` combina `raw` + sub-módulos `header`/`cells`/`catalogs` + la regeneración de geometría (`place_points` + `calculate_voronoi` + `re_graph`) para poblar un `vor_core::World` completo. Sanity checks: `place_points` count == slot[6].points count; `grid.cells.height.len() == points.len()`; atributos de `pack.cells` (biome/state/burg/...) calzan vs `pack.points.len()` post-reGraph. Convierte `vor_import::geometry::voronoi::Voronoi` → `vor_core::voronoi::VoronoiVertices` (con `-1` para EMPTY). 7 tests end-to-end en `tests/sorvik_full_load.rs`.
-- [x] **Sub-módulo `header`** — slots `[0]` (MapHeader), `[1]` (Settings; sub-JSON `options` en `[19]`), `[2]` (MapCoordinates; soporta `lonW`/`lonE` y legacy `lonL`/`lonR`).
-- [x] **Sub-módulo `cells`** — slot `[6]` (gridGeneral JSON con `spacing`/`cellsX`/`cellsY`/`cellsDesired`/`points`/`boundary`); slot `[7]`-`[11]` (grid.cells TypedArrays CSV→`GridCells`); slots `[16]`-`[27]` + `[36]`/`[40]`/`[44]` (pack.cells TypedArrays → `PackCells`); `parse_grid_features_kind()` extrae del slot `[6]` los tipos de features del **grid** (NO el slot `[12]` que trae pack.features) — necesario porque `reGraph` consume `grid.features` para distinguir lagos.
-- [x] **Sub-módulo `catalogs`** — slot `[3]` biomas (pipe-CSV); `[4]` notes (JSON, con sanitización de lone surrogates `\uXXXX` — Azgaar serializa notas con emoji/Carian escapeados como lone surrogates, ilegales en JSON RFC 8259 pero válidos en JS, los perdemos a `?`); `[12]` features; `[13]` culturas; `[14]` estados; `[15]` burgos; `[29]` religiones; `[30]` provincias; `[31]` namebases (custom `/`-delimited); `[32]` ríos; `[35]` markers; `[37]` rutas; `[38]` zonas; `[39]` ice; `[46]` measurers. Todos los placeholders `0` de Azgaar (numeric, no object) se saltan en el mapeo a tipos fuertes. `origin` arrays con `null` se manejan via `serde_json::Value` intermedio.总人口 41 tests (`cargo test --workspace`), clippy + fmt clean.
-- [ ] **Parser JSON export (modo Full)** — DIFERIDO a fase siguiente (fase 0 §13.4: si solo se importan mapas ya generados, no hace falta portear `aleaPRNG`/`randomizeOptions`).
-
-**Scope de Fase 1 confirmado con Hans (24 jul 2026)**: **solo parser `.map`**. JSON export Full DIFERIDO a fase siguiente (aprovechando el hallazgo fase-0 §13.4: si solo se importan mapas ya generados, NO hace falta portear `aleaPRNG`/`randomizeOptions` — las options serializadas en slot `[1]` se importan como opaco).
-
-## Progreso de la Fase 2 (plan maestro §23)
-
-- [x] Configurar deps wgpu 22 / winit 0.30 / egui 0.29 / lyon 1.0 / bytemuck / pollster.
-- [x] **vor-render::Camera** — ortográfica 2D con pan (drag), zoom al cursor, screen→world, frame_bounds.
-- [x] **vor-render::HeightmapLayer** — `build_mesh(grid)` triangula celdas con lyon, rampa de color por altura.
-- [x] **vor-render::Renderer** — pipeline wgpu + shaders WGSL + buffers GPU. Campos `pub` para que vor-app gestione los passes.
-- [x] **vor-app::State** — winit 0.30 (ApplicationHandler), wgpu 22, egui 0.29 integrado. Overlay egui con FPS, cursor, info cámara, path. Pan con botón izq, zoom con rueda.
-- [x] **vor-cli** — bin `vor` que carga `.map` vía vor-import y abre el visor.
-- [x] **Tests/sanity** — 47 tests verdes (`cargo test --workspace`), clippy 0 warnings, fmt clean. 7 tests nuevos en vor-render (cámara + rampa color).
-- [ ] **Prueba end-to-end** — correr `cargo run --bin vor -- /path/to/map.map` para ver si el visor abre correctamente en X11/Wayland. Falta hacerlo.
-
-## Decisiones tomadas (fuera de las que ya están en el plan maestro)
-
-- **Nombre del proyecto**: Voronia (24 jul 2026, tras descartar `Worldforge`/`Terraforge` por colisión con proyectos reales — detalle en plan maestro §1.3).
-- **Configuración de OpenCode** (24 jul 2026): `opencode.json` con `compaction.auto: true`, `compaction.prune: true`, `compaction.reserved: 16000`, `instructions` español por defecto + skill voronia-dev. Compactación automática porque GLM-5.2 vía NVIDIA tiene ventana nominal ~1M pero límite práctico ≈170K; umbral operativo 160K (ver `SKILL.md` "Límite de contexto y checkpoint de sesión").
-- **Regla crítica de checkpoint de contexto** (24 jul 2026): al acercarse a 160K tokens el agente detiene generación, escribe `agent_state_checkpoint.md` en la raíz, avisa a Hans con mensaje literal (ver `SKILL.md`), dispara compactación. `agent_state_checkpoint.md` cubierto por `.gitignore` como ruta temporal no-commiteable.
-- **Protocolo de reanudación** (24 jul 2026): al decir "continuar con el trabajo que se dejó / seguir donde lo dejamos / continuar con la Fase X", el agente lee `references/status.md` + `agent_state_checkpoint.md` si existe, **reconstruye el `todowrite`** ítem por ítem (mismo texto, orden, estado y prioridad), verifica con `git status` los archivos pendientes de commitear, confirma con Hans el punto exacto en 1-2 líneas, y ejecuta el próximo paso sugerido. Tras reanudar, borra el `agent_state_checkpoint.md`. Detalle en `SKILL.md` (subsección "Protocolo de reanudación").
-- **Tracking de skill en repo** (24 jul 2026, commit `dc011e9`): `.gitignore` refina `.opencode/` como `.opencode/*` + `!.opencode/skills/` para trackear la skill (protocolo `SKILL.md` punto 4) sin trackear caches/node_modules/tools (estos últimos también cubiertos por `.opencode/.gitignore` interno con `node_modules`/`package.json`/`package-lock.json`/`bun.lock`). Resolución del "PENDIENTE DE CONFIRMACIÓN DE HANS" que vivía en ediciones anteriores de este archivo.
-- **Parser `.map` primero, JSON export Full diferido** (24 jul 2026, decisión de Hans): Fase 1 scopea solo el parser `.map` (slot-by-slot). JSON export Full entra en una fase próxima.
-- **Decisión de arquitectura: sub-módulos del parser** (25 jul 2026): `vor-import::mapfile` se organiza en `raw` (bytes→`RawMap`), `header` (slots 0/1/2), `cells` (slots 6-11/16-27/36/40/44), `catalogs` (slots 3/4/12-15/29-46) y `loader` (orquesta todo). El `loader` regenera la geometría en memoria (`place_points`+`calculate_voronoi`+`re_graph`), no persiste los `cells.v/c/b` en `vor-core::Grid` por ser derivables — solo se proyecta a `VoronoiVertices` (positions v ac, v c).
-- **`re_graph` consume features de `grid`, no de `pack`** (25 jul 2026, hallazgo Sorvik): el slot `[12]` serializa `pack.features` (post-markup, 19 entradas para Sorvik), pero el `re_graph` necesita `grid.features` (pre-markup, 25 entradas) para distinguir lake vs ocean durante el repacking. Por eso agregamos `parse_grid_features_kind(slot[6])` que extrae del sub-JSON `grid.features` las referencias. El slot `[6]` trae los `features` embebidos en el JSON, no como slot aparte.
-- **Lone surrogates JSON en notes** (25 jul 2026, hallazgo Sorvik): Azgaar serializa el slot `[4]` notes con emojis/chars Carian no-BMP como `\uXXXX` escapes, pero puede producir *lone surrogates* (`\uD800`-`\uDBFF` o `\uDC00`-`\uDFFF` sin su contraparte), ilegales por RFC 8259 pero válidos en JS. `serde_json` los rechaza con "unexpected end of hex escape"._strategy: `sanitize_lone_surrogates` preprocesa el string reemplazando lone surrogates por `?` (lossy). El dato de `notes` es texto libre legend sin invariantes duras — aceptable.
-- **Placeholders Azgaar: tipos mixtos en JSON arrays** (25 jul 2026): el slot `[0]` de `pack.burgs`/`pack.cultures`/`pack.states`/`pack.features`/`pack.provinces` es literalmente `0` (número, no objeto) en Azgaar — no un placeholder object. Para `serde` con struct-typed deserialization, filtramos `entry.is_object()` y saltamos los no-objetos. En religiones/rivers/markers/routes/zones/ice/measurers no hay placeholder `0` (arrancan desde el primer item real).
-- **`PackCells::grid_id` se obtiene de `re_graph`, no del archivo** (25 jul 2026): el mapping `pack.cells.g[packId] → gridId` es parte del output de `re_graph`. El loader lo preserva del `Pack` retornado; `parse_pack_cells` lo deja vacío y el loader lo completa del `re_graph` output.
-- **Enums con `Default` + `#[default]`** (24 jul 2026): para que structs deriven `Default` felizmente y `#[serde(default)]` funcione en campos enum. Se eligió la variant "neutral/placeholder" como default en cada caso (`GovernmentForm::Anarchy`, `CultureType::Generic`, `ReligionType::Folk`, `ReligionExpansion::Culture`, `RouteGroup::Roads`, `IceKind::Glacier`, `FeatureType::Ocean`).
-- **Porte manual de `delaunator@5.1.0` en vez del crate `delaunator` (Rust)** (25 jul 2026): el crate `delaunator = "1.1"` de crates.io NO es bit-exacto contra el JS `delaunator@5.1.0` (npm) que Azgaar usa según `azgaar-fmg/package-lock.json:1599`. Causa raíz: el crate `robust = "1.2"` reimplementa Shewchuk de forma distinta (signo del `orient2dadapt` no negado, constante `THETA` vs `ccwerrboundA`) y además `delaunator-rs` tiene un bug en `find_closest_point` (filtra `d > 0` indiscriminadamente en ambos usos). Resultado: divergencia de 6280 entradas en `triangles` y 12145 en `halfedges` sobre los 10000 puntos jittered `placePoints(2000,2000,10000,"861039636")`. Decisión: porte manual bit-exacto en `crates/vor-import/src/geometry/delaunay.rs`, replicando el fuente JS 1-a-1 (incluyendo los robust predicates inline de Shewchuk). Esto sigue el patrón del porte de `Alea@1.0.1` y garantiza bit-exactitud (hallazgo fase-0 §13.4 crítico para que atributos del `.map` queden en celdas correctas).
-- **wgpu 22 fijado por compatibilidad con egui-wgpu 0.29** (26 jul 2026): egui-wgpu 0.29 depende de wgpu ^22.1.0. wgpu 23 causa conflicto de dependencias. Decisión: wgpu 22 hasta que egui-wgpu mueva a 23+.
-- **egui incluido desde Fase 2, no diferido a Fase 5** (26 jul 2026, decisión de Hans): overlay egui mínimo con FPS/info desde el día 1 del visor.
-- **`cell_rings` en vor-core::VoronoiVertices** (26 jul 2026): viola el principio "cells.v es derivable del Delaunay" de Fase 1, pero es necesario porque vor-render no puede depender de vor-import (regla dura del plan). Se marcó `#[serde(skip)]` para no persistirlo en `.vorn`.
-- **Render en dos passes wgpu** (26 jul 2026): Pass 1 = heightmap con `ClearOp::Clear`; Pass 2 = egui con `LoadOp::Load` sobre la misma surface. Evita composición en CPU.
-- **Desktop-only en Fase 2** (26 jul 2026): no se construye ni prueba en web/WASM. winit 0.30 con features x11+wayland.
-- **`forget_lifetime()` para egui-wgpu** (26 jul 2026): egui_wgpu::Renderer::render requiere `RenderPass<'static>`. Se usa `RenderPass::forget_lifetime()` que es safe porque el pass internamente no retiene referencias reales al encoder (el lifetime es un `PhantomData` de guardia).
-- **`cull_mode: None` en pipeline de mapa** (27 jul 2026): la proyección ortográfica 2D invierte Y (`bottom > top` en `camera.rs:77-78`). Con `cull_mode: Some(Face::Back), front_face: Ccw`, los triángulos CCW en mundo (ríos/bordes/burgos) se vuelven CW en clip tras el Y-flip y se cullingan. `cull_mode: None` es correcto para un viewer 2D (el mapa siempre mira de frente, no hay geometría ocluida).
-
-## Bloqueos / cosas pendientes de confirmar
-
-- **`Cargo.lock` sigue ignorado** (decisión heredada del commit inicial — ver nota adjunta en `.gitignore`). Para un workspace con binarios normalmente se commitea; sin decisión final todavía.
-- **Nombre del formato decidido**: `.vorn` (Vorn World File). Ver §8.2 del plan maestro. El placeholder `.gmap` queda reemplazado definitivamente.
-- **Divergencia verificada entre `azgaar-fmg` (repo clonado v1.138.0 según header de Brample) y el `.map` "Brample" real (generado el 22 jul 2026, un día posterior al último commit del clon `51d8e3e`)**: el algoritmo `placePoints`/`getJitteredGrid` del repo produce puntos divergentes contra el slot `[6]` de Brample con el mismo seed `861039636` y `cellsDesired=10000`. Confirmado bit-exacto Rust↔JS-standalone-replicando-el-bg-master-actual, lo que implica que el Brample fue generado con **una build de azgaar.github.io más nueva que el último commit del repo clonado**. Por eso:
-  * Mi fixture `crates/vor-import/tests/reference/grid_2000x2000_c10k_seed_861039636_selfref.json` es **self-reference** — valida Rust contra el álgoritmo actual del repo, no contra el Brample.
-  * Hans generará un nuevo `.map` de referencia desde azgaar.github.io (master actual en producción) y lo dejará en `~/Descargas/`. El item "Test end-to-end: cargar .map de referencia → World Data Model" usará ese nuevo archivo.
-  * Las pruebas `Alea` bit-exactas vs JS quedan intactas (no se ven afectadas por la divergencia — eso prueba Rust=JS standalone).
-  * Las pruebas `place_points` structural (spacing=20, cellsX=cellsY=100, 10000 pts, boundary `[1,-20],[1,2020],[42,-20]...`) calzan bit-exacto con Brample slot `[6]` — no es afectada, esas derivaciones no usan RNG.
-- **Variants de enums a confirmar contra wiki de Azgaar** antes del cierre de Fase 1: `CultureType`, `GovernmentForm`, `ReligionType` (variant `Organized` — el string exacto puede ser "Organized" o "Organized Religion"), subgrupos `LandGroup`/`LakeGroup`. Ver campos marcados `// TODO Fase 1: confirmar variants exactas` en `crates/vor-core/src/entities/*`.
-
-## Historia corta de ediciones de este archivo
-
-La edición previa (configuración OpenCode, commit previo DC011E9) decía "Fase 0: no iniciada" y marcaba como pendiente confirmar el tracking de la skill. **Eso estaba desactualizado**: la Fase 0 estaba completa (residía en `docs/fase-0-investigacion.md`), y el workspace ya existía. Se corrige acá. Si en una sesión futura este archivo dijese algo incompatible con `git log` o `docs/fase-0-investigacion.md`, dudá del archivo y confía en el log + la investigación.
+## Pendiente (post-Fase 7)
+- Integrar vor-sim::generate() con vor-app (generación nativa vs solo import)
+- Unificar meander (vor-render tiene copia, vor-sim tiene original)
+- Tests end-to-end de generate() con un mundo real
+- Optimizar: todo el pipeline es O(n²) en el peor caso (resolveDepressions)

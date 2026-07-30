@@ -165,6 +165,13 @@ pub fn parse_grid_features(
             first_cell,
             perimeter_vertices: Vec::new(),
             name,
+            shoreline: Vec::new(),
+            lake_height: 0.0,
+            inlets: Vec::new(),
+            outlet_river: None,
+            entering_flux: 0.0,
+            closed: false,
+            out_cell: None,
         });
     }
     Ok(out)
@@ -279,6 +286,7 @@ pub fn parse_pack_cells(
         good: parse_u16(slot40_good),
         market: parse_u16(slot44_market),
         routes: parse_routes_map(slot36_routes),
+        feature_id: Vec::new(), // populated by loader after re_graph (from grid_id → grid.feature_id)
         adjacency: Vec::new(), // populated by `re_graph`.
     }
 }
