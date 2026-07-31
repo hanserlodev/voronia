@@ -50,10 +50,9 @@ Un hallazgo clave de esta investigación (§3) cambia el enfoque técnico del pa
 19. Documentación
 20. Código abierto: licencia, gobernanza y comunidad
 21. Extensiones más allá de Azgaar
-22. Integración futura con Atenea
-23. Roadmap por fases (con checklists)
-24. Métricas de éxito / objetivos de rendimiento
-25. Riesgos y mitigaciones
+22. Roadmap por fases (con checklists)
+23. Métricas de éxito / objetivos de rendimiento
+24. Riesgos y mitigaciones
 26. Decisiones pendientes
 27. Flujo de trabajo con Claude Code
 28. Glosario
@@ -65,7 +64,7 @@ Un hallazgo clave de esta investigación (§3) cambia el enfoque técnico del pa
 
 ### 1.1 Resumen
 
-Construir un motor de mundos de fantasía nativo, rápido y extensible — inspirado en Azgaar pero no limitado por sus decisiones técnicas de 2017 (SVG, DOM, single-thread JS) — que además pueda crecer hacia un **World Engine** completo integrable con Atenea (asistente IA local de Hans).
+Construir un motor de mundos de fantasía nativo, rápido y extensible — inspirado en Azgaar pero no limitado por sus decisiones técnicas de 2017 (SVG, DOM, single-thread JS) — que pueda crecer hacia un **World Engine** completo, abierto a integraciones externas.
 
 ### 1.2 Objetivos
 
@@ -76,7 +75,6 @@ Construir un motor de mundos de fantasía nativo, rápido y extensible — inspi
 - [ ] Ofrecer edición interactiva (terreno, entidades, fronteras) con undo/redo real.
 - [ ] Expandir capacidades más allá de lo que Azgaar permite hoy (ver §21).
 - [ ] Mantener el proyecto open source, con atribución correcta.
-- [ ] Sentar las bases para integrarse como "motor de mundo" de Atenea.
 
 ### 1.3 Nombre del proyecto: Voronia
 
@@ -110,7 +108,7 @@ Alternativa de respaldo si en algún momento no convence: `Mundrift` (nombre inv
 
 ### 1.5 Público objetivo y casos de uso
 
-- Uso personal de Hans para worldbuilding (ligado a Atenea).
+- Uso personal de Hans para worldbuilding.
 - Comunidad de worldbuilders, DMs de TTRPG, escritores de fantasía — mismo público que Azgaar.
 - Potencial público técnico: gente que quiera un motor de mundos embebible en sus propios juegos/herramientas.
 
@@ -120,7 +118,7 @@ Alternativa de respaldo si en algún momento no convence: `Mundrift` (nombre inv
 
 ### 2.1 Qué se reutiliza
 
-- **Los conceptos y algoritmos de referencia** que el propio Azgaar cita como inspiración (ver §29): generación de terreno de Martin O'Leary, generación de mapas poligonales (Voronoi/Delaunay) de Amit Patel, y el enfoque de Scott Turner ("Here Dragons Abound").
+- **Los conceptos y algoritmos de referencia** que el propio Azgaar cita como inspiración (ver §28): generación de terreno de Martin O'Leary, generación de mapas poligonales (Voronoi/Delaunay) de Amit Patel, y el enfoque de Scott Turner ("Here Dragons Abound").
 - **El modelo conceptual de datos** (grid/pack, cells, features, culturas, estados, burgos, religiones, ríos, rutas, zonas, biomas, namebases) — descrito con precisión en §7, tomado de la wiki oficial de Azgaar.
 - **La compatibilidad de entrada**: poder importar mapas ya generados en Azgaar.
 
@@ -135,7 +133,7 @@ Alternativa de respaldo si en algún momento no convence: `Mundrift` (nombre inv
 
 - Azgaar's Fantasy Map Generator está bajo **licencia MIT** (copyright Max Haniyeu / Azgaar, 2017–2024). El propio proyecto aclara que los mapas, capturas y obras derivadas generadas *con* la herramienta no están restringidos por la licencia y pueden usarse comercialmente — pero eso aplica a los *mapas generados*, no al código fuente en sí.
 - MIT permite reimplementar, adaptar y redistribuir con la única condición de mantener el aviso de copyright y de licencia si se reutiliza código literal. Como aquí **no se copia código**, sino que se reimplementan algoritmos/lógica desde cero, no hay obligación legal de licencia — pero **sí es correcto y honesto** dar atribución explícita.
-- Acción concreta: el `README.md` de Voronia debe incluir una sección "Créditos e inspiración" mencionando a Azgaar, con enlace al repo original y a los tres artículos de referencia (§29). Esto también es simplemente buena práctica de comunidad open source.
+- Acción concreta: el `README.md` de Voronia debe incluir una sección "Créditos e inspiración" mencionando a Azgaar, con enlace al repo original y a los tres artículos de referencia (§28). Esto también es simplemente buena práctica de comunidad open source.
 - Voronia se licenciará también bajo **MIT** (recomendado): máxima compatibilidad, cero fricción para que otros lo adopten, coherente con el ecosistema del que parte.
 
 ### 2.4 Compatibilidad de datos
@@ -184,10 +182,11 @@ Si cualquiera de estos pasos difiere aunque sea ligeramente del original, **los 
 1. **El dato manda, el render obedece.** El renderer nunca modifica el estado del mundo; solo lo visualiza (mismo principio que ya persigue el propio Azgaar en su arquitectura futura).
 2. **Todo es determinista y reproducible.** Misma semilla + mismos parámetros = mismo mundo, siempre. Esto habilita testing, comparación de versiones, y compatibilidad de import.
 3. **CPU para lógica, GPU para render masivo.** No todo se beneficia de GPU — ver §5.3 para el desglose explícito.
-4. **Incremental, no big-bang.** Cada fase entrega algo usable y demostrable (ver §23).
+4. **Incremental, no big-bang.** Cada fase entrega algo usable y demostrable (ver §22).
 5. **El `.map` de Azgaar es un formato de intercambio, no el modelo interno.** Voronia nunca piensa "en términos de Azgaar" puertas adentro — solo en el import/export.
 6. **Extensible desde el día uno.** El sistema procedural se diseña para poder agregar nuevos generadores sin tocar el core (ver §21.4, sistema de plugins).
 7. **Todo dato serializable y versionado.** El formato `.vorn` lleva número de versión desde la v1 para poder evolucionar sin romper mapas guardados.
+8. **Versionado semver estricto y sincronizado.** Todo el workspace (los 8 crates vía `version.workspace = true`) comparte un único número `MAJOR.MINOR.PATCH`. Pre-1.0: `0.x.y`. La v1.0 se alcanza en la Fase 9 (§22). Cada release público va con tag git `vX.Y.Z` y entrada en `CHANGELOG.md`. El `format_version` de `.vorn` es independiente del semver del proyecto (evoluciona por separado, §10).
 
 ---
 
@@ -298,7 +297,7 @@ Basado directamente en la documentación oficial del modelo de datos de Azgaar (
 
 ### 7.1 Grid vs Pack
 
-- **`Grid`**: malla inicial, puntos en grilla cuadrada "jitterizada", cantidad configurable (`cells_desired`: default 10.000, mínimo 1.000, máximo 100.000 en Azgaar — ver §24 para cómo esto informa nuestros objetivos de rendimiento).
+- **`Grid`**: malla inicial, puntos en grilla cuadrada "jitterizada", cantidad configurable (`cells_desired`: default 10.000, mínimo 1.000, máximo 100.000 en Azgaar — ver §23 para cómo esto informa nuestros objetivos de rendimiento).
 - **`Pack`**: malla derivada de `Grid` tras el "repacking" — optimizada para la masa de tierra real (más densidad de celdas en zonas relevantes). La mayoría de la simulación (culturas, estados, ríos, etc.) opera sobre `Pack`, no sobre `Grid`.
 - Ambas mallas se **regeneran siempre a partir de semilla + parámetros**, nunca se leen directamente del archivo (ver §3).
 
@@ -483,7 +482,7 @@ Todos confirmados en el modelo real de Azgaar; se listan de forma compacta (estr
 
 - **Biomes**: matriz 2D `[temperatura][humedad] → bioma`, más costo de movimiento por bioma (usado en la expansión de culturas/estados) y habitabilidad (usado en el scoring de burgos).
 - **NameBases**: generador de nombres por cultura — lista de nombres de entrenamiento, longitud mín/máx, letras duplicables, probabilidad de nombres multi-palabra. Es un sistema de generación fonética, no una lista fija.
-- **Notes**: texto tipo leyenda asociado a cualquier entidad (burgo, estado, marcador, etc.) — relevante directamente para la integración con Atenea (§22).
+- **Notes**: texto tipo leyenda asociado a cualquier entidad (burgo, estado, marcador, etc.).
 
 ---
 
@@ -591,7 +590,7 @@ Click en el mapa → convertir coordenada de pantalla a coordenada de mundo (inv
 
 ## 10. Motor de simulación procedural
 
-Cobertura completa de los sistemas confirmados que tiene Azgaar hoy (no listas hipotéticas — todos documentados en su wiki oficial), a reimplementar de forma nativa. El orden sugerido de implementación va en §23; acá se documenta el **alcance funcional** de cada uno.
+Cobertura completa de los sistemas confirmados que tiene Azgaar hoy (no listas hipotéticas — todos documentados en su wiki oficial), a reimplementar de forma nativa. El orden sugerido de implementación va en §22; acá se documenta el **alcance funcional** de cada uno.
 
 ### 10.1 Heightmap
 
@@ -689,7 +688,7 @@ voronia/
 │   ├── vor-app/                      # binario final: winit + egui + orquestación
 │   └── vor-cli/                       # herramientas headless (batch gen, conversión de formatos)
 ├── docs/
-│   └── (specs por fase, ver §27)
+│   └── (specs por fase, ver §26)
 └── tests/
     └── fixtures/               # mapas de ejemplo (propios y, si la licencia lo permite, de Azgaar) para tests de regresión
 ```
@@ -774,7 +773,7 @@ Esto es explícitamente lo que el usuario pidió no dejar fuera: no solo igualar
 Azgaar limita `cellsDesired` a 100.000 por restricciones de rendimiento del navegador. Con GPU nativa, el objetivo es soportar cómodamente ese máximo y explorar mapas de 500k–1M+ celdas.
 
 ### 21.2 Simulación temporal / historia
-Avanzar el mundo por años/siglos generando eventos históricos de forma procedural (guerras, sucesiones, migraciones, cambios climáticos), con una línea de tiempo navegable ("ver el mapa en el año X"). Esto conecta directamente con Atenea (§22).
+Avanzar el mundo por años/siglos generando eventos históricos de forma procedural (guerras, sucesiones, migraciones, cambios climáticos), con una línea de tiempo navegable ("ver el mapa en el año X").
 
 ### 21.3 Proyección esférica opcional
 Además del modo "hoja plana" (como Azgaar), soportar opcionalmente un modo de planeta completo con proyección esférica, para mundos que no son solo un continente recortado.
@@ -786,49 +785,27 @@ API de extensión (vía WASM o un lenguaje embebido tipo Lua/Rhai) para que la c
 Exportar heightmap + datos de entidades en formatos consumibles por Godot/Unity/Unreal — diferenciador fuerte frente a Azgaar, que es puramente cartográfico.
 
 ### 21.6 Integración con generación asistida por LLM
-Nombres, descripciones y lore generados/enriquecidos vía LLM local — conecta directo con Atenea. Dato interesante encontrado en la investigación: el propio Azgaar ya tiene una página de wiki dedicada a integración con **Ollama** para generación de texto, que vale la pena revisar como referencia de lo que ya intentaron (ver §29).
+Nombres, descripciones y lore generados/enriquecidos vía LLM local. Dato interesante encontrado en la investigación: el propio Azgaar ya tiene una página de wiki dedicada a integración con **Ollama** para generación de texto, que vale la pena revisar como referencia de lo que ya intentaron (ver §28).
 
 ### 21.7 API / CLI headless para generación batch
-Generar N mundos en batch sin UI (`vor-cli`), útil para testing, para crear datasets, o para que Atenea pida "generame un mundo nuevo" sin abrir la app gráfica.
+Generar N mundos en batch sin UI (`vor-cli`), útil para testing, para crear datasets, o para integraciones headless sin abrir la app gráfica.
 
 ### 21.8 Colaboración en tiempo real (largo plazo, opcional)
 Edición multi-usuario del mismo mundo — ambicioso, se deja fuera de v1 explícitamente (§1.4) pero documentado como visión de largo plazo.
 
 ---
 
-## 22. Integración futura con Atenea
-
-```text
-                  ATENEA
-                     │
-                     ▼
-              WORLD ENGINE (voronia)
-                     │
-        ┌────────────┼────────────┐
-        ▼            ▼            ▼
-      MAPA        HISTORIA      LORE
-   (§9 render)   (§21.2 sim)  (Notes, §7.8)
-        │            │            │
-        └────────────┼────────────┘
-                     ▼
-                  IA LOCAL (Atenea)
-```
-
-Idea concreta de uso: Hans le pregunta a Atenea "¿qué pasó en el Reino de Valdoria en los últimos 200 años?", y Atenea consulta el mismo `World Data Model` estructurado que usa el mapa (estado, cultura, religión, guerras vía `campaigns`, relaciones diplomáticas) en vez de inventar la respuesta sin contexto. Esto requiere que `vor-core` exponga una API de consulta limpia (o un modo de exportar un resumen estructurado en JSON/texto) que Atenea pueda leer — a diseñar cuando ambos proyectos estén lo bastante maduros para integrarse. No es un requisito de v1 de Voronia, pero **sí debe influir en el diseño del modelo de datos desde ahora** (que sea fácil de consultar/serializar para consumo externo).
-
----
-
-## 23. Roadmap por fases
+## 22. Roadmap por fases
 
 Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de horas disponibles reales.
 
-### Fase 0 — Investigación y sentado de bases · `M`
-- [ ] Clonar el repo de Azgaar y revisar `src/` para identificar el PRNG exacto usado (crítico por §3).
-- [ ] Identificar el algoritmo exacto de Delaunay/Voronoi y de "repacking" grid→pack en el código fuente real.
-- [ ] Confirmar estructura exacta del JSON export completo (exportar un mapa real de prueba y diseccionarlo).
-- [ ] Revisar wikis clave: Heightmap customization, Heightmap template editor, Culture types, Military Forces, Goods spread functions.
-- [ ] Crear el repo `voronia` bajo `hanserlodev`, licencia MIT, README inicial con créditos.
-- [ ] Setup del Cargo workspace (estructura de §13, vacía pero compilando).
+### Fase 0 — Investigación y sentado de bases · `M` ✓ COMPLETADA
+- [x] Clonar el repo de Azgaar y revisar `src/` para identificar el PRNG exacto usado (crítico por §3).
+- [x] Identificar el algoritmo exacto de Delaunay/Voronoi y de "repacking" grid→pack en el código fuente real.
+- [x] Confirmar estructura exacta del JSON export completo (exportar un mapa real de prueba y diseccionarlo).
+- [x] Revisar wikis clave: Heightmap customization, Heightmap template editor, Culture types, Military Forces, Goods spread functions.
+- [x] Crear el repo `voronia` bajo `hanserlodev`, licencia MIT, README inicial con créditos.
+- [x] Setup del Cargo workspace (estructura de §13, vacía pero compilando). Resultado consolidado en `docs/phases/phase-0-research.md` (Azgaar 1.138.0, commit `51d8e3e`).
 
 ### Fase 1 — Regeneración de geometría + parser de datos · `L` · ✓ COMPLETADA (commit `7907084`, 25 jul 2026)
  - [x] Portar el generador de puntos en grilla jitterizada con semilla.
@@ -838,23 +815,23 @@ Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de
  - [x] Parser del `.map` Azgaar → poblar `World Data Model` (`vor-import::mapfile::Loader::load`). Parser JSON export Full DIFERIDO a Fase 2+ (decisión Hans: fase 0 §13.4 — si solo se importan mapas ya generados, no hace falta portear `aleaPRNG`/`randomizeOptions`).
 
 
-### Fase 2 — Visor GPU mínimo · `M`
-- [ ] Ventana (winit) + inicialización de wgpu.
-- [ ] Cámara ortográfica con pan/zoom.
-- [ ] Render de una sola capa: terreno (color por altura), vía triangulación con `lyon`.
-- [ ] Esto ya es demostrable: "cargar un mapa real de Azgaar y verlo en un visor nativo GPU".
+### Fase 2 — Visor GPU mínimo · `M` ✓ COMPLETADA (commit `ded7327`, 26 jul 2026)
+- [x] Ventana (winit) + inicialización de wgpu.
+- [x] Cámara ortográfica con pan/zoom.
+- [x] Render de una sola capa: terreno (color por altura), vía triangulación con `lyon`.
+- [x] Esto ya es demostrable: "cargar un mapa real de Azgaar y verlo en un visor nativo GPU".
 
-### Fase 3 — Capas completas de renderizado · `L` ✓ COMPLETADA (commit dc9596c, 27 jul 2026)
+### Fase 3 — Capas completas de renderizado · `L` ✓ COMPLETADA (commit `4e29bb6`, 26 jul 2026)
 - [x] Ríos, fronteras de estados/provincias/culturas, biomas, burgos, labels básicos.
 - [x] Sistema de toggles de capas.
 - [x] Picking (click → info de celda/entidad).
 
-### Fase 4 — Formato `.vorn` · `M` ✓ COMPLETADA (commit pending, 27 jul 2026)
+### Fase 4 — Formato `.vorn` · `M` ✓ COMPLETADA (commit `ee3ec2e`, 26 jul 2026)
 - [x] Definir el esquema completo con `serde` + `bincode`, versión 1.
 - [x] Save/load, con benchmark de velocidad vs re-importar desde JSON.
 - [x] Autosave básico (§15).
 
-### Fase 5 — UI de edición · `M` ✓ COMPLETADA (commit pending, 27 jul 2026)
+### Fase 5 — UI de edición · `M` ✓ COMPLETADA (commit `cac2d80`, 27 jul 2026)
 - [x] Paneles egui: capas, inspector de entidad, opciones de exportación.
 - [x] Selección y edición básica de atributos de una entidad (renombrar, recolorear).
 
@@ -877,18 +854,25 @@ Estimaciones de esfuerzo relativas (S/M/L/XL), no calendario fijo — depende de
 ### Fase 8 — Extensiones más allá de Azgaar · `XL` (selección progresiva, no todo a la vez)
 - [ ] Elegir 1-2 ítems de §21 como siguiente objetivo concreto (recomendado: empezar por 21.7 CLI headless, es la base para varias otras).
 
-### Fase 9 — Integración con Atenea · `M`
-- [ ] API de consulta estructurada del `World Data Model`.
-- [ ] Prototipo de pregunta-respuesta usando Atenea + un mundo generado.
-
-### Fase 10 — Empaquetado, distribución y v1.0 pública · `M`
+### Fase 9 — Empaquetado, distribución y v1.0 pública · `M`
 - [ ] AppImage/Flatpak para Linux.
 - [ ] Documentación pública completa.
 - [ ] Anuncio en Discord/Reddit de Azgaar (con crédito claro) y donde sea relevante para la comunidad de worldbuilding.
 
+### Versionado (semver) — regla para cada release
+
+- Un único número de versión para todo el workspace (`[workspace.package] version`, heredado por los 8 crates vía `version.workspace = true`).
+- **SemVer estricto**:
+  - Pre-1.0 (`0.x.y`): `x` (minor) = nuevas fases/features o cambios que rompen API; `y` (patch) = bugfixes retrocompatibles. El `0` de mayor se mantiene hasta la v1.0.
+  - Post-1.0: `major` = breaking, `minor` = feature retrocompatible, `patch` = bugfix.
+- **En cada release público** (convención, en este orden): bump de versión → `CHANGELOG.md` con entrada (Added/Changed/Fixed/Removed) → commit → tag git `vX.Y.Z` → (eventualmente) push.
+- **Correspondencia con el roadmap**: cada fase completada que agregue funcionalidad visible = bump de minor (0.1.0 → 0.2.0 → 0.3.0...). La **v1.0.0 = cierre de la Fase 9**.
+- **`VornMetadata.voronia_version`** guarda el semver del proyecto en cada archivo `.vorn` (para migraciones/telemetría); es informativo, la compatibilidad real la gobierna `VORN_FORMAT_VERSION` (§10), que evoluciona de forma independiente.
+- El fixture del test de handshake `Sorvik-2026-07-24-23-39.map` (Azgaar 1.138.0) es un mapa generado bajo MIT y se commitea en `crates/vor-import/tests/reference/` para que los tests corran para cualquiera.
+
 ---
 
-## 24. Métricas de éxito / objetivos de rendimiento
+## 23. Métricas de éxito / objetivos de rendimiento
 
 Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son promesas duras, son metas de diseño:
 
@@ -899,7 +883,7 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 
 ---
 
-## 25. Riesgos y mitigaciones
+## 24. Riesgos y mitigaciones
 
 | Riesgo | Impacto | Mitigación |
 |---|---|---|
@@ -911,7 +895,7 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 
 ---
 
-## 26. Decisiones pendientes
+## 25. Decisiones pendientes
 
 - [x] Nombre del proyecto: `Voronia` (§1.3) — falta solo la verificación final de registro exacto en GitHub/crates.io al crear el repo.
 - [x] Nombre del formato binario: `.vorn` (Vorn World File). Verificado sin colisiones. Decisión tomada 27 jul 2026.
@@ -922,16 +906,16 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 
 ---
 
-## 27. Flujo de trabajo con Claude Code
+## 26. Flujo de trabajo con Claude Code
 
-- Este documento es la referencia macro. Para cada fase (§23), generar un **sub-spec enfocado** (`docs/phases/phase-N.md`) con el detalle accionable de esa fase específica antes de pedirle a Claude Code que implemente — evita saturar el contexto con las 29 secciones completas en cada sesión (coherente con el enfoque de optimización de tokens que Hans ya usa en otros proyectos).
+- Este documento es la referencia macro. Para cada fase (§22), generar un **sub-spec enfocado** (`docs/phases/phase-N.md`) con el detalle accionable de esa fase específica antes de pedirle a Claude Code que implemente — evita saturar el contexto con las 28 secciones completas en cada sesión (coherente con el enfoque de optimización de tokens que Hans ya usa en otros proyectos).
 - Convención de commits y de identidad de git: usar `hanserlodev` como identidad por defecto, igual que en el resto de los proyectos de Hans.
-- Sugerido: una rama por fase (`fase-1-parser`, `fase-2-visor`, etc.), PR a `master` al cerrar cada fase con checklist de §23 como descripción.
+- Sugerido: una rama por fase (`fase-1-parser`, `fase-2-visor`, etc.), PR a `master` al cerrar cada fase con checklist de §22 como descripción.
 - Los tests de regresión (§16) son especialmente importantes al trabajar con un agente: dan una señal objetiva de "esto no rompió nada" sin tener que revisar cada línea generada a mano.
 
 ---
 
-## 28. Glosario
+## 27. Glosario
 
 - **Voronoi**: partición del plano en regiones según el punto "semilla" más cercano.
 - **Delaunay**: triangulación dual del diagrama de Voronoi; cada triángulo conecta 3 puntos semilla vecinos.
@@ -953,7 +937,7 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 
 ---
 
-## 29. Referencias
+## 28. Referencias
 
 **Proyecto original:**
 - Repositorio: https://github.com/Azgaar/Fantasy-Map-Generator

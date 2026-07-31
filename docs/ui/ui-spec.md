@@ -232,7 +232,7 @@ Buttons always visible regardless of the active tab. They are global actions:
 
 ```
 ┌─────────────────────┐
-│ Voronia v0.1.0      │
+│ Voronia v0.2.0      │
 │ Motor de mapas de   │
 │ fantasía nativo     │
 │ (Rust + wgpu)       │

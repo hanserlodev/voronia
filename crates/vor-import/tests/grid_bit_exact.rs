@@ -1,7 +1,7 @@
 //! Bit-exact test: `place_points` Rust vs the Azgaar JS version (`graphUtils.ts:17-98`).
 //!
 //! Loads a fixture generated in `node` with the same version of the Azgaar source
-//! that lives in `/home/hans/Proyectos/azgaar-fmg` (master as of this test);
+//! that lives in the `azgaar-fmg` reference checkout (master as of this test);
 //! the bits are serialized as decimal strings of `u64` (via the JS `BigUint64Array`)
 //! to avoid loss when going through JSON (see rationale in `alea_bit_exact.rs`).
 //!
@@ -23,7 +23,7 @@
 //!
 //! The test that validates against the real Brample (item "Empirical validation
 //! against the .map Brample" of the todo) is marked as **blocked by version difference**;
-//! see the item in `references/status.md`.
+//! see the project's status notes.
 
 use serde_json::Value;
 use std::fs;

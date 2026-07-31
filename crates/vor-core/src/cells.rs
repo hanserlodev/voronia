@@ -4,8 +4,8 @@
 //! by cell id (grid id and pack id respectively — separate namespaces,
 //! `pack.cells.g[packId]` maps to the original grid id). Voronia keeps exactly
 //! the same SoA layout: we never use `Vec<Cell>` with a fat struct per element,
-//! because on maps of 10k–100k cells cache locality really matters (rule
-//! `references/conventions.md` §"Layout de datos").
+//! because on maps of 10k–100k cells cache locality really matters (the same
+//! Structure-of-Arrays pattern Azgaar uses internally with TypedArrays).
 //!
 //! Important: **neither `Grid`, nor `Pack`, nor `GridCells`, nor `PackCells` are read from file**
 //! — the geometry (cell IDs, vertices, neighbors) is regenerated bit-exact from

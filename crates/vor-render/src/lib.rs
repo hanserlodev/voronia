@@ -1,7 +1,7 @@
 //! `vor-render` -- the Voronia wgpu rendering pipeline.
 //!
 //! Read-only access to the World Data Model (`vor-core`): it never mutates it
-//! (hard rule from plan sec.5 + `references/architecture.md`). It draws map
+//! (hard rule from plan sec.5). It draws map
 //! layers (heightmap first, Phase 2; rivers/biomes/burgs/... in Phase 3),
 //! caching triangulated geometry so it is not re-tessellated every frame.
 //!

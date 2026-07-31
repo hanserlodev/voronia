@@ -5,7 +5,10 @@
 use vor_import::geometry::place_points;
 use vor_import::mapfile::raw;
 
-const SORVIK_MAP_PATH: &str = "/home/hans/Descargas/Sorvik 2026-07-24-23-39.map";
+const SORVIK_MAP_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/reference/Sorvik-2026-07-24-23-39.map"
+);
 
 #[test]
 fn sorvik_grid_points_match_native_regeneration() {

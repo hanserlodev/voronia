@@ -9,7 +9,7 @@
 
 - **Azgaar version**: v1.138.0 (recorded in Phase 1 — the geometry of the Sorvik `.map` is regenerated bit-exact against this commit).
 - **Cloned local commit**: `51d8e3e` (azgaar-fmg master, Jul 21, 2026 — see the Brample divergence in `docs/phases/phase-1.md`).
-- **Test maps**: `~/Descargas/Brample 2026-07-22-21-24.map`, `Sorvik 2026-07-24-23-39.map`, `XD.map`.
+- **Test maps**: `Brample 2026-07-22-21-24.map`, `Sorvik 2026-07-24-23-39.map` (committed at `crates/vor-import/tests/reference/`), `XD.map`.
 - **Input format**: legacy `.map` (slot-by-slot, 47 slots). The geometry is not stored in the file — it is regenerated from the seed (finding phase-0 §3).
 
 ---
@@ -170,7 +170,7 @@ cargo clippy --all-targets: ✓ 0 warnings
 cargo fmt --all: ✓ clean
 ```
 
-### Phase 2 checklist (master plan §23)
+### Phase 2 checklist (master plan §22)
 
 - [x] Configure deps: workspace deps wgpu 22 / winit 0.30 / egui 0.29 / lyon 1.0 / bytemuck / pollster.
 - [x] vor-render::Camera — 2D orthographic with pan/zoom, screen→world, frame_bounds (4 tests).

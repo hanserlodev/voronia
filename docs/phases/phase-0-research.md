@@ -1,16 +1,16 @@
 # Phase 0 — Research and laying the foundations
 
-> Consolidated output of Phase 0 of the master plan (§23). Everything that follows was obtained by reading the source code and documentation of the locally cloned Azgaar Fantasy Map Generator repo. When Phase 0 closes, the checkboxes of §23 of the master plan are checked off and this file remains as a frozen reference for Phase 1+.
+> Consolidated output of Phase 0 of the master plan (§22). Everything that follows was obtained by reading the source code and documentation of the locally cloned Azgaar Fantasy Map Generator repo. When Phase 0 closes, the checkboxes of §22 of the master plan are checked off and this file remains as a frozen reference for Phase 1+.
 
 ## 0. Azgaar reference (frozen reference)
 
 - **Repo**: https://github.com/Azgaar/fantasy-map-generator (case-insensitive on GitHub).
 - **Cloned ref**: `origin/main`, shallow (`--depth 1`).
-- **Local path**: `/home/hans/Proyectos/azgaar-fmg/` (sister folder of `voronia`, outside the Voronia repo so as not to interfere with git status or the workspace build).
+- **Local path**: a sibling folder of `voronia` (outside the Voronia repo so as not to interfere with git status or the workspace build).
 - **Commit**: `51d8e3e487a28995aac2304af57ad1ac4fbe3789` (2026-07-21).
 - **Version declared in package.json**: `1.135.2`.
 - **Version of the latest (bump) commit**: `1.138.0` → there is a lag between package.json and the bump commit, normal in main. For comparison purposes, the effective reference version is **1.138.0**.
-- **Master plan §25 cited `v1.119` as the latest detected release** → outdated: the current reality of main is ~20 versions newer. This does not invalidate the plan, but it is good to know before comparing hal rounding.
+- **Master plan §24 cited `v1.119` as the latest detected release** → outdated: the current reality of main is ~20 versions newer. This does not invalidate the plan, but it is good to know before comparing hal rounding.
 - **Azgaar license**: MIT (identical to Voronia's, no legal friction for deriving).
 
 ## 1. Confirmed JS stack (from `package.json` v1.135.2)
@@ -537,7 +537,7 @@ The `.map` file is an **array of strings joined by `\r\n`**. Some elements are s
 - **PackCells**: only `pack.cells.*` and the pack vertices.
 - **GridCells**: only `grid.cells.*` and the grid vertices.
 
-The "full JSON export" that master plan §23 asks to dissect is the **Full** mode. It will be inspected with a real exported test map (see §11).
+The "full JSON export" that master plan §22 asks to dissect is the **Full** mode. It will be inspected with a real exported test map (see §11).
 
 ## 11. Pending items of this phase
 
@@ -546,7 +546,7 @@ The "full JSON export" that master plan §23 asks to dissect is the **Full** mod
 
 ## 12. Dissection of a real `.map` (Brample)
 
-File: `/home/hans/Descargas/Brample 2026-07-22-21-24.map` (~11.7 MB, `XD.map` is already out of scope at the user's request).
+File: `Brample 2026-07-22-21-24.map` (~11.7 MB, `XD.map` is already out of scope at the user's request).
 
 ### 12.1 Header (slot `[0]`)
 
@@ -716,7 +716,7 @@ And the pack attributes (biome, burg, culture, state, religion, province, pop, f
 4. **Confirmed**: the Prample file still comes with settings/`options` serialized in slot `[1]`, which includes the result of `randomizeOptions()` (where the first PRNG consumption happens with `aleaPRNG`). If Voronia only wants to load already generated maps, **it does not need to port `aleaPRNG`/`randomizeOptions`** — it can import the serialized options from slot `[1]`. This trims Phase 1 substantially compared to what §7.4 suggested.
 5. **Confirmed**: the dimensions (`graphWidth`, `graphHeight`) come in the header slot `[0]`, fields `[4]` and `[5]`. The seed is in the header slot `[0]` field `[3]`. This is the first thing Voronia parses to reconstruct `placePoints` → deterministic chain.
 
-### 13.5 Conclusion for Phase 1 (plan §23)
+### 13.5 Conclusion for Phase 1 (plan §22)
 
 For the shortest path "import a `.map` and show it in the viewer" (Phase 1+2):
 

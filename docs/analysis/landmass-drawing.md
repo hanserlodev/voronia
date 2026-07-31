@@ -1,7 +1,7 @@
 # Exhaustive analysis: how Azgaar draws the entire landmass
 
 > **Date**: July 30, 2026
-> **Source**: Azgaar's FMP — `/home/hans/Proyectos/azgaar-fmg/`
+> **Source**: Azgaar's FMP — the local azgaar-fmg reference checkout
 > **Purpose**: Complete reference for the native land rendering port in Voronia
 > **Covers**: the ENTIRE landmass drawing pipeline — from the base geometry to the thematic layers
 

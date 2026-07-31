@@ -1,7 +1,7 @@
 # Complete analysis: how Azgaar draws landmass, lines and smoothing
 
 > **Date**: July 30, 2026
-> **Source**: Azgaar's FMP — `/home/hans/Proyectos/azgaar-fmg/` (local commit)
+> **Source**: Azgaar's FMP — the local azgaar-fmg reference checkout (local commit)
 > **Purpose**: Exact reference for porting to Voronia the complete landmass, lines and smoothing pipeline
 > **Covers**: feature polygons → simplify → clip → fractalize → B-spline/Catmull-Rom → coastline stroke → isoline engine (connectVertices + getIsolines) → human geography fills + water gaps + halos → borders → heightmap contours → ocean bathymetry → river curves → SVG output
 

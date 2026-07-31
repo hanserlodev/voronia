@@ -1,5 +1,5 @@
 //! Note (slot `[4]`: notes JSON). Free-form user text associated with any entity
-//! (burg, state, marker, etc.). Relevant for the Atenea integration (plan §22).
+//! (burg, state, marker, etc.).
 
 /// A legend/free-form note.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]

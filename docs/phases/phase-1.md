@@ -1,13 +1,13 @@
 # Phase 1 — Geometry regeneration + data parser
 
-> Consolidated output of Phase 1 of the master plan (§23). Closing commit: `8142d94` (25 jul 2026). Everything that follows was obtained by porting Azgaar's algorithms (JS) to Rust bit-exact and validating against the real `.map` "Sorvik" (Azgaar 1.138.0, 24 jul 2026). When Phase 1 closes, the checkboxes of §23 are checked off and this file remains as a frozen reference for Phase 2+.
+> Consolidated output of Phase 1 of the master plan (§22). Closing commit: `8142d94` (25 jul 2026). Everything that follows was obtained by porting Azgaar's algorithms (JS) to Rust bit-exact and validating against the real `.map` "Sorvik" (Azgaar 1.138.0, 24 jul 2026). When Phase 1 closes, the checkboxes of §22 are checked off and this file remains as a frozen reference for Phase 2+.
 
 ## 0. Azgaar reference (frozen for Phase 1)
 
-- **Cloned repo**: `/home/hans/Proyectos/azgaar-fmg/` (shallow `--depth 1`, commit `51d8e3e487a28995aac2304af57ad1ac4fbe3789`, 21 jul 2026).
+- **Cloned repo**: local azgaar-fmg checkout (shallow `--depth 1`, commit `51d8e3e487a28995aac2304af57ad1ac4fbe3789`, 21 jul 2026).
 - **Version declared in `package.json`**: `1.135.2`.
 - **Version of the Brample/Sorvik header**: `1.138.0` — there is a lag between `package.json` and the commit bump; the effective reference version is **1.138.0**.
-- **Reference `.map` for end-to-end validation**: `/home/hans/Descargas/Sorvik 2026-07-24-23-39.map` (5 MB, 47 slots, seed `279321909`, dim 937×945). **DO NOT use `XD.map` nor `Brample 2026-07-22-21-24.map`** (the latter diverges in jitter — see §4.1).
+- **Reference `.map` for end-to-end validation**: `Sorvik 2026-07-24-23-39.map` (5 MB, 47 slots, seed `279321909`, dim 937×945), committed at `crates/vor-import/tests/reference/`. **DO NOT use `XD.map` nor `Brample 2026-07-22-21-24.map`** (the latter diverges in jitter — see §4.1).
 - **License**: MIT (identical to Voronia's).
 
 ---
@@ -17,7 +17,7 @@
 | Commit | Date (CDT) | Title | What it did |
 |---|---|---|---|
 | `3d688a0` | 24 jul 22:21 | `feat: initialize workspace` | Cargo workspace of 8 empty crates + LICENSE/README/CONTRIBUTING/CODE_OF_CONDUCT/.gitignore |
-| `dc011e9` | 24 jul 22:21 | `chore: track .opencode/skills/` | Refined `.gitignore` (`.opencode/*` + `!.opencode/skills/`), `opencode.json` (Spanish, compaction auto/prune/reserved=16000), initial skill tracking |
+| `dc011e9` | 24 jul 22:21 | `chore: dev tooling setup` | Refined `.gitignore`, `opencode.json` (compaction auto/prune/reserved=16000), dev tooling config |
 | `dd9d378` | 24 jul 22:43 | `feat(vor-core): World Data Model base` | Pure SoA types: `Grid`/`Pack`/`GridCells`/`PackCells`/`VoronoiVertices`/`Feature`/entities/`Settings`/`MapHeader`/`MapCoordinates`/`World` + `CoreError`. Fix Cargo.toml workspace inheritance + resolver=2 |
 | `4d6dc5d` | 24 jul 22:49 | `docs(skill): actualizar status.md` | Phase 0 marked COMPLETED, Phase 1 progress documented, pending items listed with exact Azgaar paths |
 | `eaabd5e` | 24 jul 23:06 | `feat(vor-import/prng): port Alea@1.0.1` | `crates/vor-import/src/prng/alea.rs` — bit-exact Alea (s0/s1/s2/c as f64, exact Mash replica, `next_f64`/`next_u32`/`next_fract53`). Bit-exact tests `tests/alea_bit_exact.rs` with bit fixtures (`BigUint64Array` → decimal u64 strings). Reference fixture `tests/reference/alea-1.0.1.original.js` |
@@ -300,7 +300,7 @@ Key indices: `[19]`=`options` (opaque JSON string), `[20]`=`mapName`, `[21]`=`hi
 
 ## 6. Sorvik invariants (validated end-to-end, 25 jul)
 
-File: `/home/hans/Descargas/Sorvik 2026-07-24-23-39.map`
+File: `Sorvik 2026-07-24-23-39.map` (committed at `crates/vor-import/tests/reference/`)
 
 | Attribute | Value | Source |
 |---|---|---|
@@ -366,10 +366,10 @@ All counts match the Python dump of the file and the `Loader::load` output.
 
 | Item | Why | Master plan ref |
 |---|---|---|
-| **JSON export parser (Full mode)** | Requires `aleaPRNG 1.1.0` + `randomizeOptions` (setSeed→generateGrid stretch) which is NOT needed to import already generated `.map` files (phase-0 §13.4) | §23 Phase 1 "JSON export Full parser DEFERRED" |
-| **`.vorn` format (binary save/load)** | Dedicated Phase 4 | §23 Phase 4 |
-| **Native procedural generation (heightmap, rivers, cultures, etc.)** | Phase 7 (XL) | §23 Phase 7 |
-| **GPU viewer (winit/wgpu/lyon)** | Phase 2 (M) — **NEXT** | §23 Phase 2 |
+| **JSON export parser (Full mode)** | Requires `aleaPRNG 1.1.0` + `randomizeOptions` (setSeed→generateGrid stretch) which is NOT needed to import already generated `.map` files (phase-0 §13.4) | §22 Phase 1 "JSON export Full parser DEFERRED" |
+| **`.vorn` format (binary save/load)** | Dedicated Phase 4 | §22 Phase 4 |
+| **Native procedural generation (heightmap, rivers, cultures, etc.)** | Phase 7 (XL) | §22 Phase 7 |
+| **GPU viewer (winit/wgpu/lyon)** | Phase 2 (M) — **NEXT** | §22 Phase 2 |
 
 ---
 
@@ -390,7 +390,7 @@ All counts match the Python dump of the file and the `Loader::load` output.
 
 ## 10. Next steps (Phase 2 — Minimal GPU viewer)
 
-1. **Generate sub-spec** `docs/phases/phase-2.md` before implementing (plan §27).
+1. **Generate sub-spec** `docs/phases/phase-2.md` before implementing (plan §26).
 2. **winit window + wgpu init** (device/queue/surface/swapchain).
 3. **Orthographic camera** with pan (drag) + zoom (scroll).
 4. **Terrain layer rendering**: `PackCells` points triangulation → `lyon::path::Path` → vertex buffer → shader colored by `height` (u8 → normalized float).
@@ -402,8 +402,7 @@ All counts match the Python dump of the file and the `Loader::load` output.
 ## 11. Key files (for quick resumption)
 
 ```
-/home/hans/Proyectos/voronia/
-├── crates/vor-core/src/                          # World Data Model (frozen Phase 1)
+./crates/vor-core/src/                          # World Data Model (frozen Phase 1)
 ├── crates/vor-import/src/
 │   ├── prng/alea.rs                              # bit-exact Alea@1.0.1
 │   ├── numbers/mod.rs                            # rn(v,d)
@@ -428,8 +427,7 @@ All counts match the Python dump of the file and the `Loader::load` output.
 │   └── reference/                                # fixtures + JS generators
 ├── docs/phases/phase-0-research.md                  # Frozen research
 ├── docs/phases/phase-1.md                                # THIS FILE
-├── .opencode/skills/voronia-dev/references/status.md  # Current state + decisions
-└── voronia-plan-proyecto.md §23                  # Roadmap (Phase 1 checked off ✓)
+└── voronia-plan-proyecto.md §22                  # Roadmap (Phase 1 checked off ✓)
 ```
 
 ---

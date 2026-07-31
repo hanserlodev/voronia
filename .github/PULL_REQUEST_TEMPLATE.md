@@ -28,7 +28,7 @@ Related to: #issue (if applicable)
 - [ ] I did not add `println!` (use `tracing`)
 - [ ] `vor-render` does not write to the World Data Model (read-only)
 - [ ] No secrets or keys in the diff
-- [ ] I updated `docs/` and `.opencode/skills/voronia-dev/references/status.md` if applicable
+- [ ] I updated `docs/` if applicable
 
 ## Screenshots / evidence
 

@@ -6,18 +6,25 @@ Voronia is a from-scratch reimplementation of the procedural pipeline behind [Az
 
 ## Status
 
-**Phase 0 — Research & groundwork**: complete. The full investigation of Azgaar's source (PRNG, Delaunay/Voronoi, grid→pack repacking, `.map` format, generation pipeline) lives in [`docs/phases/phase-0-research.md`](docs/phases/phase-0-research.md).
+Development version: **0.2.0**. See [`CHANGELOG.md`](CHANGELOG.md) and the master plan at [`voronia-plan-proyecto.md`](voronia-plan-proyecto.md) (Spanish) for the full roadmap, data model, and architectural decisions.
 
-**Phase 1 — Geometry regeneration + data parser**: not yet started.
+Completed phases (roadmap §22):
 
-See the master plan at [`voronia-plan-proyecto.md`](voronia-plan-proyecto.md) (Spanish) for the full roadmap, data model, and architectural decisions.
+- **Phase 0 — Research & groundwork**: the full investigation of Azgaar's source (PRNG, Delaunay/Voronoi, grid→pack repacking, `.map` format, generation pipeline) lives in [`docs/phases/phase-0-research.md`](docs/phases/phase-0-research.md).
+- **Phase 1 — Geometry regeneration + data parser**: bit-exact port of Azgaar's grid + Voronoi + repacking to Rust, plus the `.map`/JSON parser → World Data Model. Validated handshake against a real Azgaar 1.138.0 map (`Sorvik`, committed as test fixture).
+- **Phase 2 — Minimal GPU viewer**: winit + wgpu window, grid mesh, pan/zoom.
+- **Phase 3 — Full render layers**: biomes, relief, rivers, states, burgs, labels, water gap, text (glyphon).
+- **Phase 4 — `.vorn` format**: native binary serialization (bincode v1, versioned header) + autosave.
+- **Phase 5 — Editing UI**: egui interface, layer toggles, editing workflows.
+
+Next up: **Phase 6 — Advanced editing** (undo/redo, brushes, borders, rivers).
 
 ## Why
 
 - **Native performance**: render hundreds of thousands of cells at 60 FPS with GPU-accelerated pan/zoom.
 - **Bit-exact `.map` import**: regenerate Azgaar's grid + Voronoi topology deterministically from the seed embedded in a `.map` file, so all per-cell attributes line up with the correct geometry. No silent data loss.
 - **Editing**: undo/redo, brushes, manual border tweaking, river editing — none of which Azgaar's current web app offers with the same fidelity.
-- **Beyond Azgaar**: no practical cell-count ceiling, optional spherical projection, batch/headless generation via CLI, eventual LLM-assisted worldbuilding integration with [Atenea](https://github.com/hanserlodev).
+- **Beyond Azgaar**: no practical cell-count ceiling, optional spherical projection, batch/headless generation via CLI, eventual LLM-assisted worldbuilding integration.
 
 ## Architecture
 

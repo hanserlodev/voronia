@@ -6,7 +6,7 @@ labels: ["bug"]
 assignees: []
 ---
 
-<!-- Before opening: search for an existing similar issue and read the master plan in docs/plan.md (§23) and docs/fase-*.md -->
+<!-- Before opening: search for an existing similar issue and read the master plan (voronia-plan-proyecto.md §22) and docs/phases/phase-*.md -->
 
 ## Description
 

@@ -24,18 +24,13 @@ desktop.ini
 # This rule is defensive — in case anyone symlinks it in by mistake.
 /azgaar-fmg/
 
-# OpenCode agent checkpoint de sesión (ephemeral, ver SKILL.md "Límite de contexto").
+# OpenCode agent checkpoint de sesión (ephemeral).
 # NO commitear: es estado transitorio para sobrevivir compactación del contexto.
 /agent_state_checkpoint.md
 
-# OpenCode runtime dentro del repo:
-#  - `.opencode/skills/`  -> SE commitea. Las skills viven adentro del repo a propósito
-#    (protocolo de maintenance del SKILL.md: el historial de git de la skill queda
-#    sincronizado con el historial del proyecto). NO ignorar.
-#  - Todo lo demás bajo `.opencode/` (caches de agent, node_modules, tools,
-#    state session-specific, etc.) -> NO se commitea.
-.opencode/*
-!.opencode/skills/
+# OpenCode runtime (skills, caches de agente, node_modules, tools, etc.).
+# No se commitea: es configuración local de desarrollo del maintainer.
+.opencode/
 
 # Editor / language server caches
 .cache/

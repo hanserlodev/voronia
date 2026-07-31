@@ -6,7 +6,7 @@ labels: ["enhancement"]
 assignees: []
 ---
 
-<!-- Before opening: check the master plan (docs/plan.md §23 — roadmap) and references/status.md.
+<!-- Before opening: check the master plan (voronia-plan-proyecto.md §22 — roadmap) and the phase docs.
      Maybe the item is already planned or in progress. -->
 
 ## Problem / motivation
@@ -24,7 +24,7 @@ Describe how you would do it (or how you imagine it):
 - [ ] Does it affect the World Data Model (`vor-core`)?
 - [ ] Does it affect the `.vorn` format (`vor-format`)?
 - [ ] Is it deterministic (same seed = same result)? <!-- mandatory if generative -->
-- [ ] Does it touch crate boundaries? (see `docs/architecture.md`)
+- [ ] Does it touch crate boundaries? (see `docs/phases/phase-0-research.md` §6)
 
 ## Additional Information
 

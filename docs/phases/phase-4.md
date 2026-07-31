@@ -1,6 +1,6 @@
 # Phase 4 — `.vorn` format (Vorn World File)
 
-> Consolidated output of Phase 4 of the master plan (§23). Closing: commit `ee3ec2e` (Jul 27, 2026). Native binary format of Voronia: replaces the `.gmap` placeholder from previous phases, implemented with serde + bincode v1 in `vor-format`, integrated with autosave in vor-app and benchmark validated against Sorvik.
+> Consolidated output of Phase 4 of the master plan (§22). Closing: commit `ee3ec2e` (Jul 27, 2026). Native binary format of Voronia: replaces the `.gmap` placeholder from previous phases, implemented with serde + bincode v1 in `vor-format`, integrated with autosave in vor-app and benchmark validated against Sorvik.
 
 ## 0. Format name
 
@@ -165,10 +165,6 @@ clippy 0 errors, fmt clean.
 
 | File | Change |
 |---|---|
-| `.opencode/skills/voronia-dev/SKILL.md` | `.gmap` → `.vorn` in description and stack table |
-| `references/architecture.md` | `.gmap` → `.vorn`, updated description |
-| `references/conventions.md` | `.gmap` → `.vorn` in benchmark ref |
-| `references/status.md` | Phase 4 marked COMPLETED, format name, benchmark results |
 | `README.md` | `.gmap` → `.vorn` in crates tree |
 | `voronia-plan-proyecto.md` | 12 `.gmap`→`.vorn` occurrences, §8.2 updated with the naming decision, naming item checked, collision risk resolved |
 | `docs/phases/phase-1.md` | `.gmap` → `.vorn` in the future phases table |
@@ -186,7 +182,7 @@ clippy 0 errors, fmt clean.
 
 ## 8. Final state
 
-- **Phase 4**: ✓ COMPLETED (master plan §23, checkbox checked)
+- **Phase 4**: ✓ COMPLETED (master plan §22, checkbox checked)
 - **Working tree**: clean (commit `ee3ec2e` pushed to main)
 - **Tests**: 53 green
 - **clippy**: 0 errors

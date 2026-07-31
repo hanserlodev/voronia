@@ -180,7 +180,7 @@ Port of Azgaar's isoline engine (`connectVertices`, `getIsolines`, border/halo p
 So that the colors of human layers (states, provinces, cultures, religions, biomes) don't bleed into the ocean: generates a water gap over the water cells (`h < 20` or lake), painted with the ocean background color. `append_water_gap` mutates an existing mesh adding vertices/triangles; `build_water_gap_mesh` creates it from scratch.
 
 ### `text.rs` — TextSystem (glyphon)
-GPU text system with `glyphon 0.6`: `FontSystem` + `SwashCache` + `TextAtlas` + `Viewport`. Two renderers (one MSAA for the map pass, one non-MSAA for debug). `prepare()` uploads glyphs outside the render pass; `render()` draws inside any pass; `render_debug_no_msaa()` on the resolved surface. See the "TextSystem" section in `references/status.md`.
+GPU text system with `glyphon 0.6`: `FontSystem` + `SwashCache` + `TextAtlas` + `Viewport`. Two renderers (one MSAA for the map pass, one non-MSAA for debug). `prepare()` uploads glyphs outside the render pass; `render()` draws inside any pass; `render_debug_no_msaa()` on the resolved surface.
 
 ---
 

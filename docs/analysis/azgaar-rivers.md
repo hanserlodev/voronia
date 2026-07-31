@@ -1,7 +1,7 @@
 # Exhaustive analysis of Azgaar FMG's river system
 
 > Date: 29 jul 2026
-> Source: azgaar-fmg TypeScript source code (HEAD commit in `/home/hans/Proyectos/azgaar-fmg/`)
+> Source: azgaar-fmg TypeScript source code (HEAD commit in the local azgaar-fmg reference checkout)
 > Purpose: reference for the native port in Voronia
 
 ## Files analyzed

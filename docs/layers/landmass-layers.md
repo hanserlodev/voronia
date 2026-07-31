@@ -2,7 +2,7 @@
 
 > **Category**: Landmass  
 > **Layers**: texture, heightmap, relief, cells, grid, coordinates  
-> **Source**: Azgaar's FMP v1.135.2 — `/home/hans/Proyectos/azgaar-fmg/`
+> **Source**: Azgaar's FMP v1.135.2 — the local azgaar-fmg reference checkout
 
 ---
 

@@ -66,7 +66,7 @@ Workspace total: 67 tests (14 new in vor-edit).
 - `cargo fmt --check`: clean.
 - Working tree: clean.
 
-## Master plan §23 checklist
+## Master plan §22 checklist
 
 - [x] egui panels: layers, entity inspector, export options.
 - [x] Basic selection and editing of an entity's attributes (rename, recolor).

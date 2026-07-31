@@ -1,7 +1,7 @@
 //! Errors of `vor-edit`.
 //!
 //! Controlled World Data Model mutations — they fail with `thiserror` instead
-//! of panicking (rule of `references/conventions.md` §"Manejo de errores").
+//! of panicking.
 
 use thiserror::Error;
 

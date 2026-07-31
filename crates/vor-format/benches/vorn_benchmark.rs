@@ -1,6 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-const SORVIK_MAP_PATH: &str = "/home/hans/Descargas/Sorvik 2026-07-24-23-39.map";
+const SORVIK_MAP_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../vor-import/tests/reference/Sorvik-2026-07-24-23-39.map"
+);
 
 fn bench_import_map(c: &mut Criterion) {
     let bytes = std::fs::read(SORVIK_MAP_PATH).expect("Sorvik map must exist");
@@ -28,7 +31,7 @@ fn bench_vorn_roundtrip(c: &mut Criterion) {
         &world.settings.map_name,
         &world.header.seed,
         &world.header.date,
-        "0.1.0",
+        env!("CARGO_PKG_VERSION"),
         Some(&world.header.version),
     );
 

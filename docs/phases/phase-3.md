@@ -119,7 +119,6 @@ M crates/vor-render/src/lib.rs                (+export new modules)
 M crates/vor-app/src/lib.rs                   (+world, layers, picking en State/redraw)
 - - - (session 2: post-Phase 2 fixes) - - -
 M crates/vor-render/src/renderer.rs           (cull_mode: None fix)
-M .opencode/skills/voronia-dev/references/status.md (fix docs)
 A docs/phases/phase-3.md                              (this file, update with findings)
 ```
 
@@ -134,7 +133,7 @@ cargo fmt --all:           ✓ clean
 cargo run --bin vor:       ✓ viewer opens with ALL layers (includes rivers, borders, burgs)
 ```
 
-### Phase 3 checklist (master plan §23)
+### Phase 3 checklist (master plan §22)
 
 - [x] Rivers, state/province/culture borders, biomes, burgs, basic labels.
 - [x] Layer toggle system.

@@ -7,7 +7,7 @@
 
 use thiserror::Error;
 
-/// `vor-core` error. Library types use `thiserror` (rule from `references/conventions.md` §"Manejo de errores").
+/// `vor-core` error. Library types use `thiserror`.
 #[derive(Debug, Error)]
 pub enum CoreError {
     /// A cell/feature/entity index falls outside the valid range of its collection.

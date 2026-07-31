@@ -2,7 +2,7 @@
 
 > **Category**: Human Geography
 > **Layers**: states, provinces, zones, cultures, religions, population, burgs, markets, trade
-> **Source**: Azgaar's FMP v1.135.2 — `/home/hans/Proyectos/azgaar-fmg/`
+> **Source**: Azgaar's FMP v1.135.2 — the local azgaar-fmg reference checkout
 
 ## 1. States (fill + borders)
 

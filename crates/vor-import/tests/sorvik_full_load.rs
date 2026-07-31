@@ -22,11 +22,14 @@
 
 use vor_import::mapfile::{raw, Loader};
 
-const SORVIK_MAP_PATH: &str = "/home/hans/Descargas/Sorvik 2026-07-24-23-39.map";
+const SORVIK_MAP_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/reference/Sorvik-2026-07-24-23-39.map"
+);
 
 fn load_sorvik() -> vor_import::mapfile::LoadResult {
-    let bytes =
-        std::fs::read(SORVIK_MAP_PATH).expect("Sorvik.map must exist at /home/hans/Descargas/");
+    let bytes = std::fs::read(SORVIK_MAP_PATH)
+        .expect("Sorvik.map must exist in crates/vor-import/tests/reference/");
     let raw = raw::parse(&bytes).expect("raw parse");
     Loader::load(&raw).expect("loader succeeds on Sorvik")
 }
