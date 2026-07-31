@@ -1,6 +1,6 @@
 //! Point-of-interest marker (slot `[35]`: `pack.markers` JSON).
 //!
-//! Brample example (fase-0 §12.3): `{"icon":"🌋","type":"volcanoes","dx":52,"px":13,"x":..,"y":..,"cell":..,"i":0}`.
+//! Brample example (phase-0 §12.3): `{"icon":"🌋","type":"volcanoes","dx":52,"px":13,"x":..,"y":..,"cell":..,"i":0}`.
 
 /// A marker (POI pin) on the map.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]

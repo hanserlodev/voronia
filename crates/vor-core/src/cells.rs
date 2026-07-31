@@ -9,7 +9,7 @@
 //!
 //! Important: **neither `Grid`, nor `Pack`, nor `GridCells`, nor `PackCells` are read from file**
 //! — the geometry (cell IDs, vertices, neighbors) is regenerated bit-exact from
-//! seed + parameters (see `docs/fase-0-investigacion.md` §13.4 for why this is
+//! seed + parameters (see `docs/phases/phase-0-research.md` §13.4 for why this is
 //! critical to avoid applying attributes to wrong cells). Attributes ARE
 //! persisted (here); geometry is not.
 

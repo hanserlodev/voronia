@@ -1,7 +1,7 @@
 //! Parser for the Azgaar Fantasy Map Generator `.map` binary-text format.
 //!
 //! Format: array of strings joined by `\r\n`. Each slot is a string.
-//! Slots indexed `[0]`..`[45]` approx. (see `docs/fase-0-investigacion.md` §12
+//! Slots indexed `[0]`..`[45]` approx. (see `docs/phases/phase-0-research.md` §12
 //! for the "Brample" dissection).
 //!
 //! gzip compression **optional**: if the file does not start with a `[0]` slot

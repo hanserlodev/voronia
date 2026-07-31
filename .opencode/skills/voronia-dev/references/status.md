@@ -84,7 +84,7 @@ ts.trim();
 
 ## Costas con paridad bit-exacta — COMPLETO (30 jul 2026)
 
-Pipeline de costas idéntico al de Azgaar: `simplify(0.3)` → `clipPoly(secure=1)` → `fractalize` → `buildCoastlinePath` → lyon. Documentación completa del proceso (bugs, fixes, algoritmos) en `docs/coastline-paridad-azgaar.md`.
+Pipeline de costas idéntico al de Azgaar: `simplify(0.3)` → `clipPoly(secure=1)` → `fractalize` → `buildCoastlinePath` → lyon. Documentación completa del proceso (bugs, fixes, algoritmos) en `docs/analysis/azgaar-coastline-parity.md`.
 
 ### Decisiones clave
 - **PRNG**: port de `Alea@1.0.1` a `vor-render/src/prng/alea.rs` (bit-exacto, verificado contra el fixture JS en `vor-import/tests/reference/alea-1.0.1.original.js`). Vive en vor-render porque vor-render no puede depender de vor-import.
@@ -121,5 +121,5 @@ Pipeline de costas idéntico al de Azgaar: `simplify(0.3)` → `clipPoly(secure=
 - Unificar meander (vor-render tiene copia, vor-sim tiene original)
 - Tests end-to-end de generate() con un mundo real
 - Optimizar: todo el pipeline es O(n²) en el peor caso (resolveDepressions)
-- Documentación de las sesiones de costas previas sin commitear (landmass-drawing-analysis, plan-puntos-1-5, plan-renderizado-completo, analisis-completo) ya están en git
+- Documentación de las sesiones de costas previas (landmass-drawing, landmass-lines-points-1-5, full-rendering, azgaar-landmass-lines-smoothing) ya está en git (docs/analysis, docs/plans)
 - Verificar visualmente la paridad de costas contra un mapa real de Azgaar (falta screenshot de comparación)

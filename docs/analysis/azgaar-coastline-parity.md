@@ -2,7 +2,7 @@
 
 > **Date**: post-Phase 7 (render) session.
 > **Reference source**: `azgaar/app/Fantasy-Map-Generator/src/renderers/coastline-fractal.ts` (and `landmass/landmass.ts`).
-> **Related**: `docs/analisis-completo-azgaar-landmass-lines-smoothing.md`, `docs/plan-puntos-1-5-landmass-lines.md`, `docs/landmass-drawing-analysis.md`.
+> **Related**: `docs/analysis/azgaar-landmass-lines-smoothing.md`, `docs/plans/landmass-lines-points-1-5.md`, `docs/analysis/landmass-drawing.md`.
 
 This document records the process of making Voronia's coastline rendering reproduce Azgaar's coastline geometry **bit-exact** (same seed = same coastline). It is not a user guide nor a replacement for the plan; it is the record of the bugs found, why they occurred and what was done to fix them.
 
@@ -14,7 +14,7 @@ Azgaar's `.map`/JSON **doesn't store the geometry** — only per-cell attributes
 
 Parity is required at two levels:
 
-1. **Mesh / grid** (grid → pack → Delaunay/Voronoi): already solved in Phases 1–6 (see `docs/fase-{1..6}.md`).
+1. **Mesh / grid** (grid → pack → Delaunay/Voronoi): already solved in Phases 1–6 (see `docs/phases/phase-{1..6}.md`).
 2. **Coastline rendering**: the fractal tracing of the coastline over the perimeter of each land feature. That's what this session covers.
 
 ## Implemented coastline pipeline

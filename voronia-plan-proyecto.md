@@ -924,7 +924,7 @@ Objetivos iniciales a validar con benchmarks reales desde la Fase 2 — no son p
 
 ## 27. Flujo de trabajo con Claude Code
 
-- Este documento es la referencia macro. Para cada fase (§23), generar un **sub-spec enfocado** (`docs/specs/fase-N.md`) con el detalle accionable de esa fase específica antes de pedirle a Claude Code que implemente — evita saturar el contexto con las 29 secciones completas en cada sesión (coherente con el enfoque de optimización de tokens que Hans ya usa en otros proyectos).
+- Este documento es la referencia macro. Para cada fase (§23), generar un **sub-spec enfocado** (`docs/phases/phase-N.md`) con el detalle accionable de esa fase específica antes de pedirle a Claude Code que implemente — evita saturar el contexto con las 29 secciones completas en cada sesión (coherente con el enfoque de optimización de tokens que Hans ya usa en otros proyectos).
 - Convención de commits y de identidad de git: usar `hanserlodev` como identidad por defecto, igual que en el resto de los proyectos de Hans.
 - Sugerido: una rama por fase (`fase-1-parser`, `fase-2-visor`, etc.), PR a `master` al cerrar cada fase con checklist de §23 como descripción.
 - Los tests de regresión (§16) son especialmente importantes al trabajar con un agente: dan una señal objetiva de "esto no rompió nada" sin tener que revisar cada línea generada a mano.

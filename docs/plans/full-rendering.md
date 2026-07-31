@@ -1,6 +1,6 @@
 # Implementation plan: full rendering of Voronia
 
-> **Based on**: Azgaar FMG analysis (`docs/landmass-drawing-analysis.md`)
+> **Based on**: Azgaar FMG analysis (`docs/analysis/landmass-drawing.md`)
 > **Current state**: 19/28 layers implemented, 79 tests, functional wgpu pipeline
 > **Objective**: Cover 100% of Azgaar's drawing layers in Voronia
 

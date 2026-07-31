@@ -62,7 +62,7 @@ Esta regla **no reemplaza** a la skill global `token-optimization` (minimizar to
 Cuando el agente detecta que se acerca al umbral operativo de **160 000 tokens** y debe hacer checkpoint + compactación (ver regla crítica arriba), **además de escribir `agent_state_checkpoint.md`**, DEBE:
 
 1. **Identificar la fase actual** (según `references/status.md` y plan maestro §23).
-2. **Escribir/actualizar `docs/fase-{N}.md`** (p.ej. `docs/fase-1.md`, `docs/fase-2.md`) con un registro cronológico completo de **todo lo ocurrido en la sesión actual desde el inicio de esa fase**, siguiendo el formato de `docs/fase-0-investigacion.md`:
+2. **Escribir/actualizar `docs/phases/phase-{N}.md`** (p.ej. `docs/phases/phase-1.md`, `docs/phases/phase-2.md`) con un registro cronológico completo de **todo lo ocurrido en la sesión actual desde el inicio de esa fase**, siguiendo el formato de `docs/phases/phase-0-research.md`:
    - Referencia congelada de Azgaar (versión, commit, .map usado).
    - Cronología de commits (hash, fecha, título, qué hizo).
    - Arquitectura del código producido (módulos, funciones clave, tipos).
@@ -70,10 +70,10 @@ Cuando el agente detecta que se acerca al umbral operativo de **160 000 tokens**
    - Hallazgos críticos y decisiones (divergencias, lone surrogates, placeholders, grid vs pack features, etc.).
    - Inventario de tests (archivo, count, qué valida cada uno).
    - Estado final: checklist fase en plan maestro, working tree limpio, tests/clippy/fmt verdes.
-3. **Incluir en el `agent_state_checkpoint.md`** una referencia al archivo de fase actualizado (p.ej. "Fase 1 registrada en `docs/fase-1.md`").
-4. Esto garantiza que **tras la compactación no se pierda el hilo narrativo ni técnico** de la fase — el MD de fase sobrevive como fuente de verdad congelada, igual que `fase-0-investigacion.md`.
+3. **Incluir en el `agent_state_checkpoint.md`** una referencia al archivo de fase actualizado (p.ej. "Fase 1 registrada en `docs/phases/phase-1.md`").
+4. Esto garantiza que **tras la compactación no se pierda el hilo narrativo ni técnico** de la fase — el MD de fase sobrevive como fuente de verdad congelada, igual que `docs/phases/phase-0-research.md`.
 
-El archivo `docs/fase-{N}.md` **sí se commitea** (es documentación del proyecto, no efímero). Se actualiza en cada checkpoint de límite de contexto durante esa fase, y se "congela" cuando la fase se cierra (commit final de fase + tilde en plan maestro §23).
+El archivo `docs/phases/phase-{N}.md` **sí se commitea** (es documentación del proyecto, no efímero). Se actualiza en cada checkpoint de límite de contexto durante esa fase, y se "congela" cuando la fase se cierra (commit final de fase + tilde en plan maestro §23).
 
 ## ⚠️ El hallazgo que no se puede olvidar
 
@@ -145,4 +145,4 @@ Esto es lo que hace que esta skill no quede desactualizada — es la parte más 
 3. **El roadmap con checkboxes vive en el plan maestro (§23), no lo dupliques acá.** Cuando se completa un ítem, tildalo ahí. Esta skill referencia el estado, no lo reemplaza.
 4. **Commiteá los cambios de esta skill junto con el código/decisión que describen.** Es exactamente para esto que la skill vive dentro del repo (`.opencode/skills/voronia-dev/`) y no en el home global de Hans: el historial de git de la skill queda sincronizado con el historial de git del proyecto. Si estás a punto de cerrar una sesión de trabajo con cambios de fondo y no tocaste ningún archivo de esta skill, probablemente te falta actualizar algo.
 5. **Si le vas a dar a Hans una recomendación que no está reflejada en ningún lado todavía y la acepta, esa es la señal de escribirla antes de terminar la sesión** — no asumas que se va a acordar de repetírtela la próxima vez.
-6. **Registro de fase al límite de contexto (protocolo § "Protocolo de registro de fase al alcanzar límite de contexto")**: cada vez que se dispare el checkpoint por límite de 160K tokens, el agente DEBE escribir/actualizar `docs/fase-{N}.md` con el registro cronológico completo de la fase actual (formato `fase-0-investigacion.md`). Este archivo SÍ se commitea y congela el conocimiento de la fase. Ver sección "Protocolo de registro de fase al alcanzar límite de contexto" arriba para el formato exacto.
+6. **Registro de fase al límite de contexto (protocolo § "Protocolo de registro de fase al alcanzar límite de contexto")**: cada vez que se dispare el checkpoint por límite de 160K tokens, el agente DEBE escribir/actualizar `docs/phases/phase-{N}.md` con el registro cronológico completo de la fase actual (formato `docs/phases/phase-0-research.md`). Este archivo SÍ se commitea y congela el conocimiento de la fase. Ver sección "Protocolo de registro de fase al alcanzar límite de contexto" arriba para el formato exacto.

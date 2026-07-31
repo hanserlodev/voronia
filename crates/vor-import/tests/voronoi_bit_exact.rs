@@ -10,7 +10,7 @@
 //!
 //! Critical: `circumcenter` (`voronoi.ts:142-154`) truncates to integers with `Math.floor`. If the
 //! Rust port does not do exactly `f64::floor()`, the `vertices.p[t]` diverge — silent geometry bug
-//! that would break the slot→cell mapping (fase-0 §6.3, §13.4).
+//! that would break the slot→cell mapping (phase-0 §6.3, §13.4).
 
 use serde_json::Value;
 use std::fs;

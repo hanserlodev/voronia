@@ -390,7 +390,7 @@ Object.entries(isolines).forEach(([index, { fill, waterGap, halo }]) => {
 
 ## 13. Rivers
 
-**See also**: `docs/analisis-rios-azgaar.md` (exhaustive 977-line analysis)
+**See also**: `docs/analysis/azgaar-rivers.md` (exhaustive 977-line analysis)
 
 ### Files
 - `public/modules/ui/layers.js:810-831` — `drawRivers()`
@@ -742,5 +742,5 @@ All of this is already available in `vor-core` (PackCells).
 ---
 
 > **Document generated from the analysis of the Azgaar FMG v1.135.2 source code**.
-> For the rivers analysis, see `docs/analisis-rios-azgaar.md` (977 lines).
-> For previous landmass layers documentation, see `docs/landmass-layers.md` (initial, less detailed analysis).
+> For the rivers analysis, see `docs/analysis/azgaar-rivers.md` (977 lines).
+> For previous landmass layers documentation, see `docs/layers/landmass-layers.md` (initial, less detailed analysis).

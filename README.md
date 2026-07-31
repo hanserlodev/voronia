@@ -6,7 +6,7 @@ Voronia is a from-scratch reimplementation of the procedural pipeline behind [Az
 
 ## Status
 
-**Phase 0 — Research & groundwork**: complete. The full investigation of Azgaar's source (PRNG, Delaunay/Voronoi, grid→pack repacking, `.map` format, generation pipeline) lives in [`docs/fase-0-investigacion.md`](docs/fase-0-investigacion.md).
+**Phase 0 — Research & groundwork**: complete. The full investigation of Azgaar's source (PRNG, Delaunay/Voronoi, grid→pack repacking, `.map` format, generation pipeline) lives in [`docs/phases/phase-0-research.md`](docs/phases/phase-0-research.md).
 
 **Phase 1 — Geometry regeneration + data parser**: not yet started.
 

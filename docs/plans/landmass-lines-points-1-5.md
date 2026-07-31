@@ -1,6 +1,6 @@
 # Implementation plan: points 1–5 — landmass, lines and smoothing
 
-> **Based on**: `docs/analisis-completo-azgaar-landmass-lines-smoothing.md`
+> **Based on**: `docs/analysis/azgaar-landmass-lines-smoothing.md`
 > **Scope**: Feature → SVG pipeline (simplify, clipPoly, fractalize) → Hybrid path builder → Coastline stroke → Isoline engine (connectVertices)
 
 ---

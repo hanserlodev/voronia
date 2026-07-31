@@ -12,7 +12,7 @@
 //! If the Rust crate does not match bit-by-bit, there is divergence in the triangulation and we
 //! must NOT use the crate — the next step would be to port manually from `delaunator-5.1.0.js`.
 //! The `azgaar-fmg` consumes `delaunay.triangles` and `delaunay.halfedges` in `voronoi.ts`, so
-//! bit-exactness is critical for the `.map` attributes to land on the correct cells (fase-0 §13.4).
+//! bit-exactness is critical for the `.map` attributes to land on the correct cells (phase-0 §13.4).
 
 use serde_json::Value;
 use std::fs;

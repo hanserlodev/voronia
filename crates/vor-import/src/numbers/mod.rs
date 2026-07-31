@@ -21,7 +21,7 @@
 /// - `JS Math.round(-1.5)=-1`, `Rust (-1.5).round()=-2` — DIFFERENT.
 ///
 /// For `getJitteredGrid`, all `x + jitter` values with `x > 0` are positive in
-/// practice (see the analysis in `docs/fase-0-investigacion.md` §6.5), so a naive
+/// practice (see the analysis in `docs/phases/phase-0-research.md` §6.5), so a naive
 /// positive flag would work. But `rn(v, d)` is also used elsewhere in Azgaar
 /// (e.g. `reGraph` coastal midpoint `rn((x + ex)/2, 1)`), also on positive
 /// coordinates — in practice it never crosses purely negative values. Even so,

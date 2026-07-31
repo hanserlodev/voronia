@@ -15,7 +15,7 @@
 //! Tested in `tests/delaunay_bit_exact.rs`: with the Rust crate, over
 //! `place_points(2000,2000,10000,"861039636") + boundary`, 6280 `triangles` entries and
 //! 12145 `halfedges` entries diverge from the JS. Accepting that divergence would break
-//! the finding of fase-0 §13.4 (attributes land in the wrong cells).
+//! the finding of phase-0 §13.4 (attributes land in the wrong cells).
 //!
 //! This port avoids all of that by sharing the code with the JS.
 //!

@@ -366,7 +366,7 @@ All counts match the Python dump of the file and the `Loader::load` output.
 
 | Item | Why | Master plan ref |
 |---|---|---|
-| **JSON export parser (Full mode)** | Requires `aleaPRNG 1.1.0` + `randomizeOptions` (setSeed→generateGrid stretch) which is NOT needed to import already generated `.map` files (fase-0 §13.4) | §23 Phase 1 "JSON export Full parser DEFERRED" |
+| **JSON export parser (Full mode)** | Requires `aleaPRNG 1.1.0` + `randomizeOptions` (setSeed→generateGrid stretch) which is NOT needed to import already generated `.map` files (phase-0 §13.4) | §23 Phase 1 "JSON export Full parser DEFERRED" |
 | **`.vorn` format (binary save/load)** | Dedicated Phase 4 | §23 Phase 4 |
 | **Native procedural generation (heightmap, rivers, cultures, etc.)** | Phase 7 (XL) | §23 Phase 7 |
 | **GPU viewer (winit/wgpu/lyon)** | Phase 2 (M) — **NEXT** | §23 Phase 2 |
@@ -390,7 +390,7 @@ All counts match the Python dump of the file and the `Loader::load` output.
 
 ## 10. Next steps (Phase 2 — Minimal GPU viewer)
 
-1. **Generate sub-spec** `docs/specs/fase-2.md` before implementing (plan §27).
+1. **Generate sub-spec** `docs/phases/phase-2.md` before implementing (plan §27).
 2. **winit window + wgpu init** (device/queue/surface/swapchain).
 3. **Orthographic camera** with pan (drag) + zoom (scroll).
 4. **Terrain layer rendering**: `PackCells` points triangulation → `lyon::path::Path` → vertex buffer → shader colored by `height` (u8 → normalized float).
@@ -426,8 +426,8 @@ All counts match the Python dump of the file and the `Loader::load` output.
 │   ├── voronoi_bit_exact.rs
 │   ├── regraph_bit_exact.rs
 │   └── reference/                                # fixtures + JS generators
-├── docs/fase-0-investigacion.md                  # Frozen research
-├── docs/fase-1.md                                # THIS FILE
+├── docs/phases/phase-0-research.md                  # Frozen research
+├── docs/phases/phase-1.md                                # THIS FILE
 ├── .opencode/skills/voronia-dev/references/status.md  # Current state + decisions
 └── voronia-plan-proyecto.md §23                  # Roadmap (Phase 1 checked off ✓)
 ```
@@ -456,4 +456,4 @@ git log --oneline -1
 
 ---
 
-*End of the Phase 1 record. Frozen at commit `8142d94` (25 jul 2026). Next update: `docs/fase-2.md` when Phase 2 closes.*
+*End of the Phase 1 record. Frozen at commit `8142d94` (25 jul 2026). Next update: `docs/phases/phase-2.md` when Phase 2 closes.*

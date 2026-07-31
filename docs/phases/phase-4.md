@@ -171,7 +171,7 @@ clippy 0 errors, fmt clean.
 | `references/status.md` | Phase 4 marked COMPLETED, format name, benchmark results |
 | `README.md` | `.gmap` → `.vorn` in crates tree |
 | `voronia-plan-proyecto.md` | 12 `.gmap`→`.vorn` occurrences, §8.2 updated with the naming decision, naming item checked, collision risk resolved |
-| `docs/fase-1.md` | `.gmap` → `.vorn` in the future phases table |
+| `docs/phases/phase-1.md` | `.gmap` → `.vorn` in the future phases table |
 | `crates/vor-format/Cargo.toml` | description, serde/bincode/thiserror deps, criterion+vor-import dev-deps, [[bench]] |
 | `crates/vor-core/src/lib.rs` | `pub mod serde_json_string` |
 | `crates/vor-core/src/world.rs` | `#[serde(with = "...")]` on 5 Value fields |
@@ -207,4 +207,4 @@ cargo run --bin vor-app -- /ruta/mapa.map --export-vorn
 
 ---
 
-*End of Phase 4 record. Frozen at commit `ee3ec2e` (Jul 27, 2026). Next update: `docs/fase-5.md` when Phase 5 is closed.*
+*End of Phase 4 record. Frozen at commit `ee3ec2e` (Jul 27, 2026). Next update: `docs/phases/phase-5.md` when Phase 5 is closed.*

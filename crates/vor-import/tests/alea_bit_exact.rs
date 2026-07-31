@@ -8,7 +8,7 @@
 //! `crates/vor-import/tests/reference/alea_seed_*_first_*_bits.json`.
 //!
 //! If this test fails, the `grid.points` that vor-import regenerates will not match
-//! slot `[6]` of the Azgaar `.map` — see `docs/fase-0-investigacion.md` §6.5,
+//! slot `[6]` of the Azgaar `.map` — see `docs/phases/phase-0-research.md` §6.5,
 //! §13.4 consequence 3 (silent bug: attributes in the wrong cells, no error).
 //!
 //! Note: we serialize as bits and not as rendered decimal strings because `serde_json`

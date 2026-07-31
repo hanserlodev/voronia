@@ -1,6 +1,6 @@
 //! Map settings (slots `[0]` header + `[1]` settings of Azgaar's `.map`).
 //!
-//! Exact parse reference in `docs/fase-0-investigacion.md` §12.1, §12.2. Header `[0]`
+//! Exact parse reference in `docs/phases/phase-0-research.md` §12.1, §12.2. Header `[0]`
 //! is pipe-delimited `version|license|date|seed|graphWidth|graphHeight|mapId`. Settings
 //! `[1]` has ~27 pipe-delimited fields and an embedded sub-JSON `options` at
 //! position `[19]` (result of Azgaar's `randomizeOptions()` — see §7.2).

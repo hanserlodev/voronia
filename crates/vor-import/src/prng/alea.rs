@@ -6,7 +6,7 @@
 //! Why bit-exactness matters here: Azgaar (`graphUtils.ts:1`) does
 //! `Math.random = Alea(seed)` before `getJitteredGrid`, so the first
 //! `Math.random()` consumed by `getJitteredGrid` is the first one of the freshly
-//! built `Alea(seed)` stream (see `docs/fase-0-investigacion.md` §6.5, §7.1, §13.4).
+//! built `Alea(seed)` stream (see `docs/phases/phase-0-research.md` §6.5, §7.1, §13.4).
 //! If our Alea diverges even by 1 ULP, the grid `points` will not match the `[6]`
 //! slot of the Azgaar `.map`, and attributes land in wrong cells (silent bug with
 //! no runtime error — §13.4 consequence 3).

@@ -10,7 +10,7 @@
 //! (which would truncate towards zero on negatives). Although cell coordinates are not
 //! negative in Azgaar, the circumcenter can fall slightly outside the cell
 //! range when the triangle is obtuse or has a hull point, and there `as i32`
-//! would diverge from `Math.floor`. Finding fase-0 §6.3 requires literal reproduction.
+//! would diverge from `Math.floor`. Finding phase-0 §6.3 requires literal reproduction.
 //!
 //! ## Output layout
 //!
@@ -190,7 +190,7 @@ fn triangle_center(points: &[Point], triangles: &[u32], t: usize) -> [f64; 2] {
 }
 
 /// `circumcenter(a, b, c)` of `voronoi.ts:142-154` — Wikipedia's formula, with
-/// `Math.floor` truncating the result to integers (fase-0 §6.3).
+/// `Math.floor` truncating the result to integers (phase-0 §6.3).
 ///
 /// Literal reproduction of the JS:
 /// ```js

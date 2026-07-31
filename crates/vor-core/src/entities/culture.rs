@@ -5,7 +5,7 @@ use super::coat_of_arms::CoatOfArms;
 /// Culture type. Variants confirmed against Azgaar's "Culture types" wiki (Phase 0 §4.3);
 /// add any missing ones per the final confirmation without breaking old migrations.
 // TODO Phase 1: confirm exact variants and the code name Azgaar uses in the JSON
-// (e.g. "Generic"/"River"/"Lake"/"Naval"/"Nomadic"/"Hunting"/"Highland" — see fase-0 §4.3).
+// (e.g. "Generic"/"River"/"Lake"/"Naval"/"Nomadic"/"Hunting"/"Highland" — see phase-0 §4.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum CultureType {

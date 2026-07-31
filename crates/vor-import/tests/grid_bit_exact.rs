@@ -7,9 +7,9 @@
 //!
 //! ## Important note: self-reference fixtures vs the real Brample
 //!
-//! The fixture is NOT compared against the "Brample" `.map` of fase-0 §12 (that map was
+//! The fixture is NOT compared against the "Brample" `.map` of phase-0 §12 (that map was
 //! generated with a `1.138.0` version of Azgaar that diverged from the cloned repo
-//! — see `docs/fase-0-investigacion.md` §12.1 for the `1.138.0` header, and commit
+//! — see `docs/phases/phase-0-research.md` §12.1 for the `1.138.0` header, and commit
 //! `51d8e3e chore: bump version to 1.138.0` in azgaar-fmg whose `package.json`
 //! stayed at `1.135.2`). This produced a divergence in the PRNG stream between the
 //! version that generated Brample and the current repo version (for example, the

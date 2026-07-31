@@ -1,6 +1,6 @@
 //! Voronoi geometry derived from Delaunay.
 //!
-//! Important for bit-exactness against Azgaar (see `docs/fase-0-investigacion.md` §6.3):
+//! Important for bit-exactness against Azgaar (see `docs/phases/phase-0-research.md` §6.3):
 //! the `positions` of the Voronoi vertices are **integer coordinates** — Azgaar
 //! deliberately truncates the circumcenter with `Math.floor`, and Voronia reproduces that.
 //! The computation happens in `vor-import` (it is logic, not data); only the geometry

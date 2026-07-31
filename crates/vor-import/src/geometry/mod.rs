@@ -1,6 +1,6 @@
 //! Jittered grid geometry — bit-exact port of Azgaar's `graphUtils.ts:17-98`.
 //!
-//! Azgaar's pipeline (confirmed against Brample in `docs/fase-0-investigacion.md`
+//! Azgaar's pipeline (confirmed against Brample in `docs/phases/phase-0-research.md`
 //! §12.4, §13.3):
 //! 1. `generateGrid(seed, w, h)` reseeds the PRNG with `Math.random = Alea(seed)` (npm).
 //! 2. `placePoints(w, h)` → `spacing`, `cellsDesired`, `boundary` (no RNG), `points` (jitter, consumes RNG), `cellsX`, `cellsY`.
@@ -11,7 +11,7 @@
 //! (`y` outer, `x` inner), 2 floats per cell. If the port iterates in another order or
 //! consumes the RNG in another sequence, the `points` will not match the `[6]` slot
 //! of the `.map` and the attributes will end up in the wrong cells — a silent bug
-//! (fase-0 §13.4).
+//! (phase-0 §13.4).
 
 use crate::numbers::rn;
 use crate::prng::Alea;
@@ -73,7 +73,7 @@ pub fn place_points(
 }
 
 /// Azgaar's `getBoundaryPoints(width, height, spacing)` (`graphUtils.ts:17-37`).
-/// **Does not consume RNG** (fase-0 §6.6 confirmed).
+/// **Does not consume RNG** (phase-0 §6.6 confirmed).
 fn get_boundary_points(width: f64, height: f64, spacing: f64) -> Vec<[f64; 2]> {
     // `offset = rn(-1 * spacing)` — default d=0, equivalent to Math.round(-spacing).
     let offset = {
@@ -157,7 +157,7 @@ mod tests {
         assert_eq!(a.cells_x, b.cells_y);
     }
 
-    /// Brample-handshake: the first Brample values (`docs/fase-0-investigacion.md`
+    /// Brample-handshake: the first Brample values (`docs/phases/phase-0-research.md`
     /// §12.4) — `spacing=20`, `cellsX=cellsY=100`, boundary starts with `[1,-20]` and `[1,2020]`.
     /// This asserts that the structural fields match before looking at the points.
     #[test]

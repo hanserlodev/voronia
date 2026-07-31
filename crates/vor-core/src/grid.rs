@@ -11,7 +11,7 @@ use crate::voronoi::VoronoiVertices;
 /// in the exact order `getJitteredGrid` produces in Azgaar (`graphUtils.ts:46-98`).
 /// Cell `id` `k` corresponds to `points[k]` → this is the detail that makes the
 /// correspondence between RNG (jitter consumption order) and per-cell attributes
-/// deterministic (see `docs/fase-0-investigacion.md` §6.5, §13.4).
+/// deterministic (see `docs/phases/phase-0-research.md` §6.5, §13.4).
 /// The `boundary` are virtual points outside the canvas to avoid infinite Voronoi
 /// cells at the edge — they do not consume RNG (§6.6).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]

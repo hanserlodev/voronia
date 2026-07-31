@@ -1,6 +1,6 @@
 # Phase 3 — Complete rendering layers
 
-> Chronological session log. Format: `docs/fase-0-investigacion.md`.
+> Chronological session log. Format: `docs/phases/phase-0-research.md`.
 > Last updated: July 27, 2026 — Phase 3 COMPLETED (all fixes applied).
 
 ---
@@ -120,7 +120,7 @@ M crates/vor-app/src/lib.rs                   (+world, layers, picking en State/
 - - - (session 2: post-Phase 2 fixes) - - -
 M crates/vor-render/src/renderer.rs           (cull_mode: None fix)
 M .opencode/skills/voronia-dev/references/status.md (fix docs)
-A docs/fase-3.md                              (this file, update with findings)
+A docs/phases/phase-3.md                              (this file, update with findings)
 ```
 
 ---

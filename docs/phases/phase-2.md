@@ -1,6 +1,6 @@
 # Phase 2 — Minimal GPU viewer
 
-> Chronological session log. Format: `docs/fase-0-investigacion.md`.
+> Chronological session log. Format: `docs/phases/phase-0-research.md`.
 > Last updated: July 26, 2026 — Phase 2 COMPLETED.
 
 ---
@@ -8,15 +8,15 @@
 ## Azgaar reference
 
 - **Azgaar version**: v1.138.0 (recorded in Phase 1 — the geometry of the Sorvik `.map` is regenerated bit-exact against this commit).
-- **Cloned local commit**: `51d8e3e` (azgaar-fmg master, Jul 21, 2026 — see the Brample divergence in `docs/fase-1.md`).
+- **Cloned local commit**: `51d8e3e` (azgaar-fmg master, Jul 21, 2026 — see the Brample divergence in `docs/phases/phase-1.md`).
 - **Test maps**: `~/Descargas/Brample 2026-07-22-21-24.map`, `Sorvik 2026-07-24-23-39.map`, `XD.map`.
-- **Input format**: legacy `.map` (slot-by-slot, 47 slots). The geometry is not stored in the file — it is regenerated from the seed (finding fase-0 §3).
+- **Input format**: legacy `.map` (slot-by-slot, 47 slots). The geometry is not stored in the file — it is regenerated from the seed (finding phase-0 §3).
 
 ---
 
 ## Session chronology (July 26, 2026)
 
-### Initial commit: `758599e docs: registrar Fase 1 en docs/fase-1.md + protocolo checkpoint→phase-md en SKILL.md`
+### Initial commit: `758599e docs: registrar Fase 1 en docs/phases/phase-1.md + protocolo checkpoint→phase-md en SKILL.md`
 
 The starting point is the Phase 1 complete tag. Clean working tree.
 

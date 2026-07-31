@@ -13,7 +13,7 @@
 //! ## Data model
 //!
 //! The design follows Azgaar's real data model (confirmed against its `Data-model`
-//! wiki page and a real test `.map` — see `docs/fase-0-investigacion.md`
+//! wiki page and a real test `.map` — see `docs/phases/phase-0-research.md`
 //! §10.1, §12.3). What changes relative to Azgaar: strong typing with enums instead
 //! of magic strings, `Option<...>` for optional ids instead of magic sentinel `0`
 //! values (where applicable), and opaque preservation (`serde_json::Value`) of the
