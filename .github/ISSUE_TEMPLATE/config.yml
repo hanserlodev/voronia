@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Voronia — documentación del proyecto
+    url: https://github.com/hanserlodev/voronia
+    about: Consultá el plan maestro y la documentación en docs/ antes de abrir un issue.
+  - name: Repositorio de Azgaar's Fantasy Map Generator
+    url: https://github.com/Azgaar/Fantasy-Map-Generator
+    about: Bugs del generador original de Azgaar (no del motor Voronia) — reportar allá.
