@@ -8,7 +8,7 @@
 //! **No** logic lives here — not procedural generation (that goes to `vor-sim`), not
 //! `.map` parsing (that goes to `vor-import`), not `.vorn` serialization (that goes to `vor-format`),
 //! not rendering (that goes to `vor-render`). The boundaries between crates follow
-//! the workspace layout documented in `docs/` (see `voronia-plan-proyecto.md` §3).
+//! the workspace layout documented in `docs/` (see `docs/plans/master-plan.md` §3).
 //!
 //! ## Data model
 //!

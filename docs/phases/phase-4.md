@@ -166,7 +166,7 @@ clippy 0 errors, fmt clean.
 | File | Change |
 |---|---|
 | `README.md` | `.gmap` → `.vorn` in crates tree |
-| `voronia-plan-proyecto.md` | 12 `.gmap`→`.vorn` occurrences, §8.2 updated with the naming decision, naming item checked, collision risk resolved |
+| `docs/plans/master-plan.md` | 12 `.gmap`→`.vorn` occurrences, §8.2 updated with the naming decision, naming item checked, collision risk resolved |
 | `docs/phases/phase-1.md` | `.gmap` → `.vorn` in the future phases table |
 | `crates/vor-format/Cargo.toml` | description, serde/bincode/thiserror deps, criterion+vor-import dev-deps, [[bench]] |
 | `crates/vor-core/src/lib.rs` | `pub mod serde_json_string` |

@@ -10,5 +10,5 @@ pub fn show(ui: &mut egui::Ui) {
     ui.hyperlink_to("GitHub", "https://github.com/hanserlodev/voronia");
     ui.label("Open source");
     ui.separator();
-    ui.label("By Hans");
+    ui.label("By hanserlodev");
 }

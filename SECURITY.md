@@ -13,7 +13,7 @@ Only the `main` branch receives security patches. Previous releases have no acti
 
 **Do not open a public issue for security vulnerabilities.**
 
-Send the report by email to **hanserlodev@gmail.com** (or through whatever channel Hans specifies in the repository profile).
+Send the report by email to **hanserlodev@gmail.com** (or through whatever channel hanserlodev specifies in the repository profile).
 
 ### What to Include in the Report
 

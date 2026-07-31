@@ -4,7 +4,7 @@ Thanks for your interest in contributing. Voronia is a single-maintainer project
 
 ## Before you start
 
-- Read [`voronia-plan-proyecto.md`](voronia-plan-proyecto.md) (Spanish, the master plan) for architecture, data model, and phase roadmap.
+- Read [`docs/plans/master-plan.md`](docs/plans/master-plan.md) (the master plan, in English) for architecture, data model, and phase roadmap.
 - Read [`docs/phases/phase-0-research.md`](docs/phases/phase-0-research.md) — it's the authoritative reference for how Azgaar works internally (PRNG, Delaunay/Voronoi, repack, `.map` format) and informs most Phase 1+ decisions.
 - The repository is currently a one-person effort; expect rough edges in `CONTRIBUTING.md` itself as things stabilize.
 

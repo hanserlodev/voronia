@@ -6,7 +6,7 @@ labels: ["enhancement"]
 assignees: []
 ---
 
-<!-- Before opening: check the master plan (voronia-plan-proyecto.md §22 — roadmap) and the phase docs.
+<!-- Before opening: check the master plan (docs/plans/master-plan.md §22 — roadmap) and the phase docs.
      Maybe the item is already planned or in progress. -->
 
 ## Problem / motivation

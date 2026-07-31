@@ -242,7 +242,7 @@ Buttons always visible regardless of the active tab. They are global actions:
 │ Map Generator       │
 │ (MIT)               │
 │                     │
-│ Por Hans            │
+│ Por hanserlodev     │
 │ Código abierto      │
 │ github.com/...      │
 └─────────────────────┘

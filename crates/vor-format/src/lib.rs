@@ -18,7 +18,13 @@ mod tests {
     #[test]
     fn roundtrip_default_world() {
         let world = World::default();
-        let meta = VornMetadata::new("test", "12345", "2026-7-27", env!("CARGO_PKG_VERSION"), None::<&str>);
+        let meta = VornMetadata::new(
+            "test",
+            "12345",
+            "2026-7-27",
+            env!("CARGO_PKG_VERSION"),
+            None::<&str>,
+        );
 
         let bytes = {
             let meta_bytes = bincode::serialize(&meta).unwrap();

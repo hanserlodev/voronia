@@ -2,7 +2,7 @@
 //! markers, routes, zones, ice. Consolidated listing to avoid cluttering `lib.rs`.
 //!
 //! Each entity here follows the data model confirmed against Azgaar (refs in
-//! `voronia-plan-proyecto.md` §7.4–§7.7 and `docs/phases/phase-0-research.md` §10.1).
+//! `docs/plans/master-plan.md` §7.4–§7.7 and `docs/phases/phase-0-research.md` §10.1).
 //! The Azgaar model enums whose variants need confirmation against the wiki are
 //! marked `// TODO Phase 0/1: confirmar variants contra wiki` — even so we keep
 //! them closed to preserve strong typing.
