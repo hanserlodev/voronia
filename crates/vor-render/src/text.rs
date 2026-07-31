@@ -5,11 +5,11 @@ use glyphon::{
 use tracing::{info, warn};
 use wgpu::{Device, MultisampleState, Queue, TextureFormat};
 
-/// Sistema de texto GPU usando glyphon.
+/// GPU text system using glyphon.
 ///
-/// Mantiene font system, atlas de textura, caché de glyphs, y viewport.
-/// Sigue el patrón del ejemplo de glyphon: `prepare` PREVIO al render pass,
-/// `render` dentro del render pass.
+/// Owns the font system, texture atlas, glyph cache, and viewport. Follows the
+/// glyphon example pattern: `prepare` BEFORE the render pass, `render` inside
+/// the render pass.
 pub struct TextSystem {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
@@ -86,10 +86,11 @@ impl TextSystem {
         );
     }
 
-    /// Prepara una línea de texto para renderizar.
+    /// Prepares a text line for rendering.
     ///
-    /// Debe llamarse FUERA del render pass (antes de `begin_render_pass`),
-    /// porque sube glifos a la GPU via `queue.write_texture` y `queue.write_buffer`.
+    /// Must be called OUTSIDE the render pass (before `begin_render_pass`),
+    /// because it uploads glyphs to the GPU via `queue.write_texture` and
+    /// `queue.write_buffer`.
     #[allow(clippy::too_many_arguments)]
     pub fn prepare(
         &mut self,
@@ -139,7 +140,7 @@ impl TextSystem {
             }
         }
 
-        // Prepare ambos renderers (MSAA y no-MSAA) para que ambos tengan glyph_vertices poblados
+        // Prepare both renderers (MSAA and non-MSAA) so both have populated glyph_vertices
         let mut ok = true;
         for (label, r) in [
             ("msaa", &mut self.renderer),
@@ -178,9 +179,9 @@ impl TextSystem {
         }
     }
 
-    /// Renderiza al render pass activo (MSAA, el mismo del mapa).
+    /// Renders to the active render pass (MSAA, the same one as the map).
     ///
-    /// Debe llamarse DENTRO del render pass.
+    /// Must be called INSIDE the render pass.
     pub fn render<'pass>(&'pass self, pass: &mut wgpu::RenderPass<'pass>) {
         if !self.pending_draw {
             info!("glyphon render skipped (no pending draw)");
@@ -195,9 +196,9 @@ impl TextSystem {
         }
     }
 
-    /// DEBUG: renderiza texto a un encoder externo, usando un pass sin MSAA
-    /// directamente sobre el resolve_view (surface). Útil para diagnosticar si el
-    /// problema es el paso MSAA.
+    /// DEBUG: renders text to an external encoder using a pass without MSAA,
+    /// directly onto the resolve_view (surface). Useful for diagnosing whether
+    /// the issue is the MSAA pass.
     pub fn render_debug_no_msaa<'pass>(
         &'pass self,
         encoder: &'pass mut wgpu::CommandEncoder,

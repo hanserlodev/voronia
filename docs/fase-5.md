@@ -1,72 +1,72 @@
-# Fase 5 — UI de edición · M ✓ COMPLETADA (27 jul 2026)
+# Phase 5 — Editing UI · M ✓ COMPLETED (Jul 27, 2026)
 
-## Referencia congelada de Azgaar
+## Frozen Azgaar reference
 
-- Basado en el mismo `.map` de Sorvik usado en Fase 4.
-- El modelo de datos de entidades (State, Burg, Province) se confirmó contra el .map real de Sorvik (slots 14/15/30).
+- Based on the same Sorvik `.map` used in Phase 4.
+- The entity data model (State, Burg, Province) was confirmed against the real Sorvik `.map` (slots 14/15/30).
 
-## Arquitectura del código producido
+## Architecture of the code produced
 
-### `vor-edit` (nuevo crate)
+### `vor-edit` (new crate)
 
 ```
 crates/vor-edit/src/
-├── lib.rs       -- EditBuffer (dirty flag + buffers de edición temporales), SelectedEntity enum
+├── lib.rs       -- EditBuffer (dirty flag + temporary editing buffers), SelectedEntity enum
 ├── error.rs     -- EditError (EntityNotFound, InvalidHexColor, EmptyName)
-├── color.rs     -- normalize_hex() (valida y normaliza #rrggbb)
-├── state.rs     -- rename_state, set_state_color, set_state_form (busca por `id` con find)
+├── color.rs     -- normalize_hex() (validates and normalizes #rrggbb)
+├── state.rs     -- rename_state, set_state_color, set_state_form (searches by `id` with find)
 ├── burg.rs      -- rename_burg, set_burg_population, toggle_burg_capital
 └── province.rs  -- rename_province, set_province_color
 ```
 
-Decisiones de API:
-- Todas las funciones reciben `&mut World` + id + valor, retornan `Result<(), EditError>`.
-- La búsqueda de entidad es por `id` (no por posición en el Vec) porque el loader de .map hace `skip(1)` sin placeholder en pos 0.
-- `set_burg_population` actualiza tanto el campo del Burgo como `pack.cells.population[cell]` (consistencia).
-- `toggle_burg_capital` quita capital de otros burgos del mismo estado.
-- EditBuffer almacena strings temporales y selected_entity_id para binding egui.
+API decisions:
+- All functions receive `&mut World` + id + value, return `Result<(), EditError>`.
+- Entity lookup is by `id` (not by position in the Vec) because the .map loader does `skip(1)` without a placeholder at position 0.
+- `set_burg_population` updates both the Burg field and `pack.cells.population[cell]` (consistency).
+- `toggle_burg_capital` removes the capital from other burgs of the same state.
+- EditBuffer stores temporary strings and selected_entity_id for egui binding.
 
-### `vor-app` — extensiones de UI
+### `vor-app` — UI extensions
 
-- **Entity Inspector**: sección "editor" en el SidePanel, debajo del inspector de celda. Aparece solo cuando la celda tiene estado/burgo/provincia. Campos: nombre (texto), color (hex), botón aplicar.
-- **Export panel**: tres secciones colapsables: save .vorn (con autosave toggle), PNG, SVG.
-- `entity_from_cell(world, cell)` → determina `SelectedEntity` (prioridad: State > Burg > Province).
+- **Entity Inspector**: "editor" section in the SidePanel, below the cell inspector. It appears only when the cell has a state/burg/province. Fields: name (text), color (hex), apply button.
+- **Export panel**: three collapsible sections: save .vorn (with autosave toggle), PNG, SVG.
+- `entity_from_cell(world, cell)` → determines `SelectedEntity` (priority: State > Burg > Province).
 
-### Export PNG (`crates/vor-app/src/png_export.rs`)
+### PNG export (`crates/vor-app/src/png_export.rs`)
 
-Renderiza las capas activas a una textura offscreen (mismo formato que la surface) del tamaño especificado, lee los pixels vía `map_async`, convierte BGRA→RGBA si el formato de surface es BGRA, encodea con `image::RgbaImage::save()`.
+Renders the active layers to an offscreen texture (same format as the surface) of the specified size, reads the pixels via `map_async`, converts BGRA→RGBA if the surface format is BGRA, encodes with `image::RgbaImage::save()`.
 
-### Export SVG (`crates/vor-app/src/svg_export.rs`)
+### SVG export (`crates/vor-app/src/svg_export.rs`)
 
-Genera SVG autónomo desde World Data Model (sin GPU):
-1. Fondo oscuro (`<rect>`)
-2. Polígonos de Voronoi por celda pack coloreados por altura (`height_color` rampa)
-3. Ríos como `<polyline>` con ancho según caudal
-4. Fronteras de estados como `<path>` con segmentos entre celdas vecinas de distinto estado
-5. Burgos como `<circle>` + `<text>` (capitales con radio 5, resto con radio 3)
+Generates a standalone SVG from the World Data Model (no GPU):
+1. Dark background (`<rect>`)
+2. Voronoi polygons per pack cell colored by height (`height_color` ramp)
+3. Rivers as `<polyline>` with width according to discharge
+4. State borders as `<path>` with segments between neighboring cells of different states
+5. Burgs as `<circle>` + `<text>` (capitals radius 5, the rest radius 3)
 
-## Fixes incorporados
+## Fixes incorporated
 
-### Lookup por id (no posición)
+### Lookup by id (not position)
 
-Las entidades State/Province en el inspector de celda y en el editor buscaban con `get(sid as usize)` — incorrecto porque el loader de .map hace `skip(1)` sin placeholder en pos 0. Ahora usan `iter().find(|s| s.id == sid)` consistente con burgos.
+The State/Province entities in the cell inspector and editor used `get(sid as usize)` — incorrect because the .map loader does `skip(1)` without a placeholder at position 0. They now use `iter().find(|s| s.id == sid)`, consistent with burgs.
 
-## Inventario de tests
+## Test inventory
 
-| Archivo | Count | Qué valida |
+| File | Count | What it validates |
 |---|---|---|
-| `crates/vor-edit/tests/edit_tests.rs` | 14 | rename_state/burg/province, set_state/province_color, set_burg_population, toggle_capital, normalize_hex, casos error |
+| `crates/vor-edit/tests/edit_tests.rs` | 14 | rename_state/burg/province, set_state/province_color, set_burg_population, toggle_capital, normalize_hex, error cases |
 
-Total workspace: 67 tests (14 nuevos en vor-edit).
+Workspace total: 67 tests (14 new in vor-edit).
 
-## Estado final
+## Final state
 
 - `cargo test --workspace`: 67 passed, 0 failed.
-- `cargo clippy --workspace`: 0 errors (warnings pre-existentes).
+- `cargo clippy --workspace`: 0 errors (pre-existing warnings).
 - `cargo fmt --check`: clean.
-- Working tree: limpio.
+- Working tree: clean.
 
-## Checklist plan maestro §23
+## Master plan §23 checklist
 
-- [x] Paneles egui: capas, inspector de entidad, opciones de exportación.
-- [x] Selección y edición básica de atributos de una entidad (renombrar, recolorear).
+- [x] egui panels: layers, entity inspector, export options.
+- [x] Basic selection and editing of an entity's attributes (rename, recolor).

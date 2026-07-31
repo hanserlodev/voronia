@@ -1,11 +1,11 @@
-//! `vor-edit` — Comandos de edición y undo/redo de Voronia.
+//! `vor-edit` — Voronia editing commands and undo/redo.
 //!
-//! En Fase 5 los comandos son mutación directa (sin Command stack). El caller
-//! marca la app como dirty y regenera meshes de capas afectadas. El undo/redo
-//! con patrón Command llega en Fase 6.
+//! In Phase 5 commands are direct mutation (no Command stack). The caller
+//! marks the app as dirty and regenerates meshes of affected layers. Undo/redo
+//! with the Command pattern arrives in Phase 6.
 //!
-//! Los mutadores siempre buscan entidades por campo `id` (no por posición en el
-//! Vec), porque el loader de `.map` omite placeholders con `skip(1)`.
+//! Mutators always look up entities by `id` field (not by position in the
+//! Vec), because the `.map` loader omits placeholders with `skip(1)`.
 
 pub mod burg;
 pub mod color;
@@ -19,25 +19,24 @@ pub use error::EditError;
 pub use province::{rename_province, set_province_color};
 pub use state::{rename_state, set_state_color, set_state_form};
 
-/// Estado de edición efímero para bindings de egui.
+/// Ephemeral editing state for egui bindings.
 ///
-/// Las ediciones ocurren en el World real a través de las funciones de este
-/// crate; este struct solo trackea dirty flag y buffers de strings temporales
-/// para que egui pueda mostrar campos de texto sin pedirle al usuario que
-/// "confirme" cada pulsación de tecla.
+/// Edits happen on the real World through this crate's functions; this struct
+/// only tracks the dirty flag and temporary string buffers so egui can show
+/// text fields without asking the user to "confirm" each keystroke.
 #[derive(Debug, Clone, Default)]
 pub struct EditBuffer {
     pub selected_entity_id: Option<SelectedEntity>,
-    /// String temporal para el campo de rename (egui text edit).
+    /// Temporary string for the rename field (egui text edit).
     pub rename_buffer: String,
-    /// String temporal para el campo de color hex.
+    /// Temporary string for the hex color field.
     pub color_buffer: String,
-    /// Flag dirty: se marca `true` tras cada mutación. La app lo lee y lo
-    /// pone a `false` después de regenerar meshes.
+    /// Dirty flag: set to `true` after each mutation. The app reads it and
+    /// resets it to `false` after regenerating meshes.
     pub dirty: bool,
 }
 
-/// Qué entidad está seleccionada en el inspector.
+/// Which entity is selected in the inspector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectedEntity {
     State(u16),
@@ -53,7 +52,7 @@ impl EditBuffer {
         self.color_buffer.clear();
     }
 
-    /// Puebla los buffers desde la entidad seleccionada (para bindear a egui).
+    /// Populates the buffers from the selected entity (to bind to egui).
     pub fn load_entity(&mut self, world: &vor_core::World) {
         match self.selected_entity_id {
             Some(SelectedEntity::State(id)) => {
@@ -74,7 +73,7 @@ impl EditBuffer {
                 }
             }
             Some(SelectedEntity::Culture(_id)) => {
-                // No editable en Fase 5
+                // Not editable in Phase 5
             }
             None => {}
         }

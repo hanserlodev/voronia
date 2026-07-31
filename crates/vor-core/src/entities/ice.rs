@@ -1,8 +1,8 @@
-//! Hielo (slot `[39]`: `pack.ice` JSON).
+//! Ice (slot `[39]`: `pack.ice` JSON).
 //!
-//! Sistema separado del heightmap normal — cada elemento es un polygon de hielo.
+//! Separate system from the normal heightmap — each element is an ice polygon.
 
-/// Grupo de hielo (variants confirmadas en plan §7.7).
+/// Ice group (variants confirmed in plan §7.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum IceKind {
@@ -11,15 +11,15 @@ pub enum IceKind {
     Iceberg,
 }
 
-/// Un elemento de hielo.
+/// An ice element.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Ice {
     pub id: u32,
     pub kind: IceKind,
-    /// Vértices del polígono `[[x, y], ...]`.
+    /// Polygon vertices `[[x, y], ...]`.
     #[serde(default)]
     pub vertices: Vec<[f32; 2]>,
-    /// Celda central (opcional).
+    /// Central cell (optional).
     #[serde(default)]
     pub cell: Option<u32>,
 }

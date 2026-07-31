@@ -1,12 +1,12 @@
-//! Mutadores de entidades `State`.
+//! Mutators for `State` entities.
 //!
-//! Mutan campos del catálogo de estados en `World`. La mutación es directa
-//! (sin Command stack; eso llega en Fase 6). El caller es responsable de
-//! marcar la app como dirty y de regenerar meshes de capas afectadas.
+//! Mutate fields of the state catalog in `World`. Mutation is direct
+//! (no Command stack; that arrives in Phase 6). The caller is responsible for
+//! marking the app as dirty and regenerating meshes of affected layers.
 //!
-//! Los estados se buscan por `id` (campo `State::id`) y no por posición en el
-//! Vec, porque el loader de `.map` hace `skip(1)` sin insertar placeholder en
-//! posición 0. Usar `find` es correcto independientemente del layout.
+//! States are looked up by `id` (the `State::id` field) and not by position
+//! in the Vec, because the `.map` loader does `skip(1)` without inserting a
+//! placeholder at position 0. Using `find` is correct regardless of layout.
 
 use vor_core::entities::state::GovernmentForm;
 use vor_core::world::World;

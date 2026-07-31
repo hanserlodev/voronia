@@ -1,4 +1,4 @@
-/// Port del `meander()` de Azgaar pathUtils.ts:370-429
+/// Port of Azgaar's `meander()` from pathUtils.ts:370-429
 pub fn meander_anchors(anchors: &[[f32; 2]], is_water: &[bool]) -> Vec<[f32; 2]> {
     let n = anchors.len();
     if n < 2 {
@@ -81,8 +81,8 @@ fn reflect_across_line(m: [f32; 2], p: [f32; 2], q: [f32; 2]) -> [f32; 2] {
     [2.0 * foot_x - m[0], 2.0 * foot_y - m[1]]
 }
 
-/// Port de `addMeandering()` de Azgaar: meanderea + interpola flux.
-/// Retorna `[x, y, flux]` por punto meandereado.
+/// Port of Azgaar's `addMeandering()`: meanders + interpolates flux.
+/// Returns `[x, y, flux]` per meandered point.
 pub fn add_meandering(
     anchors: &[[f32; 2]],
     cell_ids: &[u32],
@@ -102,7 +102,7 @@ pub fn add_meandering(
     let points = meander_anchors(anchors, &is_water);
     let mut flux = vec![0.0f32; points.len()];
     let step = points.len().max(1) as f32;
-    // Interpolar flux en los anchor points
+    // Interpolate flux at the anchor points
     for (i, _cid) in cell_ids.iter().enumerate() {
         let anchor_idx = if i == 0 {
             0
@@ -121,7 +121,7 @@ pub fn add_meandering(
             flux[anchor_idx] = f.copied().unwrap_or(0) as f32;
         }
     }
-    // Hacer flux monotónico creciente
+    // Make flux monotonically increasing
     let mut max_f = 0.0f32;
     for f in &mut flux {
         if *f > max_f {
@@ -137,7 +137,7 @@ pub fn add_meandering(
         .collect()
 }
 
-/// Port de `relaxAcuteAngles()` de pathUtils.ts:453-506
+/// Port of Azgaar's `relaxAcuteAngles()` from pathUtils.ts:453-506
 pub fn relax_acute_angles(points: &mut Vec<[f32; 2]>, anchor_indices: &[usize]) {
     let n = points.len();
     if n < 3 {

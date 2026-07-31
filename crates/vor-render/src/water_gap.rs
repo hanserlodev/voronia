@@ -2,14 +2,14 @@ use vor_core::pack::Pack;
 
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 
-/// Construye la malla de water gap para una capa temática.
+/// Builds the water gap mesh for a thematic layer.
 ///
-/// Dibuja quads delgados (1px) a lo largo de las aristas entre celdas de tierra
-/// y celdas de agua, coloreados con el color de la celda de tierra según
-/// `color_fn(cell_id)`. Esto evita que los colores temáticos "sangren"
-/// visualmente al océano (técnica "water gap" de Azgaar).
+/// Draws thin quads (1px) along the edges between land cells and water cells,
+/// colored with the land cell color according to `color_fn(cell_id)`. This
+/// prevents thematic colors from visually "bleeding" into the ocean (Azgaar's
+/// "water gap" technique).
 ///
-/// `is_water[i]` debe ser `true` si la celda i es agua (océano o lago).
+/// `is_water[i]` must be `true` if cell i is water (ocean or lake).
 pub fn build_water_gap_mesh(
     pack: &Pack,
     is_water: &[bool],
@@ -25,12 +25,12 @@ pub fn build_water_gap_mesh(
     mesh
 }
 
-/// Agrega water gap geometry a un `HeightmapMesh` existente (modifica in-place).
+/// Appends water gap geometry to an existing `HeightmapMesh` (modified in-place).
 ///
-/// Útil para mergear el water gap directamente en la malla de relleno temático,
-/// evitando tener que agregar una capa extra al renderer.
+/// Useful for merging the water gap directly into the thematic fill mesh,
+/// avoiding the need to add an extra layer to the renderer.
 ///
-/// `is_water[i]` debe ser `true` si la celda i es agua (océano o lago).
+/// `is_water[i]` must be `true` if cell i is water (ocean or lake).
 pub fn append_water_gap(
     mesh: &mut HeightmapMesh,
     pack: &Pack,

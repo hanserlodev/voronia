@@ -1,9 +1,9 @@
-//! PRNG interno de `vor-import`.
+//! Internal PRNG of `vor-import`.
 //!
-//! Solo el que se necesita para Fase 1: `Alea@1.0.1` (Baagøe, npm), que es el que
-//! Azgaar usa desde `generateGrid` en adelante (ver fase-0 §7.1). El `aleaPRNG 1.1.0`
-//! vendored NO se porta en Fase 1 (es del tramo `setSeed → randomizeOptions`,
-//! innecesario para import `.map` ya generado — §13.4).
+//! Only what Phase 1 needs: `Alea@1.0.1` (Baagøe, npm), the one Azgaar uses from
+//! `generateGrid` onwards (see fase-0 §7.1). The vendored `aleaPRNG 1.1.0` is
+//! NOT ported in Phase 1 (it belongs to the `setSeed → randomizeOptions` stretch,
+//! unnecessary for importing an already-generated `.map` — §13.4).
 
 pub mod alea;
 

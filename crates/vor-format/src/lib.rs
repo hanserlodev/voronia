@@ -37,7 +37,7 @@ mod tests {
             buf
         };
 
-        // Leer header
+        // Read header
         let mut header_buf = [0u8; 16];
         header_buf.copy_from_slice(&bytes[0..16]);
         let decoded = crate::header::VornHeader::decode(&header_buf).unwrap();
@@ -98,7 +98,7 @@ mod tests {
             crate::FormatError::InvalidMagic { found } => {
                 assert_eq!(found, *b"BAMN");
             }
-            other => panic!("esperaba InvalidMagic, obtuve {other}"),
+            other => panic!("expected InvalidMagic, got {other}"),
         }
 
         std::fs::remove_file(&path).ok();
@@ -119,7 +119,7 @@ mod tests {
             crate::FormatError::UnsupportedVersion(v) => {
                 assert_eq!(v, 99);
             }
-            other => panic!("esperaba UnsupportedVersion, obtuve {other}"),
+            other => panic!("expected UnsupportedVersion, got {other}"),
         }
 
         std::fs::remove_file(&path).ok();

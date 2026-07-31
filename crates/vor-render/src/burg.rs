@@ -4,8 +4,8 @@ use vor_core::pack::Pack;
 use crate::biome::hex_color_to_linear;
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 
-/// Construye la malla de burgos: un triángulo en la posición de cada burgo,
-/// coloreado según el estado al que pertenece.
+/// Builds the burg mesh: one triangle at each burg position, colored by the
+/// state it belongs to.
 pub fn build_burg_mesh(pack: &Pack, states: &[State]) -> HeightmapMesh {
     let n = pack.points_n();
     let mut vertices: Vec<HeightmapVertex> = Vec::new();

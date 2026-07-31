@@ -1,25 +1,25 @@
-# Paridad de costas con Azgaar — proceso de debugging
+# Coastline parity with Azgaar — debugging process
 
-> **Fecha**: sesión post-Fase 7 (render).
-> **Fuente de referencia**: `azgaar/app/Fantasy-Map-Generator/src/renderers/coastline-fractal.ts` (y `landmass/landmass.ts`).
-> **Relacionado**: `docs/analisis-completo-azgaar-landmass-lines-smoothing.md`, `docs/plan-puntos-1-5-landmass-lines.md`, `docs/landmass-drawing-analysis.md`.
+> **Date**: post-Phase 7 (render) session.
+> **Reference source**: `azgaar/app/Fantasy-Map-Generator/src/renderers/coastline-fractal.ts` (and `landmass/landmass.ts`).
+> **Related**: `docs/analisis-completo-azgaar-landmass-lines-smoothing.md`, `docs/plan-puntos-1-5-landmass-lines.md`, `docs/landmass-drawing-analysis.md`.
 
-Este documento registra el proceso de hacer que el render de costas de Voronia reproduzca **bit-exacto** la geometría de las costas de Azgaar (mismo seed = misma costa). No es una guía de usuario ni reemplaza el plan; es el registro de los bugs encontrados, por qué ocurrían y qué se hizo para corregirlos.
+This document records the process of making Voronia's coastline rendering reproduce Azgaar's coastline geometry **bit-exact** (same seed = same coastline). It is not a user guide nor a replacement for the plan; it is the record of the bugs found, why they occurred and what was done to fix them.
 
 ---
 
-## Por qué la paridad exacta
+## Why exact parity
 
-El `.map`/JSON de Azgaar **no guarda la geometría** — solo atributos por celda. Al cargar un mapa, Azgaar recalcula la malla completa con su PRNG y su semilla. Si Voronia genera una malla distinta (aunque sea sutilmente distinta), los atributos del mapa importado quedan ubicados sobre celdas equivocadas: **datos incorrectos en silencio, sin errores visibles**.
+Azgaar's `.map`/JSON **doesn't store the geometry** — only per-cell attributes. When loading a map, Azgaar recalculates the full mesh with its PRNG and its seed. If Voronia generates a slightly different mesh (even subtly different), the imported map's attributes end up placed on the wrong cells: **silent incorrect data, with no visible errors**.
 
-La paridad se exige a dos niveles:
+Parity is required at two levels:
 
-1. **Malla / grilla** (grid → pack → Delaunay/Voronoi): ya resuelto en Fases 1–6 (ver `docs/fase-{1..6}.md`).
-2. **Render de costas**: el trazado fractal de la costa sobre el perímetro de cada feature de tierra. Esto es lo que cubre esta sesión.
+1. **Mesh / grid** (grid → pack → Delaunay/Voronoi): already solved in Phases 1–6 (see `docs/fase-{1..6}.md`).
+2. **Coastline rendering**: the fractal tracing of the coastline over the perimeter of each land feature. That's what this session covers.
 
-## Pipeline de costas implementado
+## Implemented coastline pipeline
 
-Azgaar, para cada feature de tierra, encadena exactamente esto:
+Azgaar, for each land feature, chains exactly this:
 
 ```
 simplify(points, 0.3)                 → simplify-js (radial distance + RDP)
@@ -29,51 +29,51 @@ simplify(points, 0.3)                 → simplify-js (radial distance + RDP)
 → (lyon tessellation)                 → relleno EvenOdd
 ```
 
-El equivalente en `vor-render` quedó repartido así:
+The equivalent in `vor-render` ended up distributed as follows:
 
-| Paso de Azgaar | Módulo de Voronia |
+| Azgaar step | Voronia module |
 |---|---|
 | `simplify` (simplify-js) | `vor-render/src/simplify.rs` |
 | `clipPoly` (Sutherland-Hodgman, secure) | `vor-render/src/clip_poly.rs` |
 | `fractalize` + `makeRoughnessProfile` + `subdivideEdge` | `vor-render/src/coastline.rs` |
 | `buildCoastlinePath` (Catmull-Rom) | `vor-render/src/coastline_path.rs` |
-| stroke/shadow de costa | `vor-render/src/coastline_stroke.rs` |
+| coastline stroke/shadow | `vor-render/src/coastline_stroke.rs` |
 | isolines (get_isolines, connect_vertices, halos) | `vor-render/src/isoline.rs` |
-| máscara de agua (water gap) | `vor-render/src/water_gap.rs` |
-| texto GPU (glyphon) | `vor-render/src/text.rs` |
+| water mask (water gap) | `vor-render/src/water_gap.rs` |
+| GPU text (glyphon) | `vor-render/src/text.rs` |
 | PRNG `Alea@1.0.1` | `vor-render/src/prng/alea.rs` |
 
 ---
 
-## PRNG: `Alea` (bit-exacto)
+## PRNG: `Alea` (bit-exact)
 
-Azgaar usa el PRNG `alea` de Johannes Baagøe (npm `alea` 1.0.1) en casi todo lo generativo, con seeds string. El `.map` guarda los seeds en el header.
+Azgaar uses Johannes Baagøe's `alea` PRNG (npm `alea` 1.0.1) in almost everything generative, with string seeds. The `.map` stores the seeds in the header.
 
-Se portó `Alea@1.0.1` a `vor-render/src/prng/alea.rs` con estos métodos:
+`Alea@1.0.1` was ported to `vor-render/src/prng/alea.rs` with these methods:
 
-- `Alea::new(seed: &str)` — estado interno `s0/s1/s2/c` inicializado con la función **mash** (algoritmo de David Bau, 32 bits).
-- `next_f64() -> f64` — devuelve `(c() + s0()) * 2^-32` (un `f64` en `[0,1)`).
+- `Alea::new(seed: &str)` — internal state `s0/s1/s2/c` initialized with the **mash** function (David Bau's algorithm, 32-bit).
+- `next_f64() -> f64` — returns `(c() + s0()) * 2^-32` (an `f64` in `[0,1)`).
 - `next_u32() -> u32`, `next_fract53() -> f64`.
 
-**Verificación**: el port se testeó contra el fuente original `vor-import/tests/reference/alea-1.0.1.original.js` (bit-exacto). El port vive en `vor-render` (no en `vor-import`) porque `vor-render` no puede depender de `vor-import` por la regla de arquitectura — pero el fixture de referencia sigue en `vor-import/tests/reference/`.
+**Verification**: the port was tested against the original source `vor-import/tests/reference/alea-1.0.1.original.js` (bit-exact). The port lives in `vor-render` (not in `vor-import`) because `vor-render` can't depend on `vor-import` due to the architecture rule — but the reference fixture remains in `vor-import/tests/reference/`.
 
 ---
 
-## Bugs encontrados y corregidos
+## Bugs found and fixed
 
-### Bug 1 — PRNG equivocado: `hash_f32` en vez de `Alea`
+### Bug 1 — Wrong PRNG: `hash_f32` instead of `Alea`
 
-**Síntoma**: las costas eran "parecidas pero no iguales" a Azgaar. Mismo seed, misma forma general, pero la fractalización no coincidía punto a punto.
+**Symptom**: the coastlines were "similar but not identical" to Azgaar's. Same seed, same general shape, but the fractalization didn't match point by point.
 
-**Causa**: `coastline.rs` usaba un hash casero (`hash64`/`hash_f32` basado en multiplicación por constantes de SplitMix64) para generar números pseudoaleatorios. Azgaar usa `Alea(format!("{}_c{}", seed, feature_index))`.
+**Cause**: `coastline.rs` used a hand-rolled hash (`hash64`/`hash_f32` based on multiplication by SplitMix64 constants) to generate pseudorandom numbers. Azgaar uses `Alea(format!("{}_c{}", seed, feature_index))`.
 
-**Fix**: se reemplazó el hash por `Alea::new(&seed_str)` y el perfil de rugosidad + la subdivisión de aristas consumen el **mismo** stream PRNG (`&mut dyn FnMut() -> f32`), como en el JS original donde el `rand` es una única referencia compartida.
+**Fix**: the hash was replaced with `Alea::new(&seed_str)`, and the roughness profile + edge subdivision now consume the **same** PRNG stream (`&mut dyn FnMut() -> f32`), as in the original JS where `rand` is a single shared reference.
 
-### Bug 2 — Semilla equivocada: `map_id` en vez de `header.seed`
+### Bug 2 — Wrong seed: `map_id` instead of `header.seed`
 
-**Síntoma**: las costas no cambiaban al cambiar el seed de un mapa (o cambiaban de forma que no tenía relación con el mapa cargado).
+**Symptom**: the coastlines didn't change when changing a map's seed (or changed in a way unrelated to the loaded map).
 
-**Causa**: en `crates/vor-app/src/lib.rs` el seed se derivaba de `loaded.world.header.map_id.wrapping_add(2654435761)`. Azgaar usa el **campo `seed` del header del `.map`** (string, ej. `"123456"`), que es la semilla con la que se generó la grilla — y por lo tanto la que permite que la costa calce con la geografía.
+**Cause**: in `crates/vor-app/src/lib.rs` the seed was derived from `loaded.world.header.map_id.wrapping_add(2654435761)`. Azgaar uses the **`seed` field of the `.map` header** (string, e.g. `"123456"`), which is the seed with which the grid was generated — and therefore the one that lets the coastline match the geography.
 
 **Fix**:
 ```rust
@@ -83,13 +83,13 @@ seed: loaded.world.header.map_id.wrapping_add(2654435761),
 seed: loaded.world.header.seed.parse::<u64>().unwrap_or(0),
 ```
 
-**Nota**: el campo `seed` del header es un string numérico; se parsea a `u64` y se serializa como parte del seed string `"{seed}_c{featureIndex}"` que consume `Alea`.
+**Note**: the `seed` field of the header is a numeric string; it's parsed into a `u64` and serialized as part of the seed string `"{seed}_c{featureIndex}"` that `Alea` consumes.
 
-### Bug 3 — Índice del span siguiente en `buildCoastlinePath`
+### Bug 3 — Next span index in `buildCoastlinePath`
 
-**Síntoma**: tramos "suaves" (sin fractalizar) que se dibujaban con Catmull-Rom rota — curvas que se salían de la costa, picos puntiagudos donde no debía haberlos.
+**Symptom**: "smooth" spans (non-fractalized) drawn with rotated Catmull-Rom — curves that left the coastline, sharp spikes where there shouldn't be any.
 
-**Causa**: en `coastline_path.rs`, dentro del bucle de Catmull-Rom centrípeta:
+**Cause**: in `coastline_path.rs`, inside the centripetal Catmull-Rom loop:
 
 ```rust
 // ANTES (bug) — apuntaba al INICIO del siguiente span
@@ -99,117 +99,117 @@ let ni = spans[(i + 1) % m].end_idx;
 let ni = spans[i].end_idx;
 ```
 
-`spans[i].end_idx` ya es el índice del siguiente punto "original" del feature (el vértice sin fractalizar), que es exactamente el punto donde termina la interpolación de este tramo. Usar el span siguiente mezclaba dos tramos contiguos y rompía la continuidad de la curva.
+`spans[i].end_idx` is already the index of the next "original" point of the feature (the non-fractalized vertex), which is exactly the point where this span's interpolation ends. Using the next span mixed two contiguous spans and broke curve continuity.
 
-**Efecto secundario del fix**: también arregló el cálculo del **midpoint B-spline** de los tramos suaves, que dependía del mismo índice.
+**Fix side effect**: it also fixed the **midpoint B-spline** calculation of the smooth spans, which depended on the same index.
 
-### Bug 4 — `roughness_contrast` hardcodeado
+### Bug 4 — Hardcoded `roughness_contrast`
 
-**Síntoma**: el perfil de rugosidad no respetaba el parámetro `roughness_contrast` del header.
+**Symptom**: the roughness profile didn't respect the `roughness_contrast` parameter of the header.
 
-**Causa**: `make_roughness_profile` normalizaba con `.powf(1.5)` fijo, ignorando el `roughnessContrast` que Azgaar lee del header (default `1.5`).
+**Cause**: `make_roughness_profile` normalized with a fixed `.powf(1.5)`, ignoring the `roughnessContrast` that Azgaar reads from the header (default `1.5`).
 
-**Fix**: el perfil ahora recibe el contraste como parámetro y aplica `powf(contrast)`.
+**Fix**: the profile now receives the contrast as a parameter and applies `powf(contrast)`.
 
-### Bug 5 — Stream PRNG compartido (no descubierto en esta sesión, sí relevante)
+### Bug 5 — Shared PRNG stream (not discovered in this session, but relevant)
 
-El perfil de rugosidad y la subdivisión de aristas comparten el **mismo** `Alea`. En el port inicial se creaban dos instancias separadas; eso también rompía la paridad (los desplazamientos dependen de la secuencia completa desde el inicio). Ahora hay una sola instancia y una sola closure `rand`.
+The roughness profile and edge subdivision share the **same** `Alea`. In the initial port two separate instances were created; that also broke parity (the displacements depend on the full sequence from the start). Now there is a single instance and a single `rand` closure.
 
 ---
 
-## Parámetros por defecto alineados con Azgaar
+## Default parameters aligned with Azgaar
 
-`FractalSettings::default()` ahora refleja los defaults del renderer de Azgaar:
+`FractalSettings::default()` now reflects the defaults of Azgaar's renderer:
 
-| Parámetro | Valor | Fuente en Azgaar |
+| Parameter | Value | Source in Azgaar |
 |---|---|---|
 | `amplitude_decay` | `0.9` | slider default |
-| `min_edge` | `1.0` | constante |
-| `base_amplitude` | `1.5` | constante |
-| `max_depth` | `4` | constante |
-| `smooth_threshold` | `0.25` | constante |
+| `min_edge` | `1.0` | constant |
+| `base_amplitude` | `1.5` | constant |
+| `max_depth` | `4` | constant |
+| `smooth_threshold` | `0.25` | constant |
 | `roughness_contrast` | `1.5` | header `roughnessContrast` |
-| `profile_harmonics` | `4` | constante |
-| `lake_smooth_thresh_mult` | `2.0` | constante |
+| `profile_harmonics` | `4` | constant |
+| `lake_smooth_thresh_mult` | `2.0` | constant |
 | `simplify_tolerance` | `0.3` | `simplify(pts, 0.3)` |
 | `clip_secure` | `true` | `clipPoly(..., 1)` |
 
-Detalles del algoritmo portado bit-exacto:
+Details of the bit-exact ported algorithm:
 
-- **Desplazamiento de arista**: `(rand() - 0.5) * sqrt(len) * amplitude * roughness` sobre la normal `(-dy/len, dx/len)` del punto medio.
-- **Roughness profile**: suma de `num_harmonics` cosenos, cada armónico con `amp = rand()` y `phase = rand() * 2π`, normalizado a `[0,1]` y elevado a `roughness_contrast`. Tamaño fijo 256. Se muestrea con interpolación lineal con `t.rem_euclid(1.0)` (perfil cerrado).
-- **`mid_t`**: promedio circular de `t0/t1` (maneja el wrap del cierre del polígono).
-- **Smooth threshold** (criterio de parada): si `roughness(t_mid) < smooth_threshold`, no se subdivide (tramo queda suave). Para lagos, el umbral se multiplica por `lake_smooth_thresh_mult` (2.0).
-- **Aristas sobre el borde del mapa**: si ambos extremos están en el borde (`x<=0 || x>=W || y<=0 || y>=H`), no se fractalizan (se evita la fractalización del borde del mapa).
-- **Spans**: un `CoastlineSpan` por arista original; `is_smooth` es `true` si la arista no produjo puntos nuevos (`num_points == 2`).
+- **Edge displacement**: `(rand() - 0.5) * sqrt(len) * amplitude * roughness` over the normal `(-dy/len, dx/len)` of the midpoint.
+- **Roughness profile**: sum of `num_harmonics` cosines, each harmonic with `amp = rand()` and `phase = rand() * 2π`, normalized to `[0,1]` and raised to `roughness_contrast`. Fixed size 256. Sampled with linear interpolation using `t.rem_euclid(1.0)` (closed profile).
+- **`mid_t`**: circular average of `t0/t1` (handles the wrap of the polygon closure).
+- **Smooth threshold** (stop criterion): if `roughness(t_mid) < smooth_threshold`, don't subdivide (span stays smooth). For lakes, the threshold is multiplied by `lake_smooth_thresh_mult` (2.0).
+- **Edges on the map border**: if both endpoints are on the border (`x<=0 || x>=W || y<=0 || y>=H`), they're not fractalized (avoids fractalizing the map border).
+- **Spans**: one `CoastlineSpan` per original edge; `is_smooth` is `true` if the edge produced no new points (`num_points == 2`).
 
 ---
 
-## `buildCoastlinePath` — Catmull-Rom + B-spline (punto a punto)
+## `buildCoastlinePath` — Catmull-Rom + B-spline (point by point)
 
-El path builder reproduce `buildCoastlinePath` del JS:
+The path builder reproduces the JS `buildCoastlinePath`:
 
-- Si el span es **suave**: el path recorre la arista con un **quadratic Bézier** del punto medio al punto medio (B-spline midpoint, `(a+b)/2`), o un `LineTo` al punto medio cuando el span anterior fue jagged.
-- Si el span es **jagged** (fractalizado): cada par de puntos consecutivos se une con **cubic Bézier** usando los vecinos anterior y siguiente con el factor `1/8` de Catmull-Rom:
+- If the span is **smooth**: the path traverses the edge with a **quadratic Bézier** from midpoint to midpoint (midpoint B-spline, `(a+b)/2`), or a `LineTo` to the midpoint when the previous span was jagged.
+- If the span is **jagged** (fractalized): each pair of consecutive points is joined with a **cubic Bézier** using the previous and next neighbors with Catmull-Rom's `1/8` factor:
   ```
   cp1 = a + (b - prev) / 8
   cp2 = b - (nnext - a) / 8
   ```
-- El punto de inicio es el midpoint del último tramo si es suave, o `p0` si el último tramo es jagged (`at_mid`).
-- `coastline_path_to_lyon` convierte los `PathCommand` a un `lyon::Path` para teselar con `FillOptions::default().with_fill_rule(EvenOdd)`.
+- The start point is the midpoint of the last span if it's smooth, or `p0` if the last span is jagged (`at_mid`).
+- `coastline_path_to_lyon` converts the `PathCommand`s into a `lyon::Path` for tessellation with `FillOptions::default().with_fill_rule(EvenOdd)`.
 
-**Tests** (`coastline_path.rs`): `smooth_span_produces_quad_bezier`, `jagged_span_produces_cubic_bezier`, `start_point_jagged_last_span` — cubren los dos casos de emisión de comandos y el punto de partida.
+**Tests** (`coastline_path.rs`): `smooth_span_produces_quad_bezier`, `jagged_span_produces_cubic_bezier`, `start_point_jagged_last_span` — cover the two command emission cases and the start point.
 
 ---
 
-## Módulos nuevos de esta tanda
+## New modules from this batch
 
 ### `simplify.rs` — Ramer-Douglas-Peucker + radial distance
-Port de `simplify-js` (Vladimir Agafonkin): primera pasada de distancia radial con `sq_tolerance`, segunda de RDP recursivo. Tolerancia usada: `0.3`. Export público: `simplify`.
+Port of `simplify-js` (Vladimir Agafonkin): first pass of radial distance with `sq_tolerance`, second of recursive RDP. Tolerance used: `0.3`. Public export: `simplify`.
 
-### `clip_poly.rs` — Sutherland-Hodgman con "secure"
-Port de `clipPoly` de Azgaar: recorta el polígono al rectángulo del mapa. Con `secure=true` (1) no se degenera en rectángulos/segmentos en el borde — evita artefactos de teselación cuando el feature toca el borde. Export público: `clip_polygon`.
+### `clip_poly.rs` — Sutherland-Hodgman with "secure"
+Port of Azgaar's `clipPoly`: clips the polygon to the map rectangle. With `secure=true` (1) it doesn't degenerate into rectangles/segments at the border — avoids tessellation artifacts when the feature touches the border. Public export: `clip_polygon`.
 
-### `coastline_stroke.rs` — stroke y sombra de costa
-Genera el contorno (stroke) y la sombra de las costas (línea más gruesa y oscura bajo el stroke), para el look de Azgaar. Exports: `build_coastline_stroke_mesh`, `build_coastline_shadow_mesh`, `CoastlineStrokeSettings`.
+### `coastline_stroke.rs` — coastline stroke and shadow
+Generates the contour (stroke) and the shadow of the coastlines (a thicker, darker line under the stroke), for Azgaar's look. Exports: `build_coastline_stroke_mesh`, `build_coastline_shadow_mesh`, `CoastlineStrokeSettings`.
 
-### `isoline.rs` — motor de isolines (connect_vertices)
-Port del motor de isolines de Azgaar (`connectVertices`, `getIsolines`, paths de borde/halo). Se usa para isoheight, isotherm, isobar, etc. Exports: `connect_vertices`, `get_isolines`, `get_border_path`, `get_fill_path`, `get_halo_path`, `get_water_gap_path`, `IsolineOptions`, `IsolineOutput`.
+### `isoline.rs` — isoline engine (connect_vertices)
+Port of Azgaar's isoline engine (`connectVertices`, `getIsolines`, border/halo paths). Used for isoheight, isotherm, isobar, etc. Exports: `connect_vertices`, `get_isolines`, `get_border_path`, `get_fill_path`, `get_halo_path`, `get_water_gap_path`, `IsolineOptions`, `IsolineOutput`.
 
-### `water_gap.rs` — máscara de agua
-Para que los colores de capas humanas (estados, provincias, culturas, religiones, biomas) no sangren al océano: genera un gap de agua sobre las celdas de agua (`h < 20` o lago), pintadas con el color de fondo del océano. `append_water_gap` muta un mesh existente agregando vértices/triángulos; `build_water_gap_mesh` lo crea desde cero.
+### `water_gap.rs` — water mask
+So that the colors of human layers (states, provinces, cultures, religions, biomes) don't bleed into the ocean: generates a water gap over the water cells (`h < 20` or lake), painted with the ocean background color. `append_water_gap` mutates an existing mesh adding vertices/triangles; `build_water_gap_mesh` creates it from scratch.
 
 ### `text.rs` — TextSystem (glyphon)
-Sistema de texto GPU con `glyphon 0.6`: `FontSystem` + `SwashCache` + `TextAtlas` + `Viewport`. Dos renderers (uno MSAA para el pass del mapa, uno no-MSAA para debug). `prepare()` sube glifos fuera del render pass; `render()` dibuja dentro de cualquier pass; `render_debug_no_msaa()` sobre la resolved surface. Ver sección "TextSystem" en `references/status.md`.
+GPU text system with `glyphon 0.6`: `FontSystem` + `SwashCache` + `TextAtlas` + `Viewport`. Two renderers (one MSAA for the map pass, one non-MSAA for debug). `prepare()` uploads glyphs outside the render pass; `render()` draws inside any pass; `render_debug_no_msaa()` on the resolved surface. See the "TextSystem" section in `references/status.md`.
 
 ---
 
-## Integración en vor-app
+## Integration in vor-app
 
-- `build_fractal_landmass_mesh` se llama con `FractalSettings { seed: header.seed.parse::<u64>().unwrap_or(0), ..Default::default() }` (Bug 2).
-- Las capas de human geography (states, provinces, cultures, religions) y biomes ahora llevan `append_water_gap`, con el color de agua resuelto por capa (color del catálogo para biomes, `hex_color_to_linear` para las demás).
-- `TextSystem` se inicializa en `init_state`, se redimensiona en resize, se usa dentro del MSAA pass y se hace `trim()` al final del frame.
+- `build_fractal_landmass_mesh` is called with `FractalSettings { seed: header.seed.parse::<u64>().unwrap_or(0), ..Default::default() }` (Bug 2).
+- The human geography layers (states, provinces, cultures, religions) and biomes now carry `append_water_gap`, with the water color resolved per layer (catalog color for biomes, `hex_color_to_linear` for the rest).
+- `TextSystem` is initialized in `init_state`, resized on resize, used inside the MSAA pass and `trim()`ed at the end of the frame.
 
-## Cómo se verifica
+## How it's verified
 
-1. **Determinismo**: mismo seed + mismos parámetros = mismo mesh, siempre (tests con seed fija).
-2. **Bit-exactitud del PRNG**: tests contra el fuente JS de referencia (`alea-1.0.1.original.js`).
-3. **Visual**: comparar el render de Voronia contra el mapa original de Azgaar con el mismo seed — costas y atributos deben calzar.
-4. **Tests**: `cargo test --workspace` verde (99 tests, 1 ignored); `cargo test --package vor-render` (21 tests).
+1. **Determinism**: same seed + same parameters = same mesh, always (tests with fixed seed).
+2. **PRNG bit-exactness**: tests against the reference JS source (`alea-1.0.1.original.js`).
+3. **Visual**: compare Voronia's render against the original Azgaar map with the same seed — coastlines and attributes must match.
+4. **Tests**: `cargo test --workspace` green (99 tests, 1 ignored); `cargo test --package vor-render` (21 tests).
 
-## Checklist de la sesión
+## Session checklist
 
-- [x] Port de `Alea@1.0.1` a `vor-render/src/prng/alea.rs` + fixture de referencia
-- [x] Reemplazo del PRNG hash en `coastline.rs` por `Alea("seed_c{featureIndex}")`
-- [x] Stream PRNG compartido entre perfil y subdivisión
-- [x] `roughness_contrast` parametrizado (Bug 4)
-- [x] `simplify` + `clipPoly` en el pipeline (`simplify.rs`, `clip_poly.rs`)
-- [x] Fix `ni = spans[i].end_idx` en `buildCoastlinePath` (Bug 3)
-- [x] `FractalSettings` defaults alineados con Azgaar
-- [x] Fix semilla: `header.seed` en vez de `map_id` (Bug 2)
+- [x] Port of `Alea@1.0.1` to `vor-render/src/prng/alea.rs` + reference fixture
+- [x] Replacement of the hash PRNG in `coastline.rs` with `Alea("seed_c{featureIndex}")`
+- [x] Shared PRNG stream between profile and subdivision
+- [x] `roughness_contrast` parameterized (Bug 4)
+- [x] `simplify` + `clipPoly` in the pipeline (`simplify.rs`, `clip_poly.rs`)
+- [x] Fix `ni = spans[i].end_idx` in `buildCoastlinePath` (Bug 3)
+- [x] `FractalSettings` defaults aligned with Azgaar
+- [x] Seed fix: `header.seed` instead of `map_id` (Bug 2)
 - [x] `buildCoastlinePath` + `coastline_path_to_lyon` + 3 tests
-- [x] Stroke/shadow de costa (`coastline_stroke.rs`)
-- [x] Motor de isolines (`isoline.rs`)
-- [x] Water gap en capas humanas + biomes (`water_gap.rs`)
+- [x] Coastline stroke/shadow (`coastline_stroke.rs`)
+- [x] Isoline engine (`isoline.rs`)
+- [x] Water gap on human layers + biomes (`water_gap.rs`)
 - [x] TextSystem glyphon (`text.rs`)
-- [x] Tests verdes, clippy sin errores nuevos, fmt limpio
+- [x] Tests green, clippy without new errors, clean fmt

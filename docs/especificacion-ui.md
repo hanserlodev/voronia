@@ -1,13 +1,13 @@
-# Voronia UI — Especificación de diseño
+# Voronia UI — Design specification
 
-> **Nombre del proyecto**: `voronia-ui-v1`  
-> **Estado**: Borrador de diseño (no vinculado a una fase del roadmap)  
-> **Inspiración**: Azgaar's Fantasy Map Generator (layout funcional, no colores)  
-> **Paleta**: Modo oscuro propio de Voronia (no copiar la paleta clara de Azgaar)
+> **Project name**: `voronia-ui-v1`  
+> **Status**: Design draft (not tied to a roadmap phase)  
+> **Inspiration**: Azgaar's Fantasy Map Generator (functional layout, not colors)  
+> **Palette**: Voronia's own dark mode (do not copy Azgaar's light palette)
 
 ---
 
-## 1. Layout general
+## 1. General layout
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -27,39 +27,39 @@
 
 ### 1.1 TopBar
 
-Una línea horizontal en la parte superior de la ventana. Muestra:
+A horizontal bar at the top of the window. It shows:
 
 ```
 Voronia — Sorvik.map                    [FPS: 60] [zoom: 1.2x]
 ```
 
-- A la izquierda: "Voronia — " + nombre del archivo cargado.
-- A la derecha (opcional): métricas de debug (FPS, zoom) en texto pequeño.
-- Sin botones de acción (esas van en el StickyFooter).
+- On the left: "Voronia — " + name of the loaded file.
+- On the right (optional): debug metrics (FPS, zoom) in small text.
+- No action buttons (those go in the StickyFooter).
 
-### 1.2 SidePanel (contenedor principal a la izquierda)
+### 1.2 SidePanel (main left-side container)
 
-El panel lateral izquierdo tiene dos secciones fijas:
+The left side panel has two fixed sections:
 
-#### a) TabBar (horizontal, arriba del panel)
-Seis pestañas, siempre visibles:
+#### a) TabBar (horizontal, at the top of the panel)
+Six tabs, always visible:
 
-| # | Pestaña | Propósito |
+| # | Tab | Purpose |
 |---|---------|-----------|
-| 1 | **Layers** | Toggles de capas + presets + orden |
-| 2 | **Info** | Inspector de celda + editor de entidad |
-| 3 | **Tools** | Editores, Regenerar, Añadir, Mostrar |
-| 4 | **Options** | Configuración del mundo y del generador |
-| 5 | **Style** | Estilo visual por capa (colores, fuentes, texturas) |
-| 6 | **About** | Versión, créditos, licencia, enlaces |
+| 1 | **Layers** | Layer toggles + presets + order |
+| 2 | **Info** | Cell inspector + entity editor |
+| 3 | **Tools** | Editors, Regenerate, Add, Show |
+| 4 | **Options** | World and generator configuration |
+| 5 | **Style** | Per-layer visual style (colors, fonts, textures) |
+| 6 | **About** | Version, credits, license, links |
 
-- Solo un tab activo a la vez.
-- El tab activo cambia el contenido que se muestra debajo.
+- Only one active tab at a time.
+- The active tab changes the content shown below.
 
-#### b) TabContent (rellena el resto del panel)
-El contenido de la pestaña activa. Anchura fija ~240px, scroll vertical si el contenido excede el alto.
+#### b) TabContent (fills the rest of the panel)
+The active tab's content. Fixed width ~240px, vertical scroll if the content exceeds the height.
 
-#### c) StickyFooter (siempre visible al fondo del panel)
+#### c) StickyFooter (always visible at the bottom of the panel)
 
 ```
 ┌─────────────────────┐
@@ -68,17 +68,17 @@ El contenido de la pestaña activa. Anchura fija ~240px, scroll vertical si el c
 └─────────────────────┘
 ```
 
-Botones siempre visibles sin importar la pestaña activa. Son acciones globales:
+Buttons always visible regardless of the active tab. They are global actions:
 
-- **New**: Diálogo de nuevo mapa (seed, tamaño, opciones).
-- **Export**: Modal con opciones de exportación (PNG, SVG, JSON, .vorn).
-- **Save**: Modal de guardado (.vorn a máquina/browser).
-- **Load**: Modal de carga (.map / .vorn desde máquina/browser).
-- **Reset Zoom**: Vuelve la cámara al encuadre inicial.
+- **New**: New map dialog (seed, size, options).
+- **Export**: Modal with export options (PNG, SVG, JSON, .vorn).
+- **Save**: Save modal (.vorn to machine/browser).
+- **Load**: Load modal (.map / .vorn from machine/browser).
+- **Reset Zoom**: Returns the camera to the initial framing.
 
 ---
 
-## 2. Contenido de cada pestaña
+## 2. Content of each tab
 
 ### 2.1 Layers
 
@@ -106,9 +106,9 @@ Botones siempre visibles sin importar la pestaña activa. Son acciones globales:
 └─────────────────────┘
 ```
 
-- Checkboxes para toggle de capas (heredado de Fase 3).
-- Selector de presets: "Político", "Cultural", "Físico", "Personalizado".
-- Lista reordenable por drag (para Fase 6: implementar con egui drag).
+- Checkboxes to toggle layers (inherited from Phase 3).
+- Preset selector: "Político", "Cultural", "Físico", "Personalizado".
+- Drag-reorderable list (for Phase 6: implement with egui drag).
 
 ### 2.2 Info
 
@@ -132,9 +132,9 @@ Botones siempre visibles sin importar la pestaña activa. Son acciones globales:
 └─────────────────────┘
 ```
 
-- Inspector de celda (heredado de Fase 3): muestra info de la celda seleccionada con click derecho.
-- Editor de entidad (Fase 5): campos editables para la entidad asociada (State > Burg > Province).
-- Si no hay celda seleccionada: muestra "Click derecho en el mapa para seleccionar".
+- Cell inspector (inherited from Phase 3): shows info of the cell selected with right-click.
+- Entity editor (Phase 5): editable fields for the associated entity (State > Burg > Province).
+- If no cell is selected: shows "Click derecho en el mapa para seleccionar".
 
 ### 2.3 Tools
 
@@ -164,11 +164,11 @@ Botones siempre visibles sin importar la pestaña activa. Son acciones globales:
 └─────────────────────┘
 ```
 
-- Sub-secciones con iconos/separadores.
-- Cada entrada abre un editor específico (para Fase 6).
-- "Edit → Estados" abre el panel de renombrar/colorear estados (similar al editor actual pero más completo).
-- "Regenerate" son atajos a las funciones de `vor-sim`.
-- "Show → Minimap" es futura implementación.
+- Sub-sections with icons/separators.
+- Each entry opens a specific editor (for Phase 6).
+- "Edit → Estados" opens the panel to rename/color states (similar to the current editor but more complete).
+- "Regenerate" are shortcuts to `vor-sim` functions.
+- "Show → Minimap" is a future implementation.
 
 ### 2.4 Options
 
@@ -200,9 +200,9 @@ Botones siempre visibles sin importar la pestaña activa. Son acciones globales:
 └─────────────────────┘
 ```
 
-- Sección "Configuración del mundo": parámetros que requieren regenerar el mapa.
-- Sección "Preferencias": ajustes de UI/autosave/idioma que aplican inmediato.
-- Botón "Aplicar y regenerar" (Fase 7+ cuando vor-sim pueda regenerar).
+- "World configuration" section: parameters that require regenerating the map.
+- "Preferences" section: UI/autosave/language settings that apply immediately.
+- "Aplicar y regenerar" button (Phase 7+ when vor-sim can regenerate).
 
 ### 2.5 Style
 
@@ -224,9 +224,9 @@ Botones siempre visibles sin importar la pestaña activa. Son acciones globales:
 └─────────────────────┘
 ```
 
-- Selector de elemento (Borders, Ocean, Rivers, Labels, States, Provinces, Burgos, etc.)
-- Controls de estilo por elemento: color, opacidad, ancho de trazo, fuente, tamaño, sombra.
-- Los cambios se aplican en tiempo real al render (Fase 6+).
+- Element selector (Borders, Ocean, Rivers, Labels, States, Provinces, Burgos, etc.)
+- Per-element style controls: color, opacity, stroke width, font, size, shadow.
+- Changes apply in real time to the render (Phase 6+).
 
 ### 2.6 About
 
@@ -250,29 +250,29 @@ Botones siempre visibles sin importar la pestaña activa. Son acciones globales:
 
 ---
 
-## 3. Paleta de colores (modo oscuro Voronia)
+## 3. Color palette (Voronia dark mode)
 
-No se copia la paleta clara de Azgaar. Se mantiene el modo oscuro actual:
+Azgaar's light palette is not copied. The current dark mode is kept:
 
-| Elemento | Color | Uso |
+| Element | Color | Use |
 |----------|-------|-----|
-| Fondo panel | `#1e1e2e` | Fondo del SidePanel |
-| Fondo tabs inactivos | `#2a2a3e` | Tabs no seleccionados |
-| Fondo tab activo | `#3a3a5e` | Tab seleccionado |
-| Texto | `#cdd6f4` | Texto normal |
-| Texto secundario | `#6c7086` | Labels, hints |
-| Borde | `#45475a` | Separadores, bordes de input |
-| Acento | `#89b4fa` | Botones, links, selección |
-| Error | `#f38ba8` | Validación fallida |
-| Fondo input | `#313244` | Campos de texto |
+| Panel background | `#1e1e2e` | SidePanel background |
+| Inactive tab background | `#2a2a3e` | Unselected tabs |
+| Active tab background | `#3a3a5e` | Selected tab |
+| Text | `#cdd6f4` | Normal text |
+| Secondary text | `#6c7086` | Labels, hints |
+| Border | `#45475a` | Separators, input borders |
+| Accent | `#89b4fa` | Buttons, links, selection |
+| Error | `#f38ba8` | Failed validation |
+| Input background | `#313244` | Text fields |
 
-Basado en Catppuccin Mocha (el tema oscuro que ya usa Voronia implícitamente).
+Based on Catppuccin Mocha (the dark theme Voronia already uses implicitly).
 
 ---
 
-## 4. Modales (dialogs)
+## 4. Modals (dialogs)
 
-Export, Save, Load, New Map se abren como modales egui (ventanas flotantes centradas).
+Export, Save, Load, New Map open as egui modals (centered floating windows).
 
 ### 4.1 Export dialog
 
@@ -325,32 +325,32 @@ Export, Save, Load, New Map se abren como modales egui (ventanas flotantes centr
 
 ---
 
-## 5. Criterios de implementación
+## 5. Implementation criteria
 
-1. **Cada pestaña es un módulo separado** en `vor-app/src/ui/` para mantener el `lib.rs` manejable.
-2. **El TabBar + StickyFooter son estáticos** (no cambian entre tabs).
-3. **El estado activo del tab** vive en `State` como `active_tab: TabId` enum.
-4. **Los modales** se implementan con `egui::Window` (modal blocking).
-5. **Dark mode es el único modo** — no hay toggle claro/oscuro (por ahora).
-6. **La info de celda** (tab Info) se sigue poblando desde el picking de click derecho en el mapa.
-7. **El editor de entidad** (dentro de Info o Tools) usa `vor-edit` + `EditBuffer` (ya existe).
+1. **Each tab is a separate module** in `vor-app/src/ui/` to keep `lib.rs` manageable.
+2. **The TabBar + StickyFooter are static** (they do not change between tabs).
+3. **The active tab state** lives in `State` as an `active_tab: TabId` enum.
+4. **The modals** are implemented with `egui::Window` (modal blocking).
+5. **Dark mode is the only mode** — there is no light/dark toggle (for now).
+6. **Cell info** (Info tab) continues to be populated from right-click picking on the map.
+7. **The entity editor** (inside Info or Tools) uses `vor-edit` + `EditBuffer` (already exists).
 
 ---
 
-## 6. Tabs futuros (post-Fase 6)
+## 6. Future tabs (post-Phase 6)
 
-| Tab | Cuando | Por qué |
+| Tab | When | Why |
 |-----|--------|---------|
-| **History** | Fase 6 | Timeline de undo/redo |
-| **Simulation** | Fase 7 | Control de simulación (guerras, economía, clima) |
-| **Export → Batch** | Fase 8 | Exportación headless por lotes |
+| **History** | Phase 6 | Undo/redo timeline |
+| **Simulation** | Phase 7 | Simulation control (wars, economy, climate) |
+| **Export → Batch** | Phase 8 | Headless batch export |
 
 ---
 
-## 7. Maquetas de referencia
+## 7. Reference mockups
 
-Para la implementación visual, referirse a:
+For the visual implementation, refer to:
 
-- **Azgaar**: layout de tabs + sticky footer + modales. Copiar la UX, NO los colores.
-- **egui demo**: `egui_demo_app` tiene ejemplos de tabs, collapsing headers, modales.
-- **Catppuccin Mocha**: paleta de colores oficial de Voronia (dark mode).
+- **Azgaar**: tab layout + sticky footer + modals. Copy the UX, NOT the colors.
+- **egui demo**: `egui_demo_app` has examples of tabs, collapsing headers, modals.
+- **Catppuccin Mocha**: Voronia's official color palette (dark mode).

@@ -1,46 +1,46 @@
-# Plan de implementación: puntos 1–5 — masa de tierra, líneas y suavizado
+# Implementation plan: points 1–5 — landmass, lines and smoothing
 
-> **Basado en**: `docs/analisis-completo-azgaar-landmass-lines-smoothing.md`
-> **Alcance**: Pipeline feature → SVG (simplify, clipPoly, fractalize) → Path builder híbrido → Coastline stroke → Isoline engine (connectVertices)
+> **Based on**: `docs/analisis-completo-azgaar-landmass-lines-smoothing.md`
+> **Scope**: Feature → SVG pipeline (simplify, clipPoly, fractalize) → Hybrid path builder → Coastline stroke → Isoline engine (connectVertices)
 
 ---
 
-## Punto 1: Pipeline feature → SVG path completo
+## Point 1: Full feature → SVG path pipeline
 
-### Estado actual
-- `coastline.rs:build_fractal_landmass_mesh()` va directo de `feature.perimeter_vertices` → `fractalize_polygon` → `catmull_rom_closed` → lyon tessellation
-- **Falta**: `simplify` (Ramer-Douglas-Peucker), `clipPoly` con `secure=1`
+### Current state
+- `coastline.rs:build_fractal_landmass_mesh()` goes directly from `feature.perimeter_vertices` → `fractalize_polygon` → `catmull_rom_closed` → lyon tessellation
+- **Missing**: `simplify` (Ramer-Douglas-Peucker), `clipPoly` with `secure=1`
 
 ### Plan
 
 #### 1a. `crates/vor-render/src/simplify.rs` — Ramer-Douglas-Peucker + radial distance
 
-Port de `simplify-js` de Vladimir Agafonkin. Dos pasadas:
+Port of Vladimir Agafonkin's `simplify-js`. Two passes:
 
 ```rust
 pub fn simplify(points: &[[f32; 2]], tolerance: f32) -> Vec<[f32; 2]>;
 ```
 
-1. **Radial distance**: `radial_distance(points, sq_tolerance)` — descarta puntos consecutivos dentro de `sqrt(tolerance)` del anterior
-2. **Ramer-Douglas-Peucker**: `rdp(points, sq_tolerance)` — recursivo, encuentra el punto más alejado de la línea base. Si su distancia perpendicular > `tolerance`, divide y repite
+1. **Radial distance**: `radial_distance(points, sq_tolerance)` — discards consecutive points within `sqrt(tolerance)` of the previous one
+2. **Ramer-Douglas-Peucker**: `rdp(points, sq_tolerance)` — recursive, finds the point farthest from the baseline. If its perpendicular distance > `tolerance`, split and repeat
 
-Parámetro: `tolerance = 0.3` (calles: `simplify(pts, 0.3)`).
+Parameter: `tolerance = 0.3` (streets: `simplify(pts, 0.3)`).
 
 #### 1b. `crates/vor-render/src/clip_poly.rs` — Sutherland-Hodgman + secure
 
-Port de `clipPolygon` con `secure=1`:
+Port of `clipPolygon` with `secure=1`:
 
 ```rust
 pub fn clip_polygon(points: &[[f32; 2]], width: f32, height: f32, secure: bool) -> Vec<[f32; 2]>;
 ```
 
-- Sutherland-Hodgman contra rectángulo `[0, 0, width, height]`
-- `secure=true`: cada vértice en borde (`x===0 || x===width || y===0 || y===height`) se duplica dos veces para forzar B-spline a pasar por el borde
-- Solo se usa en features de tierra (landmass); ocean layers usan `secure=false`
+- Sutherland-Hodgman against rectangle `[0, 0, width, height]`
+- `secure=true`: each vertex on the border (`x===0 || x===width || y===0 || y===height`) is duplicated twice to force the B-spline to pass through the border
+- Only used for land features (landmass); ocean layers use `secure=false`
 
-#### 1c. Integrar en pipeline
+#### 1c. Integrate into the pipeline
 
-Modificar `build_fractal_landmass_mesh` (o crear nueva `build_landmass_mesh_v2`) para:
+Modify `build_fractal_landmass_mesh` (or create a new `build_landmass_mesh_v2`) to:
 
 ```
 perimeter_vertices
@@ -53,32 +53,32 @@ perimeter_vertices
   → lyon tessellation → HeightmapMesh
 ```
 
-### Archivos nuevo/modificados
+### New/modified files
 
-| Archivo | Acción |
+| File | Action |
 |---------|--------|
-| `vor-render/src/simplify.rs` | **CREAR**: RDP + radial distance |
-| `vor-render/src/clip_poly.rs` | **CREAR**: Sutherland-Hodgman + secure |
-| `vor-render/src/coastline.rs` | **MODIFICAR**: integrar simplify + clipPoly en `build_fractal_landmass_mesh` |
-| `vor-render/src/lib.rs` | **MODIFICAR**: exportar `simplify` y `clip_poly` |
+| `vor-render/src/simplify.rs` | **CREATE**: RDP + radial distance |
+| `vor-render/src/clip_poly.rs` | **CREATE**: Sutherland-Hodgman + secure |
+| `vor-render/src/coastline.rs` | **MODIFY**: integrate simplify + clipPoly into `build_fractal_landmass_mesh` |
+| `vor-render/src/lib.rs` | **MODIFY**: export `simplify` and `clip_poly` |
 
 ---
 
-## Punto 2: Fractalización de costa
+## Point 2: Coastline fractalization
 
-### Estado actual
-- `coastline.rs` YA tiene `fractalize_polygon` con roughness profile + midpoint displacement recursive
-- `make_roughness_profile` con 4 armónicos, contraste 1.5, 256 muestras
-- `subdivide_edge` recursivo con maxDepth=4, amplitude_decay=0.85 (Azgaar usa 0.9 — diferencia menor)
-- Skip en bordes de mapa
+### Current state
+- `coastline.rs` ALREADY has `fractalize_polygon` with roughness profile + recursive midpoint displacement
+- `make_roughness_profile` with 4 harmonics, contrast 1.5, 256 samples
+- Recursive `subdivide_edge` with maxDepth=4, amplitude_decay=0.85 (Azgaar uses 0.9 — minor difference)
+- Skipped at map borders
 
-### Lo que falta
+### What's missing
 
-#### 2a. Retornar metadatos de clasificación smooth/jagged
+#### 2a. Return smooth/jagged classification metadata
 
-`fractalize_polygon` actual retorna `Vec<[f32;2]>` (puntos sin estructura). Para el path builder híbrido (punto 3), necesitamos saber qué spans originales fueron subdivididos (jagged) y cuáles no (smooth).
+The current `fractalize_polygon` returns `Vec<[f32;2]>` (points without structure). For the hybrid path builder (point 3), we need to know which original spans were subdivided (jagged) and which were not (smooth).
 
-**Solución**: que `fractalize_polygon` retorne también un array de índices delimitando los puntos de cada span, o que directamente retorne `Vec<CoastlineSpan>`:
+**Solution**: have `fractalize_polygon` also return an index array delimiting the points of each span, or directly return `Vec<CoastlineSpan>`:
 
 ```rust
 pub struct CoastlineSpan {
@@ -90,42 +90,42 @@ pub struct CoastlineSpan {
 pub fn fractalize_polygon(...) -> (Vec<[f32; 2]>, Vec<CoastlineSpan>);
 ```
 
-Alternativa: que `fractalize_polygon` retorne los puntos con una estructura intercalada que permita reconstruir spans. Lo más limpio es el `Vec<CoastlineSpan>` adicional.
+Alternative: have `fractalize_polygon` return the points with an interleaved structure that allows spans to be reconstructed. The cleanest option is the extra `Vec<CoastlineSpan>`.
 
-#### 2b. Verificar parámetros contra Azgaar
+#### 2b. Verify parameters against Azgaar
 
-| Parámetro | Azgaar | Voronia actual | Diferencia |
+| Parameter | Azgaar | Voronia current | Difference |
 |-----------|--------|----------------|------------|
 | `maxDepth` | 4 | 4 | ✅ |
 | `baseAmplitude` | 1.5 | 1.5 | ✅ |
-| `amplitudeDecay` | 0.9 | 0.85 | ⚠️ menor → costa más suave |
-| `minEdge` | 1 | 2 | ⚠️ mayor → menos fractales en aristas cortas |
+| `amplitudeDecay` | 0.9 | 0.85 | ⚠️ lower → smoother coastline |
+| `minEdge` | 1 | 2 | ⚠️ higher → fewer fractals on short edges |
 | `smoothThreshold` | 0.25 | 0.25 | ✅ |
 | `lakeSmoothThreshMult` | 2.0 | 2.0 | ✅ |
 | `contrast` | 1.5 | 1.5 | ✅ |
 | `numHarmonics` | 4 | 4 | ✅ |
 | PROFILE_SIZE | 256 | 256 | ✅ |
 
-Alinear `amplitude_decay` a 0.9 y `min_edge` a 1.0 si se busca bit-exactitud visual.
+Align `amplitude_decay` to 0.9 and `min_edge` to 1.0 if visual bit-exactness is the goal.
 
-### Archivos
+### Files
 
-| Archivo | Acción |
+| File | Action |
 |---------|--------|
-| `vor-render/src/coastline.rs` | **MODIFICAR**: retornar `CoastlineSpan` metadata, alinear parámetros |
+| `vor-render/src/coastline.rs` | **MODIFY**: return `CoastlineSpan` metadata, align parameters |
 
 ---
 
-## Punto 3: Path builder híbrido (B-spline + Catmull-Rom)
+## Point 3: Hybrid path builder (B-spline + Catmull-Rom)
 
-### Estado actual
-- `mesh.rs` tiene `catmull_rom_closed(points, subdivisions)` — uniform Catmull-Rom α=0 con subdivisiones fijas
-- Se aplica a TODO el polígono indistintamente
+### Current state
+- `mesh.rs` has `catmull_rom_closed(points, subdivisions)` — uniform Catmull-Rom α=0 with fixed subdivisions
+- It is applied to the WHOLE polygon indiscriminately
 
-### Lo que Azgaar hace
-`buildCoastlinePath()` clasifica cada span original como:
-- **Smooth**: sin subdivisión fractal → Q midpoint B-spline (equivalente D3 `curveBasisClosed`)
-- **Jagged**: con subdivisión fractal → centripetal Catmull-Rom τ=0.25
+### What Azgaar does
+`buildCoastlinePath()` classifies each original span as:
+- **Smooth**: no fractal subdivision → Q midpoint B-spline (D3 `curveBasisClosed` equivalent)
+- **Jagged**: with fractal subdivision → centripetal Catmull-Rom τ=0.25
 
 ### Plan
 
@@ -151,14 +151,14 @@ pub fn build_coastline_path(
 ) -> CoastlinePath;
 ```
 
-Algoritmo:
-1. **Smooth span** (span sin subdivisión): emite Q midpoint B-spline
+Algorithm:
+1. **Smooth span** (span without subdivision): emit Q midpoint B-spline
    - `mx = (cpx + npx) / 2; my = (cpy + npy) / 2`
-   - Comando: `Q cpx,cpy mx,my`
-   - El primer segmento arranca en el midpoint del último→primer span para loop seamless
+   - Command: `Q cpx,cpy mx,my`
+   - The first segment starts at the midpoint of the last→first span for a seamless loop
 
-2. **Jagged span** (span con subdivisión): emite centripetal Catmull-Rom τ=0.25
-   - Para cada sub-segmento j entre puntos del span:
+2. **Jagged span** (span with subdivision): emit centripetal Catmull-Rom τ=0.25
+   - For each sub-segment j between span points:
      ```
      cp1x = a.x + (b.x - prev.x) / 8
      cp1y = a.y + (b.y - prev.y) / 8
@@ -167,11 +167,11 @@ Algoritmo:
      C cp1x,cp1y cp2x,cp2y bx,by
      ```
 
-3. **Transición smooth↔jagged**: trackear `at_mid` — si el cursor está en un midpoint (B-spline) y pasamos a jagged, emitir `L` al vértice original primero
+3. **Smooth↔jagged transition**: track `at_mid` — if the cursor is at a midpoint (B-spline) and we switch to jagged, emit `L` to the original vertex first
 
-#### 3b. Integrar con tessellation
+#### 3b. Integrate with tessellation
 
-El `CoastlinePath` con comandos debe convertirse a camino lyon (`lyon::path::Path::builder()`) para teselar:
+The `CoastlinePath` with commands must be converted to a lyon path (`lyon::path::Path::builder()`) for tessellation:
 
 ```rust
 fn coastline_path_to_lyon(path: &CoastlinePath) -> lyon::path::Path {
@@ -191,33 +191,33 @@ fn coastline_path_to_lyon(path: &CoastlinePath) -> lyon::path::Path {
 }
 ```
 
-Lyon soporta curvas Bezier en teselación — no necesita que estén convertidas a segmentos de recta.
+Lyon supports Bezier curves in tessellation — they don't need to be converted to line segments.
 
-### Archivos
+### Files
 
-| Archivo | Acción |
+| File | Action |
 |---------|--------|
-| `vor-render/src/coastline_path.rs` | **CREAR**: Hybrid path builder (B-spline + Catmull-Rom) |
-| `vor-render/src/coastline.rs` | **MODIFICAR**: usar `build_coastline_path` en `build_fractal_landmass_mesh` |
-| `vor-render/src/lib.rs` | **MODIFICAR**: exportar `coastline_path` |
+| `vor-render/src/coastline_path.rs` | **CREATE**: Hybrid path builder (B-spline + Catmull-Rom) |
+| `vor-render/src/coastline.rs` | **MODIFY**: use `build_coastline_path` in `build_fractal_landmass_mesh` |
+| `vor-render/src/lib.rs` | **MODIFY**: export `coastline_path` |
 
 ---
 
-## Punto 4: Coastline stroke (línea de costa)
+## Point 4: Coastline stroke (coastline line)
 
-### Estado actual
-- No existe. Solo hay relleno de tierra.
+### Current state
+- Doesn't exist. Only land fill exists.
 
-### Lo que Azgaar hace
-La línea de costa NO es un stroke sobre el relleno — es un `<use>` del mismo path como **línea independiente**:
+### What Azgaar does
+The coastline is NOT a stroke over the fill — it is a `<use>` of the same path as an **independent line**:
 - `#sea_island`: stroke `#1f3846`, width 0.7, opacity 0.5, drop shadow
-- `#lake_island`: stroke `#7c8eaf`, width 0.35, opacity 1, sin shadow
+- `#lake_island`: stroke `#7c8eaf`, width 0.35, opacity 1, no shadow
 
 ### Plan
 
 #### 4a. `crates/vor-render/src/coastline_stroke.rs`
 
-Generar mesh de líneas (LineList) que siga el perímetro de cada feature. No requiere reteselar — reutiliza el path del punto 3 pero lo renderiza como **trazo**, no como relleno.
+Generate a line mesh (LineList) that follows the perimeter of each feature. No retessellation required — reuse the path from point 3 but render it as a **stroke**, not a fill.
 
 ```rust
 pub struct CoastlineStrokeSettings {
@@ -239,14 +239,14 @@ pub fn build_coastline_stroke_mesh(
 ) -> HeightmapMesh;
 ```
 
-Implementación:
-1. Para cada feature de tierra (is_land), extraer perímetro
-2. Aplicar mismo pipeline: simplify → clipPoly → fractalize → buildCoastlinePath
-3. En lugar de teselar con FillTessellator, teselar con StrokeTessellator de lyon
-4. Color según feature type: sea island vs lake island
-5. **Drop shadow**: generar un segundo path desplazado (1px, 1px) con color más oscuro y baja opacidad, renderizado primero
+Implementation:
+1. For each land feature (is_land), extract the perimeter
+2. Apply the same pipeline: simplify → clipPoly → fractalize → buildCoastlinePath
+3. Instead of tessellating with FillTessellator, tessellate with lyon's StrokeTessellator
+4. Color according to feature type: sea island vs lake island
+5. **Drop shadow**: generate a second displaced path (1px, 1px) with a darker color and low opacity, rendered first
 
-Lyon ya soporta `StrokeTessellator` con opciones de width, line_join, line_cap:
+Lyon already supports `StrokeTessellator` with width, line_join and line_cap options:
 
 ```rust
 use lyon::tessellation::{StrokeOptions, StrokeTessellator};
@@ -255,28 +255,28 @@ let options = StrokeOptions::default()
     .with_line_join(LineJoin::Round);
 ```
 
-#### 4b. Integrar en layers
+#### 4b. Integrate into layers
 
-Agregar `coastline_stroke` como layer en `LayerFlags` y registrarlo en el renderer. Orden de dibujo: justo encima de landmass fill, debajo de los demás layers.
+Add `coastline_stroke` as a layer in `LayerFlags` and register it in the renderer. Draw order: directly above the landmass fill, below the other layers.
 
-### Archivos
+### Files
 
-| Archivo | Acción |
+| File | Action |
 |---------|--------|
-| `vor-render/src/coastline_stroke.rs` | **CREAR**: Stroke mesh con lyon StrokeTessellator + drop shadow |
-| `vor-render/src/layers.rs` | **MODIFICAR**: agregar `CoastlineStroke` flag |
-| `vor-render/src/lib.rs` | **MODIFICAR**: exportar |
+| `vor-render/src/coastline_stroke.rs` | **CREATE**: stroke mesh with lyon StrokeTessellator + drop shadow |
+| `vor-render/src/layers.rs` | **MODIFY**: add `CoastlineStroke` flag |
+| `vor-render/src/lib.rs` | **MODIFY**: export |
 
 ---
 
-## Punto 5: Isoline engine (connectVertices)
+## Point 5: Isoline engine (connectVertices)
 
-### Estado actual
-- No existe. `contour.rs` usa marching squares sobre grid (no Voronoi).
-- No hay forma de caminar el grafo de Voronoi para extraer contornos de regiones.
+### Current state
+- Doesn't exist. `contour.rs` uses marching squares over a grid (not Voronoi).
+- There is no way to walk the Voronoi graph to extract region contours.
 
-### Lo que Azgaar hace
-`connectVertices` camina el grafo de vértices Voronoi siguiendo la frontera entre celdas de distinto tipo:
+### What Azgaar does
+`connectVertices` walks the Voronoi vertex graph following the frontier between cells of different types:
 
 ```typescript
 connectVertices({vertices, startingVertex, ofSameType, addToChecked, closeRing}):
@@ -294,15 +294,15 @@ connectVertices({vertices, startingVertex, ofSameType, addToChecked, closeRing})
     until next == startingVertex
 ```
 
-### Adaptación al modelo Voronia
+### Adaptation to the Voronia model
 
-En Voronia, el equivalente de `vertices.c[vertex]` es:
-- `vertices.adjacent_cells[t]` — los 3 IDs de celdas que forman el triángulo Delaunay `t`
+In Voronia, the equivalent of `vertices.c[vertex]` is:
+- `vertices.adjacent_cells[t]` — the 3 cell IDs that form the Delaunay triangle `t`
 
-El equivalente de `vertices.v[vertex]` (vecinos de vértice) es:
-- `vertices.adjacent_vertices[t]` — los 3 triángulos vecinos
+The equivalent of `vertices.v[vertex]` (vertex neighbors) is:
+- `vertices.adjacent_vertices[t]` — the 3 neighboring triangles
 
-Y `cells.v[cell]` → `vertices.cell_rings[p]`.
+And `cells.v[cell]` → `vertices.cell_rings[p]`.
 
 ### Plan
 
@@ -341,7 +341,7 @@ pub fn connect_vertices(
 ) -> Vec<u32>;
 ```
 
-#### 5b. getFillPath y getBorderPath
+#### 5b. getFillPath and getBorderPath
 
 ```rust
 /// Convierte un chain de vértices en un path cerrado suave (B-spline).
@@ -356,7 +356,7 @@ pub fn get_border_path(
 ) -> lyon::path::Path;
 ```
 
-#### 5c. getIsolines (envoltura)
+#### 5c. getIsolines (wrapper)
 
 ```rust
 /// Itera todas las celdas, encuentra regiones contiguas del mismo tipo,
@@ -368,9 +368,9 @@ pub fn get_isolines(
 ) -> Vec<IsolineOutput>;
 ```
 
-#### 5d. Refactorizar contour.rs para usar isoline engine
+#### 5d. Refactor contour.rs to use the isoline engine
 
-Reemplazar marching squares actual con `connect_vertices` sobre el heightmap de Voronoi:
+Replace the current marching squares with `connect_vertices` over the Voronoi heightmap:
 
 ```rust
 // En lugar de iterar grid cells con marching squares:
@@ -378,17 +378,17 @@ let h = pack.cells.height[p];
 // connect_vertices con same_type = |c| pack.cells.height[c] >= h
 ```
 
-### Archivos
+### Files
 
-| Archivo | Acción |
+| File | Action |
 |---------|--------|
-| `vor-render/src/isoline.rs` | **CREAR**: connectVertices + getFillPath + getBorderPath + getIsolines |
-| `vor-render/src/contour.rs` | **MODIFICAR**: reemplazar marching squares con isoline engine (o mantener ambos y switchear) |
-| `vor-render/src/lib.rs` | **MODIFICAR**: exportar `isoline` |
+| `vor-render/src/isoline.rs` | **CREATE**: connectVertices + getFillPath + getBorderPath + getIsolines |
+| `vor-render/src/contour.rs` | **MODIFY**: replace marching squares with the isoline engine (or keep both and switch) |
+| `vor-render/src/lib.rs` | **MODIFY**: export `isoline` |
 
 ---
 
-## Orden de implementación sugerido
+## Suggested implementation order
 
 ```
 Semana 1: Punto 5 (Isoline engine) — es la base de todo lo demás
@@ -417,7 +417,7 @@ Semana 4: Punto 4 (Coastline stroke)
 
 ---
 
-## Dependencias entre puntos
+## Dependencies between points
 
 ```
 Punto 5 (Isoline engine) ← independiente, no necesita nada más
@@ -428,14 +428,14 @@ Punto 4 (Coastline stroke) ← necesita Puntos 1+3 (mismo pipeline para generar 
 Por tanto: P5 → P2 → P3 → P1 → P4
 ```
 
-Aunque P5 no es necesario para P1-P4 visualmente, es la base arquitectónica más importante y destraba todo el resto de capas (puntos 6+). Conviene implementarlo primero aunque no tenga efecto visual inmediato.
+Although P5 is not visually necessary for P1-P4, it is the most important architectural foundation and unlocks all the remaining layers (points 6+). It should be implemented first even though it has no immediate visual effect.
 
 ---
 
-## Convenciones de código para este plan
+## Code conventions for this plan
 
-- `lyon::tessellation::StrokeTessellator` para coastline stroke (punto 4)
-- `lyon::path::Path::builder()` con `quadratic_bezier_to` y `cubic_bezier_to` para path híbrido (punto 3)
-- `voronoi::{adjacent_cells, adjacent_vertices}` — exactamente el mapeo de `vertices.c` y `vertices.v` de Azgaar
-- Tests con semilla fija y comparación de chains/paths contra fixtures
-- `tracing::info!` logging en cada paso del pipeline para debug visual
+- `lyon::tessellation::StrokeTessellator` for the coastline stroke (point 4)
+- `lyon::path::Path::builder()` with `quadratic_bezier_to` and `cubic_bezier_to` for the hybrid path (point 3)
+- `voronoi::{adjacent_cells, adjacent_vertices}` — exactly the mapping of Azgaar's `vertices.c` and `vertices.v`
+- Tests with a fixed seed and comparison of chains/paths against fixtures
+- `tracing::info!` logging at each pipeline step for visual debugging

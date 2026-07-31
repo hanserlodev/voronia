@@ -3,16 +3,16 @@ use serde::{Deserialize, Serialize};
 pub const VORN_MAGIC: [u8; 4] = *b"VORN";
 pub const VORN_FORMAT_VERSION: u16 = 1;
 
-/// Fixed-size header del Vorn World File.
+/// Fixed-size header of the Vorn World File.
 ///
-/// Layout en disco (16 bytes):
+/// On-disk layout (16 bytes):
 ///   [0..4]  magic: b"VORN"
 ///   [4..6]  format_version: u16 LE
-///   [6..10] metadata_len: u32 LE (bytes del VornMetadata serializado)
-///   [10]    compression: u8 (0 = none, 1 = gzip — reservado para futuro)
+///   [6..10] metadata_len: u32 LE (bytes of the serialized VornMetadata)
+///   [10]    compression: u8 (0 = none, 1 = gzip — reserved for future use)
 ///   [11..16] _reserved: [u8; 5]
 ///
-/// Sigue el metadata (bincode), luego el payload (bincode World).
+/// Followed by the metadata (bincode), then the payload (bincode World).
 #[derive(Debug, Clone)]
 pub struct VornHeader {
     pub format_version: u16,
@@ -60,18 +60,18 @@ impl VornHeader {
     }
 }
 
-/// Metadata del mapa guardado en el Vorn Header.
+/// Metadata of the map saved in the Vorn Header.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VornMetadata {
-    /// Nombre del mapa.
+    /// Map name.
     pub map_name: String,
-    /// Semilla procedural.
+    /// Procedural seed.
     pub seed: String,
-    /// Fecha de creación/exportación.
+    /// Creation/export date.
     pub date: String,
-    /// Versión de Voronia que generó/exportó el archivo.
+    /// Voronia version that generated/exported the file.
     pub voronia_version: String,
-    /// Versión de Azgaar de la que se importó (si aplica).
+    /// Azgaar version it was imported from (if applicable).
     pub azgaar_version: Option<String>,
 }
 

@@ -1,39 +1,39 @@
-<!-- Muchas gracias por contribuir a Voronia. Completá este template para acelerar la revisión. -->
+<!-- Thank you very much for contributing to Voronia. Complete this template to speed up the review. -->
 
-## Resumen
+## Summary
 
-¿Qué hace este PR? (una o dos frases)
+What does this PR do? (one or two sentences)
 
-Relacionado con: #issue (si aplica)
+Related to: #issue (if applicable)
 
-## Cambios
+## Changes
 
 - [ ] `vor-core` (World Data Model)
-- [ ] `vor-import` (parser .map/JSON)
-- [ ] `vor-format` (serialización .vorn)
-- [ ] `vor-sim` (motor de simulación)
-- [ ] `vor-render` (pipeline wgpu)
-- [ ] `vor-edit` (comandos + undo/redo)
+- [ ] `vor-import` (.map/JSON parser)
+- [ ] `vor-format` (.vorn serialization)
+- [ ] `vor-sim` (simulation engine)
+- [ ] `vor-render` (wgpu pipeline)
+- [ ] `vor-edit` (commands + undo/redo)
 - [ ] `vor-app` / `vor-cli`
 - [ ] Docs (`docs/`, `SECURITY.md`, `.github/`)
 
-## Verificación
+## Verification
 
-<!-- Marcar lo que aplica. TODO debe estar verde antes del merge. -->
+<!-- Check whatever applies. EVERYTHING must be green before the merge. -->
 
-- [ ] `cargo test --workspace` verde
-- [ ] `cargo clippy --workspace` sin warnings nuevos
-- [ ] `cargo fmt --check` limpio
-- [ ] Tests con **semilla fija** si toqué código generativo (misma seed = mismo output byte-idéntico)
-- [ ] No agregué `println!` (usar `tracing`)
-- [ ] `vor-render` no escribe al World Data Model (solo lee)
-- [ ] No hay secretos ni claves en el diff
-- [ ] Actualicé `docs/` y `.opencode/skills/voronia-dev/references/status.md` si aplica
+- [ ] `cargo test --workspace` green
+- [ ] `cargo clippy --workspace` no new warnings
+- [ ] `cargo fmt --check` clean
+- [ ] Tests with a **fixed seed** if I touched generative code (same seed = byte-identical output)
+- [ ] I did not add `println!` (use `tracing`)
+- [ ] `vor-render` does not write to the World Data Model (read-only)
+- [ ] No secrets or keys in the diff
+- [ ] I updated `docs/` and `.opencode/skills/voronia-dev/references/status.md` if applicable
 
-## Screenshots / evidencia
+## Screenshots / evidence
 
-<!-- Para cambios visuales de render, incluir screenshot del antes/después o comparación con Azgaar. -->
+<!-- For visual rendering changes, include a before/after screenshot or a comparison with Azgaar. -->
 
-## Notas para el revisor
+## Notes for the reviewer
 
-<!-- Decisiones de arquitectura, divergencias con Azgaar, pasos de prueba manuales. -->
+<!-- Architectural decisions, divergences from Azgaar, manual testing steps. -->

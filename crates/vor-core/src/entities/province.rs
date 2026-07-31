@@ -1,40 +1,40 @@
-//! Provincia (slot `[30]`: `pack.provinces` JSON). Subdivisión de un estado.
+//! Province (slot `[30]`: `pack.provinces` JSON). Subdivision of a state.
 
-/// Una provincia. El slot `[0]` es placeholder.
+/// A province. Slot `[0]` is the placeholder.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Province {
     pub id: u16,
     pub name: String,
-    /// Estado al que pertenece.
+    /// State it belongs to.
     pub state: u16,
-    /// Cultura dominante.
+    /// Dominant culture.
     #[serde(default)]
     pub culture: u16,
-    /// Burgo capital de la provincia (`None` si no tiene).
+    /// Province capital burg (`None` if it has none).
     #[serde(default)]
     pub capital: Option<u16>,
-    /// Color hex.
+    /// Hex color.
     #[serde(default)]
     pub color: String,
-    /// Celda central.
+    /// Central cell.
     #[serde(default)]
     pub center_cell: u32,
-    /// "Centro visual" del polígono (pole of inaccessibility).
+    /// "Visual center" of the polygon (pole of inaccessibility).
     #[serde(default)]
     pub pole_of_inaccessibility: [f32; 2],
-    /// Burgos incluidos en la provincia.
+    /// Burgs included in the province.
     #[serde(default)]
     pub burgs: Vec<u16>,
-    /// Cantidad de celdas.
+    /// Number of cells.
     #[serde(default)]
     pub cells: u32,
-    /// Área en pixels².
+    /// Area in pixels².
     #[serde(default)]
     pub area_px: u32,
-    /// Población rural (puntos).
+    /// Rural population (points).
     #[serde(default)]
     pub rural_pop: f32,
-    /// Población urbana.
+    /// Urban population.
     #[serde(default)]
     pub urban_pop: f32,
     #[serde(default)]

@@ -1,10 +1,10 @@
-//! Test de handshake completo con el `.map` real de Sorvik (azgaar.github.io v1.138.0,
-//! 24 jul 2026). Carga el archivo end-to-end con `vor_import::mapfile::Loader::load`
-//! y valida invariants estructurales para confirmar que el parser + regeneración
-//! de geometría + mapeo a tipos fuertes funciona contra datos reales (no sintéticos).
+//! Full handshake test with the real Sorvik `.map` (azgaar.github.io v1.138.0,
+//! 24 Jul 2026). Loads the file end-to-end with `vor_import::mapfile::Loader::load`
+//! and validates structural invariants to confirm that the parser + geometry
+//! regeneration + mapping to strong types works against real (non-synthetic) data.
 //!
-//! Invariantsesperados (extraídos vía python sobre el mismo archivo):
-//! - 47 slots raw.
+//! Expected invariants (extracted via python over the same file):
+//! - 47 raw slots.
 //! - 10000 grid cells (slot [6].points count == 100×100).
 //! - 7268 pack cells (slot [16] biome count == re_graph output).
 //! - 19 features (slot [12]).
@@ -88,15 +88,15 @@ fn sorvik_grid_has_10000_cells() {
 
 #[test]
 fn sorvik_grid_features_match_count() {
-    // El slot[6] trae `grid.features` embebido: 25 entradas (placeholder `0` + 24 features
-    // reales con ids 1..24). El loader debe poblar `world.grid.features` con 24 items.
+    // Slot [6] brings `grid.features` embedded: 25 entries (placeholder `0` + 24 real
+    // features with ids 1..24). The loader must populate `world.grid.features` with 24 items.
     let w = load_sorvik();
     assert_eq!(
         w.world.grid.features.len(),
         24,
         "grid.features count (placeholder skipped)"
     );
-    // El slot[12] trae `pack.features`: 19 entradas (placeholder `0` + 18 reales).
+    // Slot [12] brings `pack.features`: 19 entries (placeholder `0` + 18 real).
     assert_eq!(
         w.world.pack.features.len(),
         18,

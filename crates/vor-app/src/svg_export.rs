@@ -1,7 +1,7 @@
-//! Exporta el mapa a SVG (vectorial, autónomo).
+//! Exports the map to SVG (vector, standalone).
 //!
-//! Genera un SVG con las capas de mapa sin overlay egui: heightmap (polígonos de
-//! Voronoi), ríos, fronteras de estados y burgos con labels.
+//! Generates an SVG with the map layers without the egui overlay: heightmap
+//! (Voronoi polygons), rivers, state borders and burgs with labels.
 
 use std::fmt::Write;
 use std::path::Path;
@@ -9,14 +9,14 @@ use std::path::Path;
 use vor_core::world::World;
 use vor_render::heightmap::height_color;
 
-/// Genera un SVG del mapa completo y lo escribe al path dado.
+/// Generates an SVG of the full map and writes it to the given path.
 ///
-/// Replica la lógica de render de las capas de mapa en SVG:
-/// - Fondo oscuro (océano)
-/// - Celdas del pack coloreadas por altura (misma rampa que `height_color`)
-/// - Ríos como polilíneas azules
-/// - Fronteras de estados como líneas rojas
-/// - Burgos como círculos blancos con label
+/// Replicates the render logic of the map layers in SVG:
+/// - Dark background (ocean)
+/// - Pack cells colored by height (same ramp as `height_color`)
+/// - Rivers as blue polylines
+/// - State borders as red lines
+/// - Burgs as white circles with labels
 pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
     let pack = &world.pack;
     let verts = &pack.vertices;
@@ -45,13 +45,13 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
 "#
     );
 
-    // 1. Fondo océano
+    // 1. Ocean background
     let _ = writeln!(
         svg,
         "<rect x=\"{min_x}\" y=\"{min_y}\" width=\"{w}\" height=\"{h}\" fill=\"#05050d\"/>"
     );
 
-    // 2. Celdas del pack (polígonos Voronoi con color por altura)
+    // 2. Pack cells (Voronoi polygons colored by height)
     let n_pack = pack.points_n();
     for p in 0..n_pack {
         let ann = match verts.cell_rings.get(p) {
@@ -73,7 +73,7 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
         let _ = writeln!(svg, "\" fill=\"{hex}\" stroke=\"none\" opacity=\"0.95\"/>");
     }
 
-    // 3. Ríos como polilíneas
+    // 3. Rivers as polylines
     for river in &world.rivers {
         if river.cell_path.is_empty() {
             continue;
@@ -86,7 +86,7 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
             }
             let _ = write!(svg, "{:.1},{:.1}", pt[0], pt[1]);
         }
-        // Ancho según caudal (mapeado a 0.5~4px)
+        // Width based on discharge (mapped to 0.5~4px)
         let width_px = (river.discharge_m3s / 5000.0).clamp(0.5, 4.0);
         let _ = writeln!(
             svg,
@@ -94,7 +94,7 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
         );
     }
 
-    // 4. Fronteras de estados
+    // 4. State borders
     {
         let _ = write!(svg, "<path d=\"");
         for p in 0..n_pack {
@@ -106,7 +106,7 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
             for &nb in neighbors {
                 let nid = cells.state.get(nb as usize).copied().unwrap_or(0);
                 if nid != sid && nb > p as u32 {
-                    // Dibujar segmento solo una vez (p < nb)
+                    // Draw segment only once (p < nb)
                     let a = pack.points.get(p).copied().unwrap_or([0.0; 2]);
                     let b = pack.points.get(nb as usize).copied().unwrap_or([0.0; 2]);
                     let _ = write!(svg, "M {:.1},{:.1} L {:.1},{:.1} ", a[0], a[1], b[0], b[1]);
@@ -119,7 +119,7 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
         );
     }
 
-    // 5. Burgos: círculo + label
+    // 5. Burgs: circle + label
     for burg in &world.burgs {
         if burg.id == 0 || burg.removed {
             continue;

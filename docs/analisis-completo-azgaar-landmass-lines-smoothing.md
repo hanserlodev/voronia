@@ -1,40 +1,40 @@
-# Análisis completo: cómo Azgaar dibuja masa de tierra, líneas y suavizado
+# Complete analysis: how Azgaar draws landmass, lines and smoothing
 
-> **Fecha**: 30 jul 2026
-> **Fuente**: Azgaar's FMP — `/home/hans/Proyectos/azgaar-fmg/` (commit local)
-> **Propósito**: Referencia exacta para portar a Voronia el pipeline completo de tierra, líneas y suavizado
-> **Cubre**: feature polygons → simplify → clip → fractalize → B-spline/Catmull-Rom → coastline stroke → isoline engine (connectVertices + getIsolines) → human geography fills + water gaps + halos → borders → heightmap contours → ocean bathymetry → river curves → SVG output
+> **Date**: July 30, 2026
+> **Source**: Azgaar's FMP — `/home/hans/Proyectos/azgaar-fmg/` (local commit)
+> **Purpose**: Exact reference for porting to Voronia the complete landmass, lines and smoothing pipeline
+> **Covers**: feature polygons → simplify → clip → fractalize → B-spline/Catmull-Rom → coastline stroke → isoline engine (connectVertices + getIsolines) → human geography fills + water gaps + halos → borders → heightmap contours → ocean bathymetry → river curves → SVG output
 
-> ⚠️ **ALCANCE DE IMPLEMENTACIÓN INMEDIATA**: Solo puntos **1–5** (pipeline feature → SVG path, fractalización, path builder híbrido, coastline stroke). El resto (puntos 6–16: isoline engine, human geography fills, halos, borders, heightmap contours, ocean bathymetry, etc.) queda documentado para implementación futura.
+> ⚠️ **IMMEDIATE IMPLEMENTATION SCOPE**: Only items **1–5** (feature → SVG path pipeline, fractalization, hybrid path builder, coastline stroke). The rest (items 6–16: isoline engine, human geography fills, halos, borders, heightmap contours, ocean bathymetry, etc.) remains documented for future implementation.
 
 ---
 
-## Índice
+## Table of contents
 
-1. [Pipeline completo de tierra (feature → SVG path)](#1-pipeline-completo-de-tierra)
-2. [Fractalización de costa (midpoint displacement + roughness profile)](#2-fractalización-de-costa)
-3. [Path builder híbrido: B-spline + Catmull-Rom](#3-path-builder-híbrido)
-4. [Coastline stroke (línea de costa)](#4-coastline-stroke)
+1. [Complete landmass pipeline (feature → SVG path)](#1-complete-landmass-pipeline)
+2. [Coastline fractalization (midpoint displacement + roughness profile)](#2-coastline-fractalization)
+3. [Hybrid path builder: B-spline + Catmull-Rom](#3-hybrid-path-builder)
+4. [Coastline stroke (coastline line)](#4-coastline-stroke)
 5. [Isoline engine: connectVertices](#5-isoline-engine)
 6. [Isoline engine: getIsolines](#6-getisolines)
-7. [Human geography fills (estados, culturas, religiones, provincias)](#7-human-geography-fills)
+7. [Human geography fills (states, cultures, religions, provinces)](#7-human-geography-fills)
 8. [Water gap technique](#8-water-gap)
 9. [State halos](#9-state-halos)
-10. [Borders (fronteras)](#10-borders)
+10. [Borders](#10-borders)
 11. [Heightmap contours](#11-heightmap-contours)
 12. [Ocean bathymetric layers](#12-ocean-bathymetric-layers)
 13. [River smoothing (Catmull-Rom + meander)](#13-river-smoothing)
-14. [Curvas disponibles en Azgaar (catálogo D3 + custom)](#14-curvas-disponibles)
-15. [Resumen estilos SVG](#15-resumen-estilos-svg)
-16. [Equivalencias Voronia](#16-equivalencias-voronia)
+14. [Curves available in Azgaar (D3 catalog + custom)](#14-curves-available)
+15. [SVG styles summary](#15-svg-styles-summary)
+16. [Voronia equivalences](#16-voronia-equivalences)
 
 ---
 
-## 1. Pipeline completo de tierra
+## 1. Complete landmass pipeline
 
-**Archivo**: `src/renderers/draw-features.ts:76-87` — `featurePathRenderer()`
+**File**: `src/renderers/draw-features.ts:76-87` — `featurePathRenderer()`
 
-Cada feature de tierra (continente, isla, lago, isla-en-lago) pasa por este pipeline exacto:
+Each land feature (continent, island, lake, island-in-lake) goes through this exact pipeline:
 
 ```
 feature.vertices (IDs de vértices)
@@ -51,17 +51,17 @@ feature.vertices (IDs de vértices)
 
 ### 1.1 simplify (simplify-js)
 
-**Archivo**: `public/libs/simplify.js`
+**File**: `public/libs/simplify.js`
 
-Librería de Vladimir Agafonkin. Combina dos algoritmos:
-1. **Radial distance**: elimina puntos consecutivos dentro de la tolerancia cuadrática
-2. **Ramer-Douglas-Peucker**: recursivo, encuentra el punto más alejado de la línea base; si supera la tolerancia, divide y repite
+Library by Vladimir Agafonkin. Combines two algorithms:
+1. **Radial distance**: removes consecutive points within the squared tolerance
+2. **Ramer-Douglas-Peucker**: recursive, finds the point farthest from the baseline; if it exceeds the tolerance, it splits and repeats
 
-Llamada con `simplify(points, 0.3)` — tolerancia 0.3 píxeles, sin `highestQuality` → usa ambos algoritmos.
+Called with `simplify(points, 0.3)` — 0.3 pixel tolerance, without `highestQuality` → uses both algorithms.
 
-### 1.2 clipPoly con secure=1
+### 1.2 clipPoly with secure=1
 
-**Archivo**: `src/utils/commonUtils.ts:16-37`
+**File**: `src/utils/commonUtils.ts:16-37`
 
 ```typescript
 const clipped = clipPolygon(points, [0, 0, graphWidth, graphHeight]);
@@ -75,19 +75,19 @@ for (const point of clipped) {
 }
 ```
 
-Sin `secure`, el B-spline de D3 (`curveBasisClosed`) se arquea lejos del borde del mapa, dejando un gap. Al duplicar los puntos de borde, la curva pasa exactamente por ellos.
+Without `secure`, D3's B-spline (`curveBasisClosed`) arcs away from the map edge, leaving a gap. By duplicating the boundary points, the curve passes exactly through them.
 
-**Solo `draw-features.ts` usa `secure=1`**. Ocean-layers y otros no lo necesitan porque sus paths no se cierran con `curveBasisClosed`.
+**Only `draw-features.ts` uses `secure=1`**. Ocean-layers and others do not need it because their paths are not closed with `curveBasisClosed`.
 
 ---
 
-## 2. Fractalización de costa
+## 2. Coastline fractalization
 
-**Archivo**: `src/renderers/coastline-fractal.ts`
+**File**: `src/renderers/coastline-fractal.ts`
 
 ### 2.1 Roughness profile (per-feature)
 
-Cada feature recibe un perfil de rugosidad único vía PRNG determinista (Alea con semilla `${seed}_c${featureIndex}`).
+Each feature receives a unique roughness profile via a deterministic PRNG (Alea with seed `${seed}_c${featureIndex}`).
 
 ```typescript
 function makeRoughnessProfile(rand, contrast, numHarmonics = 4): Float32Array {
@@ -105,11 +105,11 @@ function makeRoughnessProfile(rand, contrast, numHarmonics = 4): Float32Array {
 }
 ```
 
-- `PROFILE_SIZE = 256` muestras alrededor del perímetro
-- `numHarmonics = 4` → ~4 zonas rugosas alrededor del perímetro
-- `contrast = 1.5` → acentúa diferencia entre calma y rugosidad
+- `PROFILE_SIZE = 256` samples around the perimeter
+- `numHarmonics = 4` → ~4 rough zones around the perimeter
+- `contrast = 1.5` → accentuates the difference between calm and rough
 
-### 2.2 Midpoint displacement recursivo
+### 2.2 Recursive midpoint displacement
 
 ```
 subdivideEdge(x0, y0, x1, y1, t0, t1, depth, amplitude, profile, rand):
@@ -128,25 +128,25 @@ subdivideEdge(x0, y0, x1, y1, t0, t1, depth, amplitude, profile, rand):
   subdivideEdge(mx,my, x1,y1, tm,t1, depth-1, nextAmp, ...)
 ```
 
-Parámetros default:
-- `maxDepth = 4` → hasta 16 segmentos por arista original
-- `baseAmplitude = 1.5` → pico de desplazamiento
-- `amplitudeDecay = 0.9` → 90% de amplitud por nivel
-- `minEdge = 1` → aristas < 1px no se subdividen
-- `smoothThreshold = 0.25` → zonas con rugosidad < 0.25 no se subdividen
-- `lakeSmoothThreshMult = 2.0` → lagos tienen threshold 0.5 (más calmados)
+Default parameters:
+- `maxDepth = 4` → up to 16 segments per original edge
+- `baseAmplitude = 1.5` → peak displacement
+- `amplitudeDecay = 0.9` → 90% of amplitude per level
+- `minEdge = 1` → edges < 1px are not subdivided
+- `smoothThreshold = 0.25` → zones with roughness < 0.25 are not subdivided
+- `lakeSmoothThreshMult = 2.0` → lakes have threshold 0.5 (calmer)
 
-### 2.3 Skip en bordes del mapa
+### 2.3 Skip on map edges
 
-Aristas donde AMBOS vértices están en el borde del mapa (`x===0 || x===graphWidth || y===0 || y===graphHeight`) no se fractalizan — mantienen la línea recta original.
+Edges where BOTH vertices are on the map boundary (`x===0 || x===graphWidth || y===0 || y===graphHeight`) are not fractalized — they keep the original straight line.
 
 ---
 
-## 3. Path builder híbrido
+## 3. Hybrid path builder
 
-**Archivo**: `src/renderers/coastline-fractal.ts:194-252` — `buildCoastlinePath()`
+**File**: `src/renderers/coastline-fractal.ts:194-252` — `buildCoastlinePath()`
 
-### 3.1 Clasificación smooth/jagged
+### 3.1 smooth/jagged classification
 
 ```typescript
 // smooth[i] = true si el span original i→i+1 NO tiene subdivisión fractal
@@ -157,18 +157,18 @@ smooth[i] = (b > a ? b - a : b + N - a) === 1;
 
 ### 3.2 Smooth spans: Q midpoint B-spline
 
-Equivalente exacto a `curveBasisClosed` de D3:
+Exact equivalent of D3's `curveBasisClosed`:
 
 ```
 M→(midpoint del último→primer span)   # arranque seamless
 Q cpx,cpy mx,my                        # Q = quadratic bezier
 ```
 
-Donde `mx = (cpx + npx) / 2`, `my = (cpy + npy) / 2`. Esto produce arcos suaves que ocultan la angularidad de Voronoi.
+Where `mx = (cpx + npx) / 2`, `my = (cpy + npy) / 2`. This produces smooth arcs that hide the angularity of the Voronoi tessellation.
 
 ### 3.3 Jagged spans: centripetal Catmull-Rom
 
-Para spans con subdivisión fractal, Catmull-Rom centrípeto (α~0.5 aunque la fórmula usada es equivalente a tensión ~0.25):
+For spans with fractal subdivision, centripetal Catmull-Rom (α~0.5, although the formula used is equivalent to tension ~0.25):
 
 ```
 for each sub-segment j:
@@ -179,21 +179,21 @@ for each sub-segment j:
   C cp1x,cp1y cp2x,cp2y bx,by
 ```
 
-La división por 8 produce tangentes = 1/4 de la diferencia, equivalente a tensión Catmull-Rom τ=0.25.
+The division by 8 produces tangents = 1/4 of the difference, equivalent to Catmull-Rom tension τ=0.25.
 
-### 3.4 Transición seamless smooth↔jagged
+### 3.4 Seamless smooth↔jagged transition
 
-El path arranca en el midpoint del último span (si es smooth) para que el loop cerrado no tenga costura. La variable `atMid` trackea si el cursor está en un midpoint (B-spline) o en un vértice original. Cuando se pasa de smooth a jagged, se emite un `L` al vértice original primero.
+The path starts at the midpoint of the last span (if smooth) so that the closed loop has no seam. The `atMid` variable tracks whether the cursor is at a midpoint (B-spline) or at an original vertex. When transitioning from smooth to jagged, an `L` is emitted to the original vertex first.
 
 ---
 
-## 4. Coastline stroke
+## 4. Coastline stroke (coastline line)
 
-**Archivo**: `src/services/io/auto-update.ts:191-204`
+**File**: `src/services/io/auto-update.ts:191-204`
 
-La línea de costa NO es un stroke sobre el relleno de tierra — es un `<use>` que reutiliza el mismo path del feature pero renderizado como **línea** sin relleno.
+The coastline is NOT a stroke over the land fill — it is a `<use>` that reuses the feature's own path but rendered as a **line** without fill.
 
-### 4.1 Estructura DOM
+### 4.1 DOM structure
 
 ```
 <g id="coastline" fill="none" stroke-linejoin="round">
@@ -206,26 +206,26 @@ La línea de costa NO es un stroke sobre el relleno de tierra — es un `<use>` 
 </g>
 ```
 
-### 4.2 Estilos
+### 4.2 Styles
 
-| Grupo | opacity | stroke | stroke-width | filter |
+| Group | opacity | stroke | stroke-width | filter |
 |-------|---------|--------|-------------|--------|
 | `#sea_island` | 0.5 | `#1f3846` | 0.7 | `url(#dropShadow)` |
 | `#lake_island` | 1 | `#7c8eaf` | 0.35 | none |
 
-### 4.3 Diferencia con fill
+### 4.3 Difference from fill
 
-El fill de tierra NO se renderiza directamente — la tierra se ve a través de las capas temáticas (heightmap, biomas, estados, etc.). El stroke de costa es sutil (~0.5px), semi-transparente, y en islas oceánicas lleva un drop shadow para dar profundidad.
+The land fill is NOT rendered directly — land is visible through the thematic layers (heightmap, biomes, states, etc.). The coastline stroke is subtle (~0.5px), semi-transparent, and on oceanic islands it carries a drop shadow for depth.
 
 ---
 
 ## 5. Isoline engine: connectVertices
 
-**Archivo**: `src/utils/pathUtils.ts:261-311`
+**File**: `src/utils/pathUtils.ts:261-311`
 
-Es el algoritmo fundamental que camina el grafo de Voronoi para trazar el contorno de una región de celdas del mismo tipo.
+It is the fundamental algorithm that walks the Voronoi graph to trace the outline of a region of cells of the same type.
 
-### 5.1 Algoritmo
+### 5.1 Algorithm
 
 ```
 connectVertices({vertices, startingVertex, ofSameType, addToChecked, closeRing}):
@@ -249,9 +249,9 @@ connectVertices({vertices, startingVertex, ofSameType, addToChecked, closeRing})
     until next == startingVertex  // cerramos el loop
 ```
 
-### 5.2 Lógica de decisión
+### 5.2 Decision logic
 
-Para cada vértice actual, examina sus 3 celdas adyacentes (`vertices.c[vertex]` = normalmente 3 celdas contiguas). Si dos celdas consecutivas son de distinto tipo, el vértice está en la frontera y el vecino que conecta esas dos celdas es el siguiente en el chain.
+For each current vertex, it examines its 3 adjacent cells (`vertices.c[vertex]` = normally 3 contiguous cells). If two consecutive cells are of different types, the vertex is on the border and the neighbor connecting those two cells is the next one in the chain.
 
 ```
    c1    c2
@@ -261,21 +261,21 @@ Para cada vértice actual, examina sus 3 celdas adyacentes (`vertices.c[vertex]`
    c3    (implícito)
 ```
 
-### 5.3 Variantes
+### 5.3 Variants
 
-| Variante | Archivo | Diferencia |
+| Variant | File | Difference |
 |----------|---------|------------|
-| General (`pathUtils.ts`) | `src/utils/pathUtils.ts:261` | Toma callback `ofSameType`, `addToChecked`, `closeRing` |
-| Heightmap (`draw-heightmap.ts`) | `src/renderers/draw-heightmap.ts:162` | Especializado para altura: compara `cells.h[c] < h` |
-| Ocean (`ocean-layers.ts`) | `src/renderers/ocean-layers.ts:35` | Especializado para capas de temperatura oceánica |
+| General (`pathUtils.ts`) | `src/utils/pathUtils.ts:261` | Takes the `ofSameType`, `addToChecked`, `closeRing` callbacks |
+| Heightmap (`draw-heightmap.ts`) | `src/renderers/draw-heightmap.ts:162` | Specialized for height: compares `cells.h[c] < h` |
+| Ocean (`ocean-layers.ts`) | `src/renderers/ocean-layers.ts:35` | Specialized for oceanic temperature layers |
 
 ---
 
 ## 6. Isoline engine: getIsolines
 
-**Archivo**: `src/utils/pathUtils.ts:84-177`
+**File**: `src/utils/pathUtils.ts:84-177`
 
-### 6.1 Flujo
+### 6.1 Flow
 
 ```
 getIsolines(pack, getType, options):
@@ -306,18 +306,18 @@ getIsolines(pack, getType, options):
 
 ### 6.2 Output: `addIsolineTo`
 
-Según `options`, genera:
+Depending on `options`, it generates:
 
-| Option | Output | Descripción |
+| Option | Output | Description |
 |--------|--------|-------------|
-| `polygons` | `isolines[type].polygons` | `vertexChain.map(v => vertices.p[v])` — arrays de puntos |
-| `fill` | `isolines[type].fill` | String SVG con paths de relleno (vía `getFillPath`) |
-| `waterGap` | `isolines[type].waterGap` | Paths discontinúos en tierra (vía `getBorderPath`) |
-| `halo` | `isolines[type].halo` | Paths discontinúos en borde de mapa (vía `getBorderPath`) |
+| `polygons` | `isolines[type].polygons` | `vertexChain.map(v => vertices.p[v])` — arrays of points |
+| `fill` | `isolines[type].fill` | SVG string with fill paths (via `getFillPath`) |
+| `waterGap` | `isolines[type].waterGap` | Paths interrupted on land (via `getBorderPath`) |
+| `halo` | `isolines[type].halo` | Paths interrupted at the map edge (via `getBorderPath`) |
 
 ### 6.3 `getFillPath`
 
-**Archivo**: `src/utils/pathUtils.ts:49-82`
+**File**: `src/utils/pathUtils.ts:49-82`
 
 ```typescript
 function getFillPath(vertices, vertexChain): string {
@@ -328,9 +328,9 @@ function getFillPath(vertices, vertexChain): string {
 
 ### 6.4 `getBorderPath`
 
-**Archivo**: `src/utils/pathUtils.ts:25-47`
+**File**: `src/utils/pathUtils.ts:25-47`
 
-Genera SVG path con comandos M/L, rompiendo el path donde `discontinue(vertex)` es true. Esto produce múltiples sub-paths en lugar de uno continuo.
+Generates an SVG path with M/L commands, breaking the path where `discontinue(vertex)` is true. This produces multiple sub-paths instead of one continuous path.
 
 ```
 getBorderPath(vertices, vertexChain, discontinue):
@@ -345,7 +345,7 @@ getBorderPath(vertices, vertexChain, discontinue):
 
 ## 7. Human geography fills
 
-Todas las capas de relleno humano siguen el mismo patrón:
+All human fill layers follow the same pattern:
 
 ```
 getIsolines(pack, cellId => cells.{type}[cellId], { fill: true, waterGap: true [, halo: bool] })
@@ -356,56 +356,56 @@ getIsolines(pack, cellId => cells.{type}[cellId], { fill: true, waterGap: true [
     [<path d="{halo}" stroke="{darkerColor}" clip-path="url(#state-clip{index})" />]
 ```
 
-### 7.1 Patrón por capa
+### 7.1 Per-layer pattern
 
-| Capa | Archivo (layers.js) | getType | options | Extra |
+| Layer | File (layers.js) | getType | options | Extra |
 |------|--------------------|---------|---------|-------|
-| Culturas | `drawCultures():480` | `cells.culture` | `{fill, waterGap}` | — |
-| Religiones | `drawReligions():509` | `cells.religion` | `{fill, waterGap}` | — |
-| Estados | `drawStates():537` | `cells.state` | `{fill, waterGap, halo}` | Halo solo si `shapeRendering==="geometricPrecision"` |
-| Provincias | `drawProvinces():592` | `cells.province` | `{fill, waterGap}` | — |
-| Zonas | `drawZones():978` | `cells.zone` | `{fill}` | Sin water gap |
+| Cultures | `drawCultures():480` | `cells.culture` | `{fill, waterGap}` | — |
+| Religions | `drawReligions():509` | `cells.religion` | `{fill, waterGap}` | — |
+| States | `drawStates():537` | `cells.state` | `{fill, waterGap, halo}` | Halo only if `shapeRendering==="geometricPrecision"` |
+| Provinces | `drawProvinces():592` | `cells.province` | `{fill, waterGap}` | — |
+| Zones | `drawZones():978` | `cells.zone` | `{fill}` | No water gap |
 
-### 7.2 Diferencia clave: isolines vs borders
+### 7.2 Key difference: isolines vs borders
 
-**getIsolines** → genera paths de **relleno** + water gaps + halos. Los paths son **curvas cerradas** (B-spline via D3).
+**getIsolines** → generates **fill** paths + water gaps + halos. The paths are **closed curves** (B-spline via D3).
 
-**drawBorders** → genera paths de **línea** (stroke) entre celdas de distinto estado/provincia. Los paths son **segmentos rectos** (join de vértices con `M...L...L...`). No hay suavizado en borders.
+**drawBorders** → generates **line** paths (stroke) between cells of different states/provinces. The paths are **straight segments** (join of vertices with `M...L...L...`). There is no smoothing in borders.
 
 ---
 
 ## 8. Water gap technique
 
-### 8.1 Propósito
+### 8.1 Purpose
 
-Evitar que el color de una región "sangre" visualmente al océano/lago en los bordes. Azgaar dibuja un stroke fino del mismo color del relleno en los bordes que tocan agua.
+To prevent a region's color from visually "bleeding" into the ocean/lake at the edges. Azgaar draws a thin stroke of the same color as the fill on the edges that touch water.
 
-### 8.2 Implementación
+### 8.2 Implementation
 
-`getBorderPath(vertices, vertexChain, isLandVertex)` donde:
+`getBorderPath(vertices, vertexChain, isLandVertex)` where:
 ```typescript
 const isLandVertex = (vertexId) => vertices.c[vertexId].every(i => cells.h[i] >= 20);
 ```
 
-Cuando el vértice está rodeado SOLO de celdas de tierra (height ≥ 20), el path se rompe. Cuando está en costa (mezcla tierra/agua), el path continúa. El resultado es un path que solo dibuja en bordes contra agua.
+When the vertex is surrounded ONLY by land cells (height ≥ 20), the path is broken. When it is on the coast (land/water mix), the path continues. The result is a path that only draws on edges against water.
 
-### 8.3 Estilo
+### 8.3 Style
 
 ```html
 <path d="{waterGap}" fill="none" stroke="{color}" stroke-width="3" ... />
 ```
 
-Stroke-width 3 es deliberadamente grueso para cubrir cualquier anti-aliasing o gap. Como es del mismo color del relleno, se funde visualmente.
+Stroke-width 3 is deliberately thick to cover any anti-aliasing or gap. Since it is the same color as the fill, it blends in visually.
 
 ---
 
 ## 9. State halos
 
-### 9.1 Propósito
+### 9.1 Purpose
 
-Cuando `shapeRendering === "geometricPrecision"`, los estados tienen un halo (sombra interior) que los separa visualmente.
+When `shapeRendering === "geometricPrecision"`, states have a halo (inner shadow) that visually separates them.
 
-### 9.2 Implementación
+### 9.2 Implementation
 
 ```typescript
 // 1. Path del halo: solo vértices en borde de mapa
@@ -417,22 +417,22 @@ const haloColor = d3.color(color).darker().hex();
 <path d="{halo}" stroke="{haloColor}" clip-path="url(#state-clip{index})" />
 ```
 
-El halo solo se dibuja donde el path del estado toca el borde del mapa.
+The halo is only drawn where the state's path touches the map edge.
 
 ---
 
 ## 10. Borders
 
-**Archivo**: `src/renderers/draw-borders.ts`
+**File**: `src/renderers/draw-borders.ts`
 
-### 10.1 Diferencia fundamental con getIsolines
+### 10.1 Fundamental difference from getIsolines
 
-`drawBorders` NO usa `getIsolines`. Usa un algoritmo separado que:
-1. Itera por celdas buscando pares (cellA, cellB) de distinto estado/provincia
-2. Para cada par, encuentra un vértice inicial en la frontera
-3. Camina el grafo de vértices con `getVerticesLine()` (similar a `connectVertices` pero local)
-4. Output: `M x0,y0 x1,y1 x2,y2 ...` (segmentos rectos, sin suavizado)
-5. Marca pares celda-estado como checked para no duplicar
+`drawBorders` does NOT use `getIsolines`. It uses a separate algorithm that:
+1. Iterates over cells looking for pairs (cellA, cellB) of different states/provinces
+2. For each pair, finds an initial vertex on the border
+3. Walks the vertex graph with `getVerticesLine()` (similar to `connectVertices` but local)
+4. Output: `M x0,y0 x1,y1 x2,y2 ...` (straight segments, no smoothing)
+5. Marks cell-state pairs as checked to avoid duplication
 
 ### 10.2 Output
 
@@ -441,21 +441,21 @@ select("#stateBorders").append("path").attr("d", statePath.join(" "));
 select("#provinceBorders").append("path").attr("d", provincePath.join(" "));
 ```
 
-Sin atributos stroke explícitos en el renderer — se heredan de CSS `#borders { stroke-linejoin: round; fill: none; }` y defaults de SVG. El color/width se setea dinámicamente desde el editor.
+No explicit stroke attributes in the renderer — they are inherited from CSS `#borders { stroke-linejoin: round; fill: none; }` and SVG defaults. The color/width is set dynamically from the editor.
 
-### 10.3 Estilo visual (desde editor)
+### 10.3 Visual style (from editor)
 
-- State borders: stroke `#000`, stroke-width `1.2` (cuando se resalta)
-- Province borders: stroke `#999`, stroke-width `0.5-1.0` (defaults SVG)
-- No hay suavizado — las líneas siguen las aristas de Voronoi directamente
+- State borders: stroke `#000`, stroke-width `1.2` (when highlighted)
+- Province borders: stroke `#999`, stroke-width `0.5-1.0` (SVG defaults)
+- No smoothing — the lines follow the Voronoi edges directly
 
 ---
 
 ## 11. Heightmap contours
 
-**Archivo**: `src/renderers/draw-heightmap.ts`
+**File**: `src/renderers/draw-heightmap.ts`
 
-### 11.1 Algoritmo
+### 11.1 Algorithm
 
 ```
 for each unique height h in sorted cells:
@@ -473,20 +473,20 @@ for each unique height h in sorted cells:
   // lineGen con curveBasisClosed por defecto
 ```
 
-### 11.2 Configuración
+### 11.2 Configuration
 
-Dos grupos SVG separados:
-- `#oceanHeights`: alturas < 20 (océano), render condicional
-- `#landHeights`: alturas >= 20 (tierra), siempre renderiza
+Two separate SVG groups:
+- `#oceanHeights`: heights < 20 (ocean), conditional render
+- `#landHeights`: heights >= 20 (land), always renders
 
-Atributos configurables vía DOM:
-- `skip`: cada N niveles de altura (default 1)
-- `relax`: simplificación (stride, default 0)
-- `curve`: tipo de curva D3 (default `curveBasisClosed`)
-- `scheme`: esquema de color
-- `terracing`: sombra de terracing (desplazamiento + darker)
+Configurable attributes via DOM:
+- `skip`: every N height levels (default 1)
+- `relax`: simplification (stride, default 0)
+- `curve`: D3 curve type (default `curveBasisClosed`)
+- `scheme`: color scheme
+- `terracing`: terracing shadow (offset + darker)
 
-### 11.3 Renderizado
+### 11.3 Rendering
 
 ```typescript
 // Paths se agrupan por altura y se renderizan como rect base + paths coloreados
@@ -498,17 +498,17 @@ if (terracing) {
 group.append("path").attr("d", path).attr("fill", fillColor);
 ```
 
-El terracing da efecto 3D desplazando una copia más oscura 0.7px X, 1.4px Y.
+Terracing gives a 3D effect by offsetting a darker copy by 0.7px in X, 1.4px in Y.
 
 ---
 
 ## 12. Ocean bathymetric layers
 
-**Archivo**: `src/renderers/ocean-layers.ts`
+**File**: `src/renderers/ocean-layers.ts`
 
-### 12.1 Algoritmo
+### 12.1 Algorithm
 
-Similar a heightmap contours pero para capas de temperatura oceánica (`cells.t`):
+Similar to heightmap contours but for oceanic temperature layers (`cells.t`):
 
 ```
 for each cell with t < 0 (oceánica):
@@ -526,20 +526,20 @@ for each cell with t < 0 (oceánica):
   append path con fill="#ecf2f9" y fill-opacity = 0.4/limits.length
 ```
 
-### 12.2 Diferencias con heightmap
+### 12.2 Differences from heightmap
 
-- layers.js llama `getIsolines(pack, cellId => cells.t[cellId], { polygons: true })` para obtener los polígonos
-- Usa `curveBasisClosed` por defecto (vía `lineGen`)
-- Opacidad total `0.4 / num_limits` distribuida entre las capas
-- No tiene water gap ni halos
+- layers.js calls `getIsolines(pack, cellId => cells.t[cellId], { polygons: true })` to obtain the polygons
+- Uses `curveBasisClosed` by default (via `lineGen`)
+- Total opacity `0.4 / num_limits` distributed among the layers
+- No water gap or halos
 
 ---
 
 ## 13. River smoothing
 
-**Archivo**: `src/generators/river-generator.ts:426-455`
+**File**: `src/generators/river-generator.ts:426-455`
 
-### 13.1 Catmull-Rom para banks
+### 13.1 Catmull-Rom for banks
 
 ```typescript
 this.lineGen.curve(curveCatmullRom.alpha(0.1));
@@ -547,11 +547,11 @@ this.lineGen.curve(curveCatmullRom.alpha(0.1));
 // Left bank: reverse of lineGen(riverPointsLeft)
 ```
 
-`alpha=0.1` → muy cercano a uniform Catmull-Rom (α=0), produce curvas más suaves que centrípeto (α=0.5).
+`alpha=0.1` → very close to uniform Catmull-Rom (α=0), produces smoother curves than centripetal (α=0.5).
 
 ### 13.2 Meander + relaxAcuteAngles
 
-**Archivo**: `src/utils/pathUtils.ts:370-506`
+**File**: `src/utils/pathUtils.ts:370-506`
 
 ```
 meander(cells, cellPositions, options):
@@ -575,57 +575,57 @@ meander(cells, cellPositions, options):
     relaxAcuteAngles(points, anchorIndices)
 ```
 
-`relaxAcuteAngles` itera sobre los puntos de control y refleja aquellos que forman ángulos agudos (< 60°) a través de la línea base anchor-to-anchor.
+`relaxAcuteAngles` iterates over the control points and reflects those forming acute angles (< 60°) across the anchor-to-anchor baseline.
 
-### 13.3 Diferencia con coastline path
+### 13.3 Difference from the coastline path
 
-Mientras el coastline usa **centripetal Catmull-Rom** (α=0.5, implícito en la fórmula de Hermite con división por 8), los ríos usan **uniform Catmull-Rom** (α=0.1 ~ α=0). El coastline prioriza que la curva pase cerca de los puntos fractalizados; los ríos priorizan suavidad general.
+While the coastline uses **centripetal Catmull-Rom** (α=0.5, implicit in the Hermite formula with division by 8), rivers use **uniform Catmull-Rom** (α=0.1 ~ α=0). The coastline prioritizes the curve passing close to the fractalized points; rivers prioritize overall smoothness.
 
 ---
 
-## 14. Curvas disponibles en Azgaar
+## 14. Curves available in Azgaar
 
-### 14.1 Catálogo D3 completo
+### 14.1 Complete D3 catalog
 
-Desde `draw-heightmap.ts:27-45`, Azgaar expone TODAS las curvas D3:
+From `draw-heightmap.ts:27-45`, Azgaar exposes ALL the D3 curves:
 
-| Curva | Tipo | Uso en Azgaar |
+| Curve | Type | Use in Azgaar |
 |-------|------|---------------|
-| `curveBasis` | B-spline abierto | — |
-| `curveBasisClosed` | B-spline cerrado | **Default** para heightmap, temperature, markets, ocean, isofeatures |
-| `curveBasisOpen` | B-spline abierto | — |
-| `curveCardinal` | Cardinal abierto | — |
-| `curveCardinalClosed` | Cardinal cerrado | — |
-| `curveCardinalOpen` | Cardinal abierto | — |
-| `curveCatmullRom` | Catmull-Rom abierto | Rivers (α=0.1) |
-| `curveCatmullRomClosed` | Catmull-Rom cerrado | — |
-| `curveCatmullRomOpen` | Catmull-Rom abierto | — |
-| `curveLinear` | Segmentos rectos | User selectable |
-| `curveLinearClosed` | Segmentos rectos cerrado | — |
-| `curveMonotoneX` | Monotono X | — |
-| `curveMonotoneY` | Monotono Y | — |
-| `curveNatural` | Spline natural | — |
-| `curveStep` | Escalonada | — |
-| `curveStepAfter` | Escalonada post | — |
-| `curveStepBefore` | Escalonada pre | — |
+| `curveBasis` | Open B-spline | — |
+| `curveBasisClosed` | Closed B-spline | **Default** for heightmap, temperature, markets, ocean, isofeatures |
+| `curveBasisOpen` | Open B-spline | — |
+| `curveCardinal` | Open Cardinal | — |
+| `curveCardinalClosed` | Closed Cardinal | — |
+| `curveCardinalOpen` | Open Cardinal | — |
+| `curveCatmullRom` | Open Catmull-Rom | Rivers (α=0.1) |
+| `curveCatmullRomClosed` | Closed Catmull-Rom | — |
+| `curveCatmullRomOpen` | Open Catmull-Rom | — |
+| `curveLinear` | Straight segments | User selectable |
+| `curveLinearClosed` | Closed straight segments | — |
+| `curveMonotoneX` | Monotone X | — |
+| `curveMonotoneY` | Monotone Y | — |
+| `curveNatural` | Natural spline | — |
+| `curveStep` | Stepped | — |
+| `curveStepAfter` | Stepped after | — |
+| `curveStepBefore` | Stepped before | — |
 
-### 14.2 Curva custom: coastline hybrid
+### 14.2 Custom curve: coastline hybrid
 
-La `buildCoastlinePath` es una curva **híbrida custom** que NO existe en D3: combina B-spline (spans suaves) con Catmull-Rom centrípeto (spans fractalizados) según si el span original fue subdividido o no.
+`buildCoastlinePath` is a **custom hybrid** curve that does NOT exist in D3: it combines B-spline (smooth spans) with centripetal Catmull-Rom (fractalized spans) depending on whether the original span was subdivided or not.
 
 ---
 
-## 15. Resumen estilos SVG
+## 15. SVG styles summary
 
-| Elemento | Fill | Stroke | Stroke-width | Opacidad | Filter |
+| Element | Fill | Stroke | Stroke-width | Opacity | Filter |
 |----------|------|--------|-------------|----------|--------|
 | Coastline (sea island) | none | `#1f3846` | 0.7 | 0.5 | `url(#dropShadow)` |
 | Coastline (lake island) | none | `#7c8eaf` | 0.35 | 1 | none |
-| Lakes | color grupo | — | — | 0.5-1 | — |
-| Heightmap contours | color scheme | — | — | 1 | terracing desplazado |
+| Lakes | group color | — | — | 0.5-1 | — |
+| Heightmap contours | color scheme | — | — | 1 | offset terracing |
 | State fill | `states[index].color` | — | — | 1 | — |
 | State water gap | none | `states[index].color` | 3 | 1 | — |
-| State halo | — | `color.darker()` | SVG default | — | clip-path al estado |
+| State halo | — | `color.darker()` | SVG default | — | clip-path to the state |
 | Culture fill | `cultures[index].color` | — | — | 1 | — |
 | Religion fill | `religions[index].color` | — | — | 1 | — |
 | Province fill | `provinces[index].color` | — | — | 1 | — |
@@ -637,44 +637,44 @@ La `buildCoastlinePath` es una curva **híbrida custom** que NO existe en D3: co
 
 ---
 
-## 16. Equivalencias Voronia
+## 16. Voronia equivalences
 
-| Sistema Azgaar | Estado Voronia | Archivo Voronia |
+| Azgaar system | Voronia status | Voronia file |
 |----------------|---------------|-----------------|
-| `simplify(points, 0.3)` | No implementado (features se usan raw) | `mesh.rs` / nuevo |
-| `clipPoly(points, W, H, 1)` | Implementado en `mesh.rs` (clip a bbox) | `mesh.rs` |
-| `fractalizeCoastline()` | **Parcial**: fractal midpoint displacement sí, roughness profile sí | `coastline.rs` |
-| `buildCoastlinePath()` hybrid | **Parcial**: Catmull-Rom sí, faltan spans smooth + B-spline | `coastline.rs` |
-| Coastline stroke (línea) | **No implementado**: solo hay relleno | nuevo `coastline_stroke.rs` |
-| `connectVertices()` | **No implementado**: núcleo del isoline engine | nuevo `isoline.rs` |
-| `getIsolines()` | **No implementado**: envoltura que itera celdas | nuevo `isoline.rs` |
-| `getBorderPath()` water gap | **Parcial**: `water_gap.rs` implementa detección de celdas costa | `water_gap.rs` |
-| `getFillPath()` | No implementado (para relleno B-spline suavizado) | nuevo |
-| State/culture/religion fills + water gap | **Hecho**: `state_layer.rs` etc. con `append_water_gap` | varios |
-| State halos | **No implementado** | nuevo |
-| Borders cell-to-cell | **Hecho**: `border.rs` con segmentos rectos | `border.rs` |
-| Heightmap contours | **Parcial**: `contour.rs` usa marching squares sobre grid, no sobre Voronoi | `contour.rs` |
-| Ocean bathymetric rings | **No implementado** | nuevo |
-| River Catmull-Rom α=0.1 | **Hecho**: `river.rs` usa `build_river_mesh` con meander + ancho | `river.rs` |
-| River meander + relax | **Hecho**: port exacto en `vor-sim` | `vor-sim/src/river/meander.rs` |
+| `simplify(points, 0.3)` | Not implemented (features are used raw) | `mesh.rs` / new |
+| `clipPoly(points, W, H, 1)` | Implemented in `mesh.rs` (bbox clip) | `mesh.rs` |
+| `fractalizeCoastline()` | **Partial**: fractal midpoint displacement yes, roughness profile yes | `coastline.rs` |
+| `buildCoastlinePath()` hybrid | **Partial**: Catmull-Rom yes, missing smooth spans + B-spline | `coastline.rs` |
+| Coastline stroke (line) | **Not implemented**: only fill exists | new `coastline_stroke.rs` |
+| `connectVertices()` | **Not implemented**: core of the isoline engine | new `isoline.rs` |
+| `getIsolines()` | **Not implemented**: wrapper that iterates cells | new `isoline.rs` |
+| `getBorderPath()` water gap | **Partial**: `water_gap.rs` implements coastline cell detection | `water_gap.rs` |
+| `getFillPath()` | Not implemented (for smoothed B-spline fill) | new |
+| State/culture/religion fills + water gap | **Done**: `state_layer.rs` etc. with `append_water_gap` | several |
+| State halos | **Not implemented** | new |
+| Borders cell-to-cell | **Done**: `border.rs` with straight segments | `border.rs` |
+| Heightmap contours | **Partial**: `contour.rs` uses marching squares over a grid, not over Voronoi | `contour.rs` |
+| Ocean bathymetric rings | **Not implemented** | new |
+| River Catmull-Rom α=0.1 | **Done**: `river.rs` uses `build_river_mesh` with meander + width | `river.rs` |
+| River meander + relax | **Done**: exact port in `vor-sim` | `vor-sim/src/river/meander.rs` |
 
-### 16.1 Lo que más impacto visual daría (orden recomendado)
+### 16.1 What would give the most visual impact (recommended order)
 
-1. **connectVertices + getIsolines** — destraba borders suaves, heightmap contours correctos, ocean layers, y reemplaza el marching squares actual
-2. **buildCoastlinePath híbrido** — reemplaza el Catmull-Rom simple por B-spline + Catmull-Rom según span
-3. **Coastline stroke** — la línea de costa sobre el relleno de tierra
-4. **State halos** — separación visual entre estados
-5. **Ocean bathymetric rings** — profundidad oceánica
+1. **connectVertices + getIsolines** — unlocks smooth borders, correct heightmap contours, ocean layers, and replaces the current marching squares
+2. **Hybrid buildCoastlinePath** — replaces the simple Catmull-Rom with B-spline + Catmull-Rom per span
+3. **Coastline stroke** — the coastline line over the land fill
+4. **State halos** — visual separation between states
+5. **Ocean bathymetric rings** — oceanic depth
 
-### 16.2 Nota sobre B-spline en wgpu
+### 16.2 Note on B-spline in wgpu
 
-D3 genera curvas B-spline como paths SVG (comandos Q/C). En wgpu no hay path renderer nativo. Opciones:
-- **Opción A (CPU)**: Teselar los paths a triángulos en CPU antes de subir a GPU
-- **Opción B (GPU)**: Shader geometry que evalúa B-spline/Catmull-Rom en vertex shader
-- **Opción C (lyon)**: Lyon tiene `tessellate_path` que soporta curvas Bezier → triángulos
+D3 generates B-spline curves as SVG paths (Q/C commands). In wgpu there is no native path renderer. Options:
+- **Option A (CPU)**: Tessellate the paths into triangles on the CPU before uploading to the GPU
+- **Option B (GPU)**: Geometry shader that evaluates B-spline/Catmull-Rom in the vertex shader
+- **Option C (lyon)**: Lyon has `tessellate_path`, which supports Bezier curves → triangles
 
-Voronia ya usa lyon para teselación, así que la Opción C es la más natural: generar paths SVG (comandos M/Q/C) y teselarlos con lyon.
+Voronia already uses lyon for tessellation, so Option C is the most natural: generate SVG paths (M/Q/C commands) and tessellate them with lyon.
 
 ---
 
-*Fin del análisis — 30 jul 2026*
+*End of analysis — July 30, 2026*

@@ -1,29 +1,29 @@
-//! Coordenadas del mapa en proyección lat/lon (slot `[2]`).
+//! Map coordinates in lat/lon projection (slot `[2]`).
 //!
-//! Ejemplo del Brample: `{"latT":180,"latN":90,"latS":-90,"lonL":-180,"lonR":180,...}`.
-//! Define la proyección geográfica del canvas. Preservaropaco los sub-campos que
-//! Azgaar trae pero que Voronia v1 no renderiza (latBands, etc.).
+//! Brample example: `{"latT":180,"latN":90,"latS":-90,"lonL":-180,"lonR":180,...}`.
+//! Defines the geographic projection of the canvas. Preserve opaque the sub-fields
+//! that Azgaar carries but Voronia v1 does not render (latBands, etc.).
 
-/// Coordenadas geográficas del mapa (slot `[2]`).
+/// Geographic coordinates of the map (slot `[2]`).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct MapCoordinates {
-    /// Latitud total (rango latitudinal del canvas).
+    /// Total latitude (latitudinal range of the canvas).
     #[serde(default)]
     pub lat_t: f32,
-    /// Latitud del borde norte.
+    /// Latitude of the northern edge.
     #[serde(default)]
     pub lat_n: f32,
-    /// Latitud del borde sur.
+    /// Latitude of the southern edge.
     #[serde(default)]
     pub lat_s: f32,
-    /// Longitud del borde izquierdo.
+    /// Longitude of the left edge.
     #[serde(default)]
     pub lon_l: f32,
-    /// Longitud del borde derecho.
+    /// Longitude of the right edge.
     #[serde(default)]
     pub lon_r: f32,
-    /// Sub-json opaco de opciones avanzadas (`latBands` etc.) que Azgaar usa para
-    /// ajustar la proyección por banda. Voronia v1 no las interpreta; las preserva.
+    /// Opaque sub-json of advanced options (`latBands` etc.) that Azgaar uses to
+    /// adjust the projection per band. Voronia v1 does not interpret them; it preserves them.
     #[serde(default, with = "crate::serde_json_string")]
     pub extras: serde_json::Value,
 }

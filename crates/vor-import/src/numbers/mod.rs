@@ -1,10 +1,11 @@
-//! Helpers numéricos de Azgaar traducidos a Rust, bit-exactos.
+//! Azgaar numeric helpers ported to Rust, bit-exact.
 //!
-//! Cubre solo lo que la Fase 1 (regeneración de geometría + parser `.map`) usa.
-//! El resto (`rand`, `P`, `Pint`, `gauss`, `ra`, `rw`, `biased`, `getNumberInRange`)
-//! es propio de Fase 7 (generación procedural desde seed pura) y **no** se porta acá.
+//! Covers only what Phase 1 (geometry regeneration + `.map` parser) uses.
+//! The rest (`rand`, `P`, `Pint`, `gauss`, `ra`, `rw`, `biased`, `getNumberInRange`)
+//! belongs to Phase 7 (procedural generation from a pure seed) and is **not**
+//! ported here.
 
-/// Redondeo a `d` decimales con el mismo comportamiento que `rn(v, d)` de Azgaar
+/// Rounds to `d` decimals with the same behavior as Azgaar's `rn(v, d)`
 /// (`src/utils/numberUtils.ts:7`):
 /// ```ts
 /// export const rn = (v: number, d: number = 0) => {
@@ -13,26 +14,26 @@
 /// };
 /// ```
 ///
-/// Crítico: `Math.round` de JS redondea ties (`.5` exactos) **hacia +Infinity**, no
-/// round-half-away-from-zero. Diferencias con `f64::round` de Rust:
-/// - `JS Math.round(+0.5)=1`, `Rust (+0.5).round()=1` — igual.
-/// - `JS Math.round(-0.5)=-0`, `Rust (-0.5).round()=-1` — DISTINTO.
-/// - `JS Math.round(-1.5)=-1`, `Rust (-1.5).round()=-2` — DISTINTO.
+/// Critical: JS `Math.round` rounds ties (exact `.5`) **towards +Infinity**, not
+/// round-half-away-from-zero. Differences from Rust's `f64::round`:
+/// - `JS Math.round(+0.5)=1`, `Rust (+0.5).round()=1` — same.
+/// - `JS Math.round(-0.5)=-0`, `Rust (-0.5).round()=-1` — DIFFERENT.
+/// - `JS Math.round(-1.5)=-1`, `Rust (-1.5).round()=-2` — DIFFERENT.
 ///
-/// Para `getJitteredGrid` todos los valores `x + jitter` con `x > 0` son positivos
-/// en la práctica (ver análisis en `docs/fase-0-investigacion.md` §6.5), así que
-/// un flag ingenuo positivo funciona. Pero `rn(v, d)` se usa en otros puntos de
-/// Azgaar (p.ej. `reGraph` punto medio costero `rn((x + ex)/2, 1)`), también en
-/// coordenadas positivas — en la práctica no se cruza con negativos puros. Aun así,
-/// implementamos el `Math.round` exacto para no tener bugs latentes en otros flows
-/// que se porteen en Fase 7.
+/// For `getJitteredGrid`, all `x + jitter` values with `x > 0` are positive in
+/// practice (see the analysis in `docs/fase-0-investigacion.md` §6.5), so a naive
+/// positive flag would work. But `rn(v, d)` is also used elsewhere in Azgaar
+/// (e.g. `reGraph` coastal midpoint `rn((x + ex)/2, 1)`), also on positive
+/// coordinates — in practice it never crosses purely negative values. Even so,
+/// we implement the exact `Math.round` to avoid latent bugs in other flows
+/// ported in Phase 7.
 #[inline]
 pub fn rn(v: f64, d: u32) -> f64 {
     let m = 10f64.powi(d as i32);
     js_math_round(v * m) / m
 }
 
-/// Réplica bit-exacta de `Math.round(x)` de ECMAScript.
+/// Bit-exact replica of ECMAScript `Math.round(x)`.
 ///
 /// Spec ES2025 §21.3.2.27: "Returns the Number value that is closest to x and is
 /// equal to a mathematical integer. If two Numbers are equally close, the one
@@ -40,16 +41,16 @@ pub fn rn(v: f64, d: u32) -> f64 {
 /// is returned; if two Number values are equally close, then **the one that is
 /// larger** (closer to +∞) is returned. If x is -0, returns -0."
 ///
-/// En la práctica eso es `floor(x + 0.5)` para todos los casos saexcepto por:
-/// - Tie negativo: `floor(-1.0 + 0.5) = floor(-0.5) = -1` ✓ (calza con ES).
-/// - Tie negativo entero + 0.5: `floor(-1.5 + 0.5) = floor(-1.0) = -1` ✓.
-/// - Para `x = -0.5`: `floor(-0.5 + 0.5) = floor(0.0) = 0` pero ES dice `-0`.
+/// In practice that is `floor(x + 0.5)` for all cases except:
+/// - Negative tie: `floor(-1.0 + 0.5) = floor(-0.5) = -1` ✓ (matches ES).
+/// - Negative integer + 0.5 tie: `floor(-1.5 + 0.5) = floor(-1.0) = -1` ✓.
+/// - For `x = -0.5`: `floor(-0.5 + 0.5) = floor(0.0) = 0` but ES says `-0`.
 ///
-/// La diferencia entre `0` y `-0` (signed zero) no afecta al resultado de
-/// `Math.round(...)/m` para nuestros usos (resulta en `+0` en lugar de `-0`, y
-/// todas las operaciones aritméticas subsiguientes dan idéntico resultado). Por
-/// eso implementamos como `floor(x + 0.5)`, sin distinguir signed zero — bit-exacto
-/// salvo el signo de la cero, que es irrelevante para las salidas que se comparan.
+/// The difference between `0` and `-0` (signed zero) does not affect the result
+/// of `Math.round(...)/m` for our uses (it yields `+0` instead of `-0`, and all
+/// subsequent arithmetic produces identical results). That is why we implement it
+/// as `floor(x + 0.5)` without distinguishing signed zero — bit-exact except for
+/// the sign of zero, which is irrelevant for the compared outputs.
 #[inline]
 fn js_math_round(x: f64) -> f64 {
     (x + 0.5_f64).floor()
@@ -62,15 +63,15 @@ mod tests {
     /// `rn(v, 0)` ≡ `Math.round(v)`.
     #[test]
     fn rn_zero_decimals_matches_js_math_round() {
-        // Vector confirmado contra JS: `node -e "console.log([0.5,1.5,2.5,-0.5,-1.5,-2.5,0.4999,0.5001,1.4999,1.5001].map(v=>Math.round(v)))"`
-        // = [1, 2, 3, -0, -1, -2, 0, 1, 1, 2]. El `-0` se vuelve `+0` en Rust
-        // (signed zero no propagado) — para este test asumimos behavior numérico,
-        // no bit-pattern del signed zero (no afecta a operaciones aritméticas).
+        // Vector confirmed against JS: `node -e "console.log([0.5,1.5,2.5,-0.5,-1.5,-2.5,0.4999,0.5001,1.4999,1.5001].map(v=>Math.round(v)))"`
+        // = [1, 2, 3, -0, -1, -2, 0, 1, 1, 2]. The `-0` becomes `+0` in Rust
+        // (signed zero is not propagated) — for this test we assume numeric
+        // behavior, not the signed-zero bit pattern (it does not affect arithmetic).
         let cases: &[(f64, i64)] = &[
             (0.5, 1),
             (1.5, 2),
             (2.5, 3),
-            (-0.5, 0), // JS da -0; Rust +0; numéricamente iguales.
+            (-0.5, 0), // JS gives -0; Rust +0; numerically equal.
             (-1.5, -1),
             (-2.5, -2),
             (0.4999, 0),
@@ -85,10 +86,10 @@ mod tests {
         }
     }
 
-    /// `rn(v, 2)` redondea a 2 decimales (caso típico de `getJitteredGrid`).
+    /// `rn(v, 2)` rounds to 2 decimals (typical `getJitteredGrid` case).
     #[test]
     fn rn_two_decimals() {
-        // Casos confirmados contra JS `rn`:
+        // Cases confirmed against JS `rn`:
         //   10.124 -> 10.12,  10.125 -> 10.13,  10.344 -> 10.34,  10.345 -> 10.35.
         assert_eq!(rn(10.124, 2), 10.12);
         assert_eq!(rn(10.125, 2), 10.13);
@@ -96,7 +97,7 @@ mod tests {
         assert_eq!(rn(10.345, 2), 10.35);
     }
 
-    /// `rn(v, 1)` redondea a 1 decimal (caso `reGraph` punto medio costero).
+    /// `rn(v, 1)` rounds to 1 decimal (`reGraph` coastal midpoint case).
     #[test]
     fn rn_one_decimal() {
         assert_eq!(rn(10.04, 1), 10.0);

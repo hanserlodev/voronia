@@ -76,7 +76,7 @@ pub fn resolve_depressions(pack: &Pack, h: &mut Vec<f32>) {
     }
 }
 
-/// Port de Azgaar Lakes.defineClimateData (lakes.ts:49-84)
+/// Port of Azgaar's Lakes.defineClimateData (lakes.ts:49-84)
 pub fn define_lake_climate(pack: &mut Pack, h: &[f32], grid: &Grid) {
     for feat in &mut pack.features {
         if feat.kind != FeatureType::Lake {
@@ -125,7 +125,7 @@ pub fn define_lake_climate(pack: &mut Pack, h: &[f32], grid: &Grid) {
     }
 }
 
-/// Port de Azgaar Lakes.detectCloseLakes (lakes.ts:87-126)
+/// Port of Azgaar's Lakes.detectCloseLakes (lakes.ts:87-126)
 pub fn detect_close_lakes(pack: &Pack, h: &[f32]) -> Vec<bool> {
     let mut closed = vec![false; pack.features.len()];
     for (fi, feat) in pack.features.iter().enumerate() {
@@ -140,7 +140,7 @@ pub fn detect_close_lakes(pack: &Pack, h: &[f32]) -> Vec<bool> {
         if max_h >= 99.0 {
             continue;
         }
-        // BFS desde lowest shoreline cell para ver si alcanza océano
+        // BFS from the lowest shoreline cell to see if it reaches the ocean
         let mut visited = vec![false; pack.cells.len()];
         let mut queue = std::collections::VecDeque::new();
         if let Some(&start) = feat.shoreline.iter().min_by(|&&a, &&b| {

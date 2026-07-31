@@ -1,37 +1,37 @@
-# Fase 1 — Regeneración de geometría + parser de datos
+# Phase 1 — Geometry regeneration + data parser
 
-> Salida consolidada de la Fase 1 del plan maestro (§23). Cierre: commit `8142d94` (25 jul 2026). Todo lo que sigue se obtuvo porteando bit-exacto los algoritmos de Azgaar (JS) a Rust y validando contra el `.map` real "Sorvik" (Azgaar 1.138.0, 24 jul 2026). Cuando se cierra la Fase 1, los checkboxes de §23 se tildan y este archivo queda como referencia congelada para Fase 2+.
+> Consolidated output of Phase 1 of the master plan (§23). Closing commit: `8142d94` (25 jul 2026). Everything that follows was obtained by porting Azgaar's algorithms (JS) to Rust bit-exact and validating against the real `.map` "Sorvik" (Azgaar 1.138.0, 24 jul 2026). When Phase 1 closes, the checkboxes of §23 are checked off and this file remains as a frozen reference for Phase 2+.
 
-## 0. Referencia de Azgaar (congelada para Fase 1)
+## 0. Azgaar reference (frozen for Phase 1)
 
-- **Repo clonado**: `/home/hans/Proyectos/azgaar-fmg/` (shallow `--depth 1`, commit `51d8e3e487a28995aac2304af57ad1ac4fbe3789`, 21 jul 2026).
-- **Versión declarada `package.json`**: `1.135.2`.
-- **Versión del header de Brample/Sorvik**: `1.138.0` — hay lag entre `package.json` y commit bump; la versión efectiva de referencia es **1.138.0**.
-- **.map de referencia para validación end-to-end**: `/home/hans/Descargas/Sorvik 2026-07-24-23-39.map` (5 MB, 47 slots, seed `279321909`, dim 937×945). **NO usar `XD.map` ni `Brample 2026-07-22-21-24.map`** (este último diverge en jitter — ver §4.1).
-- **Licencia**: MIT (idéntica a Voronia).
+- **Cloned repo**: `/home/hans/Proyectos/azgaar-fmg/` (shallow `--depth 1`, commit `51d8e3e487a28995aac2304af57ad1ac4fbe3789`, 21 jul 2026).
+- **Version declared in `package.json`**: `1.135.2`.
+- **Version of the Brample/Sorvik header**: `1.138.0` — there is a lag between `package.json` and the commit bump; the effective reference version is **1.138.0**.
+- **Reference `.map` for end-to-end validation**: `/home/hans/Descargas/Sorvik 2026-07-24-23-39.map` (5 MB, 47 slots, seed `279321909`, dim 937×945). **DO NOT use `XD.map` nor `Brample 2026-07-22-21-24.map`** (the latter diverges in jitter — see §4.1).
+- **License**: MIT (identical to Voronia's).
 
 ---
 
-## 1. Cronología de la sesión (commits por fecha)
+## 1. Session chronology (commits by date)
 
-| Commit | Fecha (CDT) | Título | Qué hizo |
+| Commit | Date (CDT) | Title | What it did |
 |---|---|---|---|
-| `3d688a0` | 24 jul 22:21 | `feat: initialize workspace` | Cargo workspace 8 crates vacíos + LICENSE/README/CONTRIBUTING/CODE_OF_CONDUCT/.gitignore |
-| `dc011e9` | 24 jul 22:21 | `chore: track .opencode/skills/` | `.gitignore` refinado (`.opencode/*` + `!.opencode/skills/`), `opencode.json` (español, compaction auto/prune/reserved=16000), tracking inicial de la skill |
-| `dd9d378` | 24 jul 22:43 | `feat(vor-core): World Data Model base` | Tipos puros SoA: `Grid`/`Pack`/`GridCells`/`PackCells`/`VoronoiVertices`/`Feature`/entidades/`Settings`/`MapHeader`/`MapCoordinates`/`World` + `CoreError`. Fix Cargo.toml workspace inheritance + resolver=2 |
-| `4d6dc5d` | 24 jul 22:49 | `docs(skill): actualizar status.md` | Fase 0 marcada COMPLETADA, progreso Fase 1 documentado, pendientes listados con paths Azgaar exactos |
-| `eaabd5e` | 24 jul 23:06 | `feat(vor-import/prng): port Alea@1.0.1` | `crates/vor-import/src/prng/alea.rs` — Alea bit-exacto (s0/s1/s2/c como f64, Mash replica exacta, `next_f64`/`next_u32`/`next_fract53`). Tests bit-exactos `tests/alea_bit_exact.rs` con fixture bits (`BigUint64Array` → strings decimal u64). Fixture referencia `tests/reference/alea-1.0.1.original.js` |
-| `482cdff` | 24 jul 23:19 | `feat(vor-import/numbers): porte rn(v,d)` | `crates/vor-import/src/numbers/mod.rs` — `rn(v, d) = floor(v*10^d + 0.5) / 10^d` replicando `Math.round` ties-hacia-+∞ (no away-from-zero). Tests vs Node |
-| `f30357f` | 24 jul 23:31 | `feat(vor-import/geometry): port place_points/get_jittered_grid/get_boundary_points` | `crates/vor-import/src/geometry/mod.rs` — `place_points(gw,gh,cells,seed)`, `get_boundary_points`, `get_jittered_grid` (fila-mayor, x-interno, jitter=radius*0.9, `rn(.,2)`, clamp). Test `place_points_brample_sizing_matches` + `tests/grid_bit_exact.rs` self-reference. **Hallazgo**: divergencia vs Brample real (repo ≠ build prod) — ver §4.1 |
-| `26cb774` | 24 jul 23:47 | `docs(skill): anotar divergencia Brample` | `status.md`: repo clonado produce puntos distintos vs Brample con mismo seed; Hans generará nuevo .map desde azgaar.github.io (master prod) |
-| `d441f4e` | 25 jul 00:47 | `feat(vor-import/geometry): port delaunator@5.1.0` | `crates/vor-import/src/geometry/delaunay.rs` — porte manual 1-a-1 de `delaunator@5.1.0` (incluye robust predicates Shewchuk inline). Crate `delaunator=1.1` descartado: divergencia 6280 `triangles` / 12145 `halfedges` sobre 10k pts. Tests bit-exactos `tests/delaunay_bit_exact.rs` con fixture `tests/reference/delaunay_grid_*_selfref.json` (162K líneas) generado por `generate_delaunay_fixture.js` |
-| `02b1f22` | 25 jul 20:50 | `feat(vor-import/geometry): port Voronoi class` | `crates/vor-import/src/geometry/voronoi.rs` — `calculate_voronoi`, `circumcenter` con `f64::floor()` (replica `Math.floor`), `edgesAroundPoint` cap 20 half-edges, helpers `triangle_of_edge`/`next_halfedge`/etc expuestos `pub fn` en `delaunay.rs`. `circumcenter` usa `(1/D)*numerator` (no `numerator/D`) para preservar doble redondeo f64. Test bit-exacto `tests/voronoi_bit_exact.rs` con fixture `voronoi_grid_2000x2000_c10k_seed_861039636_selfref.json` (5.2MB): 0 mismatches en 10k cells + 20198 triángulos |
-| `d70dc1e` | 25 jul 21:49 | `feat(vor-import/regraph): port reGraph` | `crates/vor-import/src/regraph.rs` — `re_graph(...)`: descartes (`height<20` no-costero, `type=-2` con `i%4==0` o feature lake), puntos extra costeros (`i>e`, mismo tipo, `dist>=spacing`, punto medio `rn(.,1)`), segundo `calculateVoronoi`. Area via shoelace (`polygon_area_signed` replicando `d3-polygon@3.0.1`). Truncation `min(area, 65535.0) as u16` replicando `createTypedArray({maxValue:65535}).map(...)`. API: `re_graph() -> (Pack, Vec<[f64;2]>)`. Conversión `Voronoi`→`VoronoiVertices` (-1 para EMPTY). Tests unitarios + bit-exacto `tests/regraph_bit_exact.rs` con fixture synthetic `h=50 t=2` (`regraph_h50_t2_grid_2000x2000_c10k_seed_861039636_selfref.json`, 4MB): 0 mismatches en 10k pack cells + 20198 triángulos |
-| `8142d94` | 25 jul 23:46 | `feat(vor-import/mapfile): .map parser raw + Loader::load` | Parser completo slot-by-slot + `Loader::load` orquestador. 41 tests workspace, clippy+fmt clean. **Fase 1 cierra** |
+| `3d688a0` | 24 jul 22:21 | `feat: initialize workspace` | Cargo workspace of 8 empty crates + LICENSE/README/CONTRIBUTING/CODE_OF_CONDUCT/.gitignore |
+| `dc011e9` | 24 jul 22:21 | `chore: track .opencode/skills/` | Refined `.gitignore` (`.opencode/*` + `!.opencode/skills/`), `opencode.json` (Spanish, compaction auto/prune/reserved=16000), initial skill tracking |
+| `dd9d378` | 24 jul 22:43 | `feat(vor-core): World Data Model base` | Pure SoA types: `Grid`/`Pack`/`GridCells`/`PackCells`/`VoronoiVertices`/`Feature`/entities/`Settings`/`MapHeader`/`MapCoordinates`/`World` + `CoreError`. Fix Cargo.toml workspace inheritance + resolver=2 |
+| `4d6dc5d` | 24 jul 22:49 | `docs(skill): actualizar status.md` | Phase 0 marked COMPLETED, Phase 1 progress documented, pending items listed with exact Azgaar paths |
+| `eaabd5e` | 24 jul 23:06 | `feat(vor-import/prng): port Alea@1.0.1` | `crates/vor-import/src/prng/alea.rs` — bit-exact Alea (s0/s1/s2/c as f64, exact Mash replica, `next_f64`/`next_u32`/`next_fract53`). Bit-exact tests `tests/alea_bit_exact.rs` with bit fixtures (`BigUint64Array` → decimal u64 strings). Reference fixture `tests/reference/alea-1.0.1.original.js` |
+| `482cdff` | 24 jul 23:19 | `feat(vor-import/numbers): porte rn(v,d)` | `crates/vor-import/src/numbers/mod.rs` — `rn(v, d) = floor(v*10^d + 0.5) / 10^d` replicating `Math.round` ties-toward-+∞ (not away-from-zero). Tests vs Node |
+| `f30357f` | 24 jul 23:31 | `feat(vor-import/geometry): port place_points/get_jittered_grid/get_boundary_points` | `crates/vor-import/src/geometry/mod.rs` — `place_points(gw,gh,cells,seed)`, `get_boundary_points`, `get_jittered_grid` (row-major, x-inner, jitter=radius*0.9, `rn(.,2)`, clamp). Test `place_points_brample_sizing_matches` + `tests/grid_bit_exact.rs` self-reference. **Finding**: divergence vs real Brample (repo ≠ prod build) — see §4.1 |
+| `26cb774` | 24 jul 23:47 | `docs(skill): anotar divergencia Brample` | `status.md`: the cloned repo produces different points vs Brample with the same seed; Hans will generate a new `.map` from azgaar.github.io (prod master) |
+| `d441f4e` | 25 jul 00:47 | `feat(vor-import/geometry): port delaunator@5.1.0` | `crates/vor-import/src/geometry/delaunay.rs` — manual 1-to-1 port of `delaunator@5.1.0` (includes inline Shewchuk robust predicates). Crate `delaunator=1.1` discarded: 6280 `triangles` / 12145 `halfedges` divergence over 10k pts. Bit-exact tests `tests/delaunay_bit_exact.rs` with fixture `tests/reference/delaunay_grid_*_selfref.json` (162K lines) generated by `generate_delaunay_fixture.js` |
+| `02b1f22` | 25 jul 20:50 | `feat(vor-import/geometry): port Voronoi class` | `crates/vor-import/src/geometry/voronoi.rs` — `calculate_voronoi`, `circumcenter` with `f64::floor()` (replicates `Math.floor`), `edgesAroundPoint` cap of 20 half-edges, helpers `triangle_of_edge`/`next_halfedge`/etc exposed as `pub fn` in `delaunay.rs`. `circumcenter` uses `(1/D)*numerator` (not `numerator/D`) to preserve double f64 rounding. Bit-exact test `tests/voronoi_bit_exact.rs` with fixture `voronoi_grid_2000x2000_c10k_seed_861039636_selfref.json` (5.2MB): 0 mismatches in 10k cells + 20198 triangles |
+| `d70dc1e` | 25 jul 21:49 | `feat(vor-import/regraph): port reGraph` | `crates/vor-import/src/regraph.rs` — `re_graph(...)`: discards (`height<20` non-coastal, `type=-2` with `i%4==0` or lake feature), extra coastal points (`i>e`, same type, `dist>=spacing`, midpoint `rn(.,1)`), second `calculateVoronoi`. Area via shoelace (`polygon_area_signed` replicating `d3-polygon@3.0.1`). Truncation `min(area, 65535.0) as u16` replicating `createTypedArray({maxValue:65535}).map(...)`. API: `re_graph() -> (Pack, Vec<[f64;2]>)`. Conversion `Voronoi`→`VoronoiVertices` (-1 for EMPTY). Unit tests + bit-exact `tests/regraph_bit_exact.rs` with synthetic fixture `h=50 t=2` (`regraph_h50_t2_grid_2000x2000_c10k_seed_861039636_selfref.json`, 4MB): 0 mismatches in 10k pack cells + 20198 triangles |
+| `8142d94` | 25 jul 23:46 | `feat(vor-import/mapfile): .map parser raw + Loader::load` | Full slot-by-slot parser + `Loader::load` orchestrator. 41 workspace tests, clippy+fmt clean. **Phase 1 closes** |
 
 ---
 
-## 2. Arquitectura del parser (`vor-import::mapfile`)
+## 2. Parser architecture (`vor-import::mapfile`)
 
 ```
 crates/vor-import/src/mapfile/
@@ -39,65 +39,65 @@ crates/vor-import/src/mapfile/
 ├── raw.rs          // bytes → RawMap { slots: Vec<String> }
 ├── header.rs       // slots [0]/[1]/[2] → MapHeader, Settings, MapCoordinates
 ├── cells.rs        // slot [6] + [7]-[11] + [16]-[27]/[36]/[40]/[44] → GridCells, PackCells
-├── catalogs.rs     // slots [3]/[4]/[12]-[15]/[29]-[46] + [31] → entidades + namebases
+├── catalogs.rs     // slots [3]/[4]/[12]-[15]/[29]-[46] + [31] → entities + namebases
 └── loader.rs       // Loader::load(&RawMap) -> LoadResult { world, pack_pts_f64 }
 ```
 
-### 2.1 `raw.rs` — Parser de bytes
+### 2.1 `raw.rs` — Bytes parser
 
-- **Entrada**: `&[u8]` (archivo `.map` crudo).
-- **Detección gzip opcional**: intenta parsear como texto; si falla detecta magic bytes gzip (`0x1f 0x8b`) y descomprime con `flate2::read::GzDecoder`.
-- **SVG CRLF rescue**: el slot `[5]` contiene SVG serializado con `\r\n` internos. El parser Azgaar (`load.ts:178-186`) cambia `\r\n` por `\n` *solo dentro del bloque `<svg id="map" ...</svg>`* antes de hacer split global por `\r\n`. Replicado: `rescue_svg_crlf(bytes)` → `replace_between(svg_start, svg_end, b"\r\n", b"\n")`.
-- **Split**: `String::from_utf8` + `split("\r\n")` → `Vec<String>` (slots). 5 tests unitarios.
+- **Input**: `&[u8]` (raw `.map` file).
+- **Optional gzip detection**: tries to parse as text; if it fails, detects gzip magic bytes (`0x1f 0x8b`) and decompresses with `flate2::read::GzDecoder`.
+- **SVG CRLF rescue**: slot `[5]` contains serialized SVG with internal `\r\n`. Azgaar's parser (`load.ts:178-186`) replaces `\r\n` with `\n` *only inside the `<svg id="map" ...</svg>` block* before doing the global split by `\r\n`. Replicated: `rescue_svg_crlf(bytes)` → `replace_between(svg_start, svg_end, b"\r\n", b"\n")`.
+- **Split**: `String::from_utf8` + `split("\r\n")` → `Vec<String>` (slots). 5 unit tests.
 
 ### 2.2 `header.rs` — Slots `[0]`, `[1]`, `[2]`
 
-| Slot | Tipo | Detalles |
+| Slot | Type | Details |
 |---|---|---|
-| `[0]` | `MapHeader` | 7 campos pipe-delimited: `version\|license\|date\|seed\|graphWidth\|graphHeight\|mapId` |
-| `[1]` | `Settings` | 27 campos pipe-delimited; `[19]` = `options` (JSON opaco string), `[20]` = `mapName`, `[21]` = `hideLabels`, `[22]` = `stylePreset`, `[23]` = `rescaleLabels`, `[24]` = `urbanDensity`, `[26]` = `growthRate` |
-| `[2]` | `MapCoordinates` | JSON con `latT/latN/latS/lonW/lonE` (Azgaar usa `lonW`/`lonE`, no `lonL`/`lonR`; parser acepta ambos) |
+| `[0]` | `MapHeader` | 7 pipe-delimited fields: `version\|license\|date\|seed\|graphWidth\|graphHeight\|mapId` |
+| `[1]` | `Settings` | 27 pipe-delimited fields; `[19]` = `options` (opaque JSON string), `[20]` = `mapName`, `[21]` = `hideLabels`, `[22]` = `stylePreset`, `[23]` = `rescaleLabels`, `[24]` = `urbanDensity`, `[26]` = `growthRate` |
+| `[2]` | `MapCoordinates` | JSON with `latT/latN/latS/lonW/lonE` (Azgaar uses `lonW`/`lonE`, not `lonL`/`lonR`; the parser accepts both) |
 
-4 tests unitarios.
+4 unit tests.
 
-### 2.3 `cells.rs` — Atributos de celdas (grid + pack)
+### 2.3 `cells.rs` — Cell attributes (grid + pack)
 
 - **Slot `[6]`** (`gridGeneral` JSON): `spacing`, `cellsX`, `cellsY`, `cellsDesired`, `points: [[f64,f64]]`, `boundary: [[f64,f64]]`, `features: [...]`.
 - **Slots `[7]`–`[11]`** (grid.cells CSV TypedArrays):
   - `[7]` `h` (height) → `Uint8` → `Vec<u8>`
-  - `[8]` `prec` (precipitación) → `Vec<u8>`
+  - `[8]` `prec` (precipitation) → `Vec<u8>`
   - `[9]` `f` (feature_id) → `Uint16` → `Vec<u16>`
   - `[10]` `t` (type) → `Int8` → `Vec<i8>`
   - `[11]` `temp` → `Int8` → `Vec<i8>`
 - **Slots `[16]`–`[27]` + `[36]`/`[40]`/`[44]`** (pack.cells CSV):
-  - `biome` (u8), `burg` (u16), `conf` (f32), `culture` (u16), `fl` (u16), `pop` (f32), `r` (u16), `road` (deprecated), `s` (u16), `state` (u16), `religion` (u16), `province` (u16), `crossroad` (deprecated), `good` (u16), `market` (u16), `routes` (JSON), `cells.h` (f32 desde reGraph).
-- **Helpers parse**: `parse_u8`/`parse_u16`/`parse_i8`/`parse_f32` replicando `Uint8Array.from(csv, Number)` / `Uint16Array.from(csv, Number)` — **ToUint32 + `& 0xFFFF`** para truncation bit-exacto.
-- **`parse_grid_features_kind(slot6)`**: extrae `features[i].type` del sub-JSON `grid.features` (slot `[6]`), **NO del slot `[12]`** (`pack.features`). Crítico: `reGraph` consume `grid.features` pre-markup (25 entradas Sorvik) para distinguir lake vs ocean, no `pack.features` post-markup (19 entradas). 24 features (índice 1 = placeholder reservado).
-- **`parse_grid_features()`**: devuelve `Vec<Feature>` completo (con `land`, `border`, `group`, `cells`).
+  - `biome` (u8), `burg` (u16), `conf` (f32), `culture` (u16), `fl` (u16), `pop` (f32), `r` (u16), `road` (deprecated), `s` (u16), `state` (u16), `religion` (u16), `province` (u16), `crossroad` (deprecated), `good` (u16), `market` (u16), `routes` (JSON), `cells.h` (f32 from reGraph).
+- **Parse helpers**: `parse_u8`/`parse_u16`/`parse_i8`/`parse_f32` replicating `Uint8Array.from(csv, Number)` / `Uint16Array.from(csv, Number)` — **ToUint32 + `& 0xFFFF`** for bit-exact truncation.
+- **`parse_grid_features_kind(slot6)`**: extracts `features[i].type` from the `grid.features` sub-JSON (slot `[6]`), **NOT** from slot `[12]` (`pack.features`). Critical: `reGraph` consumes `grid.features` pre-markup (25 Sorvik entries) to distinguish lake vs ocean, not `pack.features` post-markup (19 entries). 24 features (index 1 = reserved placeholder).
+- **`parse_grid_features()`**: returns the complete `Vec<Feature>` (with `land`, `border`, `group`, `cells`).
 
-### 2.4 `catalogs.rs` — Entidades (JSON arrays)
+### 2.4 `catalogs.rs` — Entities (JSON arrays)
 
-| Slot | Entidad | Struct intermedio | Notas |
+| Slot | Entity | Intermediate struct | Notes |
 |---|---|---|---|
 | `[3]` | Biomes | `BiomeRaw` | pipe-CSV `color\|habitability\|name` |
-| `[4]` | Notes | `NoteRaw` | JSON; **sanitize_lone_surrogates** (Azgaar emite `\uXXXX` escapes que pueden producir lone surrogates ilegales RFC 8259 — reemplazados por `?` lossy) |
-| `[12]` | Features | `FeatureRaw` | placeholder `0` (número) saltado via `entry.is_object()` |
-| `[13]` | Cultures | `CultureRaw` | placeholder `0` saltado |
-| `[14]` | States | `StateRaw` | placeholder `0` saltado |
-| `[15]` | Burgs | `BurgRaw` | placeholder `0` saltado; `origins: null` manejado via `serde_json::Value` + `json_origins_to_u16()` |
-| `[29]` | Religions | `ReligionRaw` | sin placeholder |
-| `[30]` | Provinces | `ProvinceRaw` | placeholder `0` saltado |
+| `[4]` | Notes | `NoteRaw` | JSON; **sanitize_lone_surrogates** (Azgaar emits `\uXXXX` escapes that can produce lone surrogates illegal under RFC 8259 — replaced by `?` lossy) |
+| `[12]` | Features | `FeatureRaw` | placeholder `0` (number) skipped via `entry.is_object()` |
+| `[13]` | Cultures | `CultureRaw` | placeholder `0` skipped |
+| `[14]` | States | `StateRaw` | placeholder `0` skipped |
+| `[15]` | Burgs | `BurgRaw` | placeholder `0` skipped; `origins: null` handled via `serde_json::Value` + `json_origins_to_u16()` |
+| `[29]` | Religions | `ReligionRaw` | no placeholder |
+| `[30]` | Provinces | `ProvinceRaw` | placeholder `0` skipped |
 | `[31]` | Namebases | `NamebaseRaw` | custom `/`-delimited `name\|min\|max\|d\|m\|b` |
-| `[32]` | Rivers | `RiverRaw` | sin placeholder |
-| `[35]` | Markers | `MarkerRaw` | sin placeholder |
-| `[37]` | Routes | `RouteRaw` | sin placeholder |
-| `[38]` | Zones | `ZoneRaw` | sin placeholder |
-| `[39]` | Ice | `IceRaw` | sin placeholder |
-| `[46]` | Measurers | `MeasurerRaw` | sin placeholder |
+| `[32]` | Rivers | `RiverRaw` | no placeholder |
+| `[35]` | Markers | `MarkerRaw` | no placeholder |
+| `[37]` | Routes | `RouteRaw` | no placeholder |
+| `[38]` | Zones | `ZoneRaw` | no placeholder |
+| `[39]` | Ice | `IceRaw` | no placeholder |
+| `[46]` | Measurers | `MeasurerRaw` | no placeholder |
 
-Todos con `#[serde(default)]` amplio en structs intermedios. Placeholders `0` numéricos (no objeto) filtrados en el mapeo a tipos fuertes de `vor-core`.
+All with broad `#[serde(default)]` on intermediate structs. Numeric `0` placeholders (not objects) are filtered when mapping to `vor-core`'s strong types.
 
-### 2.5 `loader.rs` — Orquestador
+### 2.5 `loader.rs` — Orchestrator
 
 ```rust
 pub fn load(raw: &RawMap) -> Result<LoadResult, LoadError> {
@@ -119,14 +119,14 @@ pub fn load(raw: &RawMap) -> Result<LoadResult, LoadError> {
 
 ---
 
-## 3. Algoritmos portados bit-exacto (resumen técnico)
+## 3. Algorithms ported bit-exact (technical summary)
 
 ### 3.1 `Alea@1.0.1` (`prng/alea.rs`)
 
-- Estado: `s0, s1, s2: f64`, `c: f64` (cast a `i32` en cada paso — replica comportamiento JS `Number → Int32`).
-- `Mash`: `n = 0xefc8249d` (u32), multiplicaciones en variables temporales separadas para **forzar redondeo IEEE 754 en cada paso** (evita FMA de LLVM que diverge en 1 ULP).
-- `next_f64()` = `(s0 + s1 + s2) / 2^53` (mismo que `Math.random`).
-- Tests: 1000 floats seed `861039636` (Brample) + 100 floats seed `42` (path corto Mash) — `to_bits()` bit-a-bit vs fixture JS.
+- State: `s0, s1, s2: f64`, `c: f64` (cast to `i32` at each step — replicates JS `Number → Int32` behavior).
+- `Mash`: `n = 0xefc8249d` (u32), multiplications in separate temporary variables to **force IEEE 754 rounding at each step** (avoids LLVM FMA that diverges by 1 ULP).
+- `next_f64()` = `(s0 + s1 + s2) / 2^53` (same as `Math.random`).
+- Tests: 1000 floats seed `861039636` (Brample) + 100 floats seed `42` (short Mash path) — `to_bits()` bit-by-bit vs JS fixture.
 
 ### 3.2 `rn(v, d)` (`numbers/mod.rs`)
 
@@ -140,23 +140,23 @@ pub fn rn(v: f64, d: u32) -> f64 {
 
 ### 3.3 `getJitteredGrid` / `placePoints` (`geometry/mod.rs`)
 
-- Iteración **fila-mayor**: `for y in (radius..height).step_by(spacing) { for x in ... }`
-- Consumo RNG: **x-primero, luego y** por celda (`rn(x + jitter(), 2)` consume 1, `rn(y + jitter(), 2)` consume 1).
+- **Row-major** iteration: `for y in (radius..height).step_by(spacing) { for x in ... }`
+- RNG consumption: **x-first, then y** per cell (`rn(x + jitter(), 2)` consumes 1, `rn(y + jitter(), 2)` consumes 1).
 - `jittering = radius * 0.9`, `doubleJittering = jittering * 2`, `jitter() = random() * doubleJittering - jittering`.
-- `Math.min(rn(x + jitter(), 2), width)` clamp **después** del redondeo.
-- `reseed` interno: `Alea(seed)` antes de generar (replica `Math.random = Alea(seed)` en `generateGrid:137`).
+- `Math.min(rn(x + jitter(), 2), width)` clamp **after** the rounding.
+- Internal `reseed`: `Alea(seed)` before generating (replicates `Math.random = Alea(seed)` in `generateGrid:137`).
 
-### 3.4 `delaunator@5.1.0` (`geometry/delaunay.rs` ~1160 líneas)
+### 3.4 `delaunator@5.1.0` (`geometry/delaunay.rs` ~1160 lines)
 
-- Porte 1-a-1 desde `delaunator@5.1.0.js` (npm, Mapbox).
-- **Robust predicates Shewchuk inline**: `orient2d`, `orient2dadapt`, `ccwerrboundA`, `ccwerrboundB`, `ccwerrboundC`, `THETA` — replicados línea por línea.
-- `find_closest_point`: filtra `d > 0` **solo en el segundo uso** (donde seed point ya está en slice), NO en el primero (bug del crate `delaunator=1.1` que filtra indiscriminadamente).
-- Test bit-exacto: 10200 puntos (10k jittered + 200 boundary) → `triangles` (30600 u32) + `halfedges` (30600 i32) = 0 mismatches vs fixture JS.
+- 1-to-1 port from `delaunator@5.1.0.js` (npm, Mapbox).
+- **Inline Shewchuk robust predicates**: `orient2d`, `orient2dadapt`, `ccwerrboundA`, `ccwerrboundB`, `ccwerrboundC`, `THETA` — replicated line by line.
+- `find_closest_point`: filters `d > 0` **only on the second use** (where the seed point is already in the slice), NOT on the first (bug of the `delaunator=1.1` crate that filters indiscriminately).
+- Bit-exact test: 10200 points (10k jittered + 200 boundary) → `triangles` (30600 u32) + `halfedges` (30600 i32) = 0 mismatches vs JS fixture.
 
 ### 3.5 `Voronoi` class (`geometry/voronoi.rs`)
 
 - `calculate_voronoi(delaunay, points, points_n)` → `cells.v/c/b` + `vertices.p/v/c`.
-- `edgesAroundPoint(e)`: camina half-edges vía `nextHalfedge`, cap **20 iteraciones** (replica JS).
+- `edgesAroundPoint(e)`: walks half-edges via `nextHalfedge`, cap of **20 iterations** (replicates JS).
 - `circumcenter(a,b,c)`:
   ```rust
   let d = 2.0 * (ax*(by-cy) + bx*(cy-ay) + cx*(ay-by));
@@ -165,9 +165,9 @@ pub fn rn(v: f64, d: u32) -> f64 {
   let uy = recip * (ad*(cx-bx) + bd*(ax-cx) + cd*(bx-ax));
   [ux.floor(), uy.floor()]  // Math.floor → trunc a entero
   ```
-- `cells.i[p] = p` (identidad, `0..pointsN-1`).
+- `cells.i[p] = p` (identity, `0..pointsN-1`).
 - `vertices.c[t] = [triangles[3t], triangles[3t+1], triangles[3t+2]]`.
-- Test bit-exacto: 10k cells + 20198 triángulos = 0 mismatches.
+- Bit-exact test: 10k cells + 20198 triangles = 0 mismatches.
 
 ### 3.6 `reGraph` (`regraph.rs`)
 
@@ -185,158 +185,158 @@ fn re_graph(
 ) -> (Pack, Vec<[f64;2]>)  // Pack.points en f32 (cap model), new_points en f64 (bit-exact)
 ```
 
-**Descartes** (orden exacto Azgaar):
-1. `height < 20 && type != -1 && type != -2` → skip (océano profundo no costero).
-2. `type == -2 && (i % 4 == 0 || feature[grid_cells_f[i]].type == "lake")` → skip (lagos no-costeros).
+**Discards** (exact Azgaar order):
+1. `height < 20 && type != -1 && type != -2` → skip (non-coastal deep ocean).
+2. `type == -2 && (i % 4 == 0 || feature[grid_cells_f[i]].type == "lake")` → skip (non-coastal lakes).
 
-**Puntos extra costeros** (tipo `1` tierra costera, `-1` agua costera):
-- Solo si `!grid_cells_b[i]` (no near-border).
-- Para cada vecino `e` en `grid_cells_c[i]`: si `i > e` continue (evita dup), si `grid_cells_t[e] != type` continue, si `dist2 < spacing^2` continue.
-- Punto medio: `rn((x+ex)/2, 1)`, `rn((ey+y)/2, 1)` (1 decimal).
+**Extra coastal points** (type `1` coastal land, `-1` coastal water):
+- Only if `!grid_cells_b[i]` (not near-border).
+- For each neighbor `e` in `grid_cells_c[i]`: if `i > e` continue (avoids dup), if `grid_cells_t[e] != type` continue, if `dist2 < spacing^2` continue.
+- Midpoint: `rn((x+ex)/2, 1)`, `rn((ey+y)/2, 1)` (1 decimal).
 
-**Segundo Voronoi**: `calculate_voronoi(new_points, boundary)`.
+**Second Voronoi**: `calculate_voronoi(new_points, boundary)`.
 
-**Area**: `d3.polygonArea` (shoelace) → `abs(area)` → `min(area, 65535.0) as u16` (replica `createTypedArray({maxValue:65535}).map(...)` ToUint32+bitand).
+**Area**: `d3.polygonArea` (shoelace) → `abs(area)` → `min(area, 65535.0) as u16` (replicates `createTypedArray({maxValue:65535}).map(...)` ToUint32+bitand).
 
-**`pack.cells.g`**: `newCells.g` mapea pack_id → grid_id original (se preserva del output de `re_graph`).
+**`pack.cells.g`**: `newCells.g` maps pack_id → original grid_id (preserved from the `re_graph` output).
 
 ---
 
-## 4. Hallazgos críticos y decisiones (registro para no perderse en compactaciones)
+## 4. Critical findings and decisions (record so nothing is lost across compactions)
 
-### 4.1 Divergencia Brample vs repo clonado (24 jul)
+### 4.1 Brample vs cloned repo divergence (24 jul)
 
-- **Problema**: `placePoints(2000,2000,10000,"861039636")` del repo clonado produce primeros puntos `[15.35, 16.11]...` pero Brample slot `[6]` tiene `[10.12, 10.34]...` (mismo seed, mismos params).
-- **Causa raíz**: Brample generado 22 jul 2026 (build azgaar.github.io prod) vs repo clonado commit `51d8e3e` 21 jul 2026. El master en prod tiene ~20 commits más que el shallow clone.
-- **Consecuencia**: fixtures `*_selfref.json` son **self-reference** (Rust = JS standalone replicando repo actual), **NO validan contra Brample real**.
-- **Resolución**: Hans genera nuevo `.map` desde azgaar.github.io (master prod) → **Sorvik 2026-07-24-23-39.map** (seed `279321909`, 937×945, 47 slots). Todos los handshakes Fase 1 usan Sorvik.
+- **Problem**: `placePoints(2000,2000,10000,"861039636")` of the cloned repo produces first points `[15.35, 16.11]...` but Brample slot `[6]` has `[10.12, 10.34]...` (same seed, same params).
+- **Root cause**: Brample generated 22 jul 2026 (azgaar.github.io prod build) vs cloned repo commit `51d8e3e` 21 jul 2026. The prod master has ~20 more commits than the shallow clone.
+- **Consequence**: `*_selfref.json` fixtures are **self-reference** (Rust = standalone JS replicating the current repo), **they do NOT validate against the real Brample**.
+- **Resolution**: Hans generates a new `.map` from azgaar.github.io (prod master) → **Sorvik 2026-07-24-23-39.map** (seed `279321909`, 937×945, 47 slots). All Phase 1 handshakes use Sorvik.
 
-### 4.2 `grid.features` vs `pack.features` (25 jul, hallazgo Sorvik)
+### 4.2 `grid.features` vs `pack.features` (25 jul, Sorvik finding)
 
 | | `grid.features` (slot[6] sub-JSON) | `pack.features` (slot[12]) |
 |---|---|---|
-| Cuándo | pre-markup (Features.markupGrid) | post-markup (Features.markupPack) |
-| Count Sorvik | 25 (índice 0 = placeholder) | 19 |
-| Uso en `reGraph` | **SÍ** — distingue lake vs ocean | NO |
-| Serializado en `.map` | Dentro de slot `[6]` JSON | Slot `[12]` aparte |
+| When | pre-markup (Features.markupGrid) | post-markup (Features.markupPack) |
+| Sorvik count | 25 (index 0 = placeholder) | 19 |
+| Used in `reGraph` | **YES** — distinguishes lake vs ocean | NO |
+| Serialized in `.map` | Inside slot `[6]` JSON | Separate slot `[12]` |
 
-**Decisión**: `parse_grid_features_kind(slot6)` extrae tipos del sub-JSON `grid.features`. El loader pasa estos a `re_graph`. `pack.features` (slot[12]) se parsea aparte para catálogo completo.
+**Decision**: `parse_grid_features_kind(slot6)` extracts types from the `grid.features` sub-JSON. The loader passes these to `re_graph`. `pack.features` (slot[12]) is parsed separately for the full catalog.
 
-### 4.3 `grid.features` no traen `cells` counts (25 jul)
+### 4.3 `grid.features` do not carry `cells` counts (25 jul)
 
-- Azgaar serializa `grid.features` **sin `cell_count`** (siempre 0).
-- Los counts reales los recalcula `Features.markupGrid()` en runtime.
-- `pack.features` (slot[12]) **sí traen `cells` completos**.
+- Azgaar serializes `grid.features` **without `cell_count`** (always 0).
+- The real counts are recomputed at runtime by `Features.markupGrid()`.
+- `pack.features` (slot[12]) **do carry complete `cells`**.
 
-### 4.4 Lone surrogates en `notes` (slot[4]) (25 jul)
+### 4.4 Lone surrogates in `notes` (slot[4]) (25 jul)
 
-- Azgaar serializa emojis/chars no-BMP (Carian) como `\uXXXX` escapes.
-- Puede producir **lone surrogates** (`\uD800`–`\uDBFF` o `\uDC00`–`\uDFFF` sin pareja) — **ilegales RFC 8259**, válidos en JS.
-- `serde_json` rechaza con "unexpected end of hex escape".
-- **Fix**: `sanitize_lone_surrogates(input: &str) -> String` preprocesa reemplazando lone surrogates por `?` (lossy aceptable — `notes` es texto libre legend).
+- Azgaar serializes emojis/non-BMP chars (Carian) as `\uXXXX` escapes.
+- Can produce **lone surrogates** (`\uD800`–`\uDBFF` or `\uDC00`–`\uDFFF` without a pair) — **illegal under RFC 8259**, valid in JS.
+- `serde_json` rejects with "unexpected end of hex escape".
+- **Fix**: `sanitize_lone_surrogates(input: &str) -> String` preprocesses by replacing lone surrogates with `?` (acceptable lossy — `notes` is free-form legend text).
 
-### 4.5 Placeholders Azgaar mixtos (25 jul)
+### 4.5 Mixed Azgaar placeholders (25 jul)
 
-| Array | Placeholder | Tipo en JSON |
+| Array | Placeholder | JSON type |
 |---|---|---|
-| `pack.burgs` | `0` | **number** (no object) |
+| `pack.burgs` | `0` | **number** (not object) |
 | `pack.cultures` | `0` | number |
 | `pack.states` | `0` | number |
 | `pack.features` | `0` | number |
 | `pack.provinces` | `0` | number |
-| `pack.religions` | *ninguno* | arranca item 0 real |
-| `pack.rivers` | *ninguno* | arranca item 0 real |
-| `pack.markers` | *ninguno* | arranca item 0 real |
-| `pack.routes` | *ninguno* | arranca item 0 real |
-| `pack.zones` | *ninguno* | arranca item 0 real |
-| `pack.ice` | *ninguno* | arranca item 0 real |
-| `pack.measurers` | *ninguno* | arranca item 0 real |
+| `pack.religions` | *none* | starts with a real item 0 |
+| `pack.rivers` | *none* | starts with a real item 0 |
+| `pack.markers` | *none* | starts with a real item 0 |
+| `pack.routes` | *none* | starts with a real item 0 |
+| `pack.zones` | *none* | starts with a real item 0 |
+| `pack.ice` | *none* | starts with a real item 0 |
+| `pack.measurers` | *none* | starts with a real item 0 |
 
-**Manejo**: en `catalogs.rs`, filtro `entry.is_object()` antes de deserializar a struct fuerte. Los `0` numéricos se saltan silenciosamente.
+**Handling**: in `catalogs.rs`, filter `entry.is_object()` before deserializing into a strong struct. Numeric `0`s are skipped silently.
 
-### 4.6 `PackCells::grid_id` viene de `re_graph`, no del archivo (25 jul)
+### 4.6 `PackCells::grid_id` comes from `re_graph`, not from the file (25 jul)
 
-- El `.map` **no serializa** `pack.cells.g` (mapping pack→grid).
-- `re_graph` lo produce como `newCells.g` (índice en `newCells.p` → grid_id original).
-- Loader lo toma del output de `re_graph` y lo escribe en `PackCells.grid_id`.
+- The `.map` **does not serialize** `pack.cells.g` (pack→grid mapping).
+- `re_graph` produces it as `newCells.g` (index in `newCells.p` → original grid_id).
+- The loader takes it from the `re_graph` output and writes it into `PackCells.grid_id`.
 
-### 4.7 Coordinates: `lonW`/`lonE` no `lonL`/`lonR` (25 jul)
+### 4.7 Coordinates: `lonW`/`lonE` not `lonL`/`lonR` (25 jul)
 
-- Azgaar usa `lonW` (west) / `lonE` (east) en `mapCoordinates`.
-- Parser acepta ambos (legacy `lonL`/`lonR` por compat).
+- Azgaar uses `lonW` (west) / `lonE` (east) in `mapCoordinates`.
+- The parser accepts both (legacy `lonL`/`lonR` for compat).
 
-### 4.8 Settings slot[1] — 27 campos (25 jul)
+### 4.8 Settings slot[1] — 27 fields (25 jul)
 
-Índices clave: `[19]`=`options` (JSON string opaco), `[20]`=`mapName`, `[21]`=`hideLabels`, `[22]`=`stylePreset`, `[23]`=`rescaleLabels`, `[24]`=`urbanDensity`, `[26]`=`growthRate`.
+Key indices: `[19]`=`options` (opaque JSON string), `[20]`=`mapName`, `[21]`=`hideLabels`, `[22]`=`stylePreset`, `[23]`=`rescaleLabels`, `[24]`=`urbanDensity`, `[26]`=`growthRate`.
 
-### 4.9 `vor-core::GridCells` no tiene `v/c/b` (25 jul)
+### 4.9 `vor-core::GridCells` has no `v/c/b` (25 jul)
 
-- Topología Voronoi (`v` vertices, `c` neighbors, `b` border flag) es **derivable** desde puntos.
-- `vor-core` solo guarda atributos serializados: `height`, `precipitation`, `feature_id`, `water_type`, `temperature`.
-- `vor_import::Voronoi` (con `v/c/b`) se convierte a `vor_core::VoronoiVertices` (solo `positions` y `cells`/`vertices` arrays planos con `-1` para EMPTY).
+- Voronoi topology (`v` vertices, `c` neighbors, `b` border flag) is **derivable** from points.
+- `vor-core` only stores serialized attributes: `height`, `precipitation`, `feature_id`, `water_type`, `temperature`.
+- `vor_import::Voronoi` (with `v/c/b`) is converted to `vor_core::VoronoiVertices` (only `positions` and flat `cells`/`vertices` arrays with `-1` for EMPTY).
 
 ---
 
-## 5. Tests — inventario completo (41 tests `cargo test --workspace`)
+## 5. Tests — complete inventory (41 tests `cargo test --workspace`)
 
-| Archivo | Tests | Qué valida |
+| File | Tests | What it validates |
 |---|---|---|
-| `crates/vor-import/tests/alea_bit_exact.rs` | 2 | 1000 floats seed Brample + 100 floats seed 42 bit-a-bit vs JS |
-| `crates/vor-import/tests/grid_bit_exact.rs` | 1 | 100 primeros points vs fixture self-reference |
-| `crates/vor-import/tests/delaunay_bit_exact.rs` | 1 | 10200 puntos → triangles/halfedges bit-a-bit vs JS delaunator@5.1.0 |
-| `crates/vor-import/tests/voronoi_bit_exact.rs` | 1 | 10k cells + 20198 triángulos cells.v/c/b + vertices.p/v/c bit-a-bit |
-| `crates/vor-import/tests/regraph_bit_exact.rs` | 1 | Pack points/grid_id/height/area + vertices.p/v/c bit-a-bit vs fixture synthetic |
+| `crates/vor-import/tests/alea_bit_exact.rs` | 2 | 1000 floats seed Brample + 100 floats seed 42 bit-by-bit vs JS |
+| `crates/vor-import/tests/grid_bit_exact.rs` | 1 | First 100 points vs self-reference fixture |
+| `crates/vor-import/tests/delaunay_bit_exact.rs` | 1 | 10200 points → triangles/halfedges bit-by-bit vs JS delaunator@5.1.0 |
+| `crates/vor-import/tests/voronoi_bit_exact.rs` | 1 | 10k cells + 20198 triangles cells.v/c/b + vertices.p/v/c bit-by-bit |
+| `crates/vor-import/tests/regraph_bit_exact.rs` | 1 | Pack points/grid_id/height/area + vertices.p/v/c bit-by-bit vs synthetic fixture |
 | `crates/vor-import/src/mapfile/raw.rs` | 5 | gzip, SVG CRLF rescue, split, slot count, header parse |
 | `crates/vor-import/src/mapfile/header.rs` | 4 | MapHeader, Settings (sub-JSON options), MapCoordinates (lonW/lonE + legacy) |
-| `crates/vor-import/src/geometry/mod.rs` | 2 | place_points sizing + boundary match Brample struct |
-| `crates/vor-import/src/regraph.rs` | 4 | deep_ocean, interior_land, determinismo, shoelace unit square |
-| `crates/vor-import/tests/sorvik_handshake.rs` | 1 | place_points bit-exacto vs Sorvik slot[6] (seed 279321909, 937×945, 10000 pts) |
+| `crates/vor-import/src/geometry/mod.rs` | 2 | place_points sizing + boundary matches Brample structure |
+| `crates/vor-import/src/regraph.rs` | 4 | deep_ocean, interior_land, determinism, shoelace unit square |
+| `crates/vor-import/tests/sorvik_handshake.rs` | 1 | place_points bit-exact vs Sorvik slot[6] (seed 279321909, 937×945, 10000 pts) |
 | `crates/vor-import/tests/sorvik_full_load.rs` | 7 | End-to-end: header, settings, coords, grid 10000, grid.features 24, pack 7268, catalogs counts |
 | **Total** | **29 unit + 12 integration = 41** | |
 
-> Nota: `cargo test --workspace` reporta 42 tests — el 42º es `crates/vor-import/tests/regraph_bit_exact.rs` que cuenta 2 (el test bit-exacto + un test helper interno). `clippy --workspace --all-targets` = 0 warnings. `fmt --all --check` = 0 issues.
+> Note: `cargo test --workspace` reports 42 tests — the 42nd is `crates/vor-import/tests/regraph_bit_exact.rs` which counts 2 (the bit-exact test + an internal helper test). `clippy --workspace --all-targets` = 0 warnings. `fmt --all --check` = 0 issues.
 
 ---
 
-## 6. Invariants Sorvik (validados end-to-end, 25 jul)
+## 6. Sorvik invariants (validated end-to-end, 25 jul)
 
-Archivo: `/home/hans/Descargas/Sorvik 2026-07-24-23-39.map`
+File: `/home/hans/Descargas/Sorvik 2026-07-24-23-39.map`
 
-| Atributo | Valor | Fuente |
+| Attribute | Value | Source |
 |---|---|---|
 | Seed | `279321909` | header[3] |
-| Dimensiones | 937 × 945 | header[4]/[5] |
+| Dimensions | 937 × 945 | header[4]/[5] |
 | Grid cells | 10000 | slot[6].cellsDesired |
-| Pack cells (post-reGraph) | 7268 | `pack.points.len()` (reducción 27.32%) |
+| Pack cells (post-reGraph) | 7268 | `pack.points.len()` (27.32% reduction) |
 | Grid features | 25 (1 placeholder) | slot[6].features |
 | Pack features | 19 | slot[12] |
-| Culturas | 16 | slot[13] |
-| Estados | 14 | slot[14] |
-| Burgos | 1010 | slot[15] |
-| Religiones | 24 | slot[29] |
-| Provincias | 226 | slot[30] |
-| Ríos | 141 | slot[32] |
-| Rutas | 815 | slot[37] |
-| Zonas | 13 | slot[38] |
+| Cultures | 16 | slot[13] |
+| States | 14 | slot[14] |
+| Burgs | 1010 | slot[15] |
+| Religions | 24 | slot[29] |
+| Provinces | 226 | slot[30] |
+| Rivers | 141 | slot[32] |
+| Routes | 815 | slot[37] |
+| Zones | 13 | slot[38] |
 | Ice | 4 | slot[39] |
 | Markers | 83 | slot[35] |
 | Measurers | 1 | slot[46] |
 
-Todos los counts calcen con dump Python del archivo y con `Loader::load` output.
+All counts match the Python dump of the file and the `Loader::load` output.
 
 ---
 
-## 7. Fixtures de referencia (commiteados en repo)
+## 7. Reference fixtures (committed in repo)
 
-| Archivo | Tamaño | Generado por |
+| File | Size | Generated by |
 |---|---|---|
-| `crates/vor-import/tests/reference/alea-1.0.1.original.js` | ~3 KB | Fuente npm (MIT, Baagøe) |
-| `crates/vor-import/tests/reference/delaunator-5.1.0.js` | ~30 KB | Fuente npm (Mapbox) |
+| `crates/vor-import/tests/reference/alea-1.0.1.original.js` | ~3 KB | npm source (MIT, Baagøe) |
+| `crates/vor-import/tests/reference/delaunator-5.1.0.js` | ~30 KB | npm source (Mapbox) |
 | `crates/vor-import/tests/reference/generate_alea_fixture.js` | ~1 KB | Node script |
-| `crates/vor-import/tests/reference/generate_grid_fixture.js` | ~2 KB | Node script (replica graphUtils.ts) |
+| `crates/vor-import/tests/reference/generate_grid_fixture.js` | ~2 KB | Node script (replicates graphUtils.ts) |
 | `crates/vor-import/tests/reference/generate_delaunay_fixture.js` | ~3 KB | Node script |
-| `crates/vor-import/tests/reference/generate_voronoi_fixture.js` | ~5 KB | Node script (replica Voronoi class) |
-| `crates/vor-import/tests/reference/generate_regraph_fixture.js` | ~7 KB | Node script (replica reGraph + Voronoi) |
+| `crates/vor-import/tests/reference/generate_voronoi_fixture.js` | ~5 KB | Node script (replicates Voronoi class) |
+| `crates/vor-import/tests/reference/generate_regraph_fixture.js` | ~7 KB | Node script (replicates reGraph + Voronoi) |
 | `tests/reference/alea_1000_seed_861039636.json` | ~16 KB | u64 bits |
 | `tests/reference/alea_100_seed_42.json` | ~2 KB | u64 bits |
 | `tests/reference/grid_2000x2000_c10k_seed_861039636_selfref.json` | ~170 KB | u64 bits |
@@ -344,100 +344,100 @@ Todos los counts calcen con dump Python del archivo y con `Loader::load` output.
 | `tests/reference/voronoi_grid_2000x2000_c10k_seed_861039636_selfref.json` | ~5.2 MB | u64/i64 bits |
 | `tests/reference/regraph_h50_t2_grid_2000x2000_c10k_seed_861039636_selfref.json` | ~4 MB | u64/i64 bits |
 
-**Serialización bits**: JS usa `BigUint64Array` / `BigInt64Array` sobre `Float64Array` / `Int32Array` view → strings decimales de u64/i64 en JSON. Rust parsea `u64`/`i64` y castea `as f64`/`as i32` (vía `transmute` o `from_bits`). **NO** serializar f64 como string decimal JSON (lossy round-trip).
+**Bits serialization**: JS uses `BigUint64Array` / `BigInt64Array` over a `Float64Array` / `Int32Array` view → decimal u64/i64 strings in JSON. Rust parses `u64`/`i64` and casts `as f64`/`as i32` (via `transmute` or `from_bits`). **DO NOT** serialize f64 as a decimal JSON string (lossy round-trip).
 
 ---
 
-## 8. Scope confirmado vs diferido
+## 8. Confirmed scope vs deferred
 
-### ✅ En Fase 1 (completado)
+### ✅ In Phase 1 (completed)
 
-- Parser `.map` slot-by-slot (47 slots).
-- Regeneración geometría completa: `placePoints` → `Delaunay` → `Voronoi` → `reGraph`.
-- `Loader::load` → `vor_core::World` completo con sanity checks.
-- Tests bit-exactos self-reference + handshake Sorvik end-to-end.
-- `Alea@1.0.1` (npm) porteado.
-- `delaunator@5.1.0` porteado manual (crate Rust descartado).
-- `Voronoi` class + `circumcenter` con `Math.floor` replicado.
-- `reGraph` con descartes lagos `i%4==0`, puntos extra costeros, area shoelace truncado.
-- Manejo placeholders `0` numéricos, lone surrogates, `grid.features` vs `pack.features`.
+- `.map` slot-by-slot parser (47 slots).
+- Complete geometry regeneration: `placePoints` → `Delaunay` → `Voronoi` → `reGraph`.
+- `Loader::load` → complete `vor_core::World` with sanity checks.
+- Self-reference bit-exact tests + end-to-end Sorvik handshake.
+- `Alea@1.0.1` (npm) ported.
+- `delaunator@5.1.0` manually ported (Rust crate discarded).
+- `Voronoi` class + `circumcenter` with `Math.floor` replicated.
+- `reGraph` with `i%4==0` lake discards, extra coastal points, truncated shoelace area.
+- Handling of numeric `0` placeholders, lone surrogates, `grid.features` vs `pack.features`.
 
-### ⏸️ Diferido a fase siguiente
+### ⏸️ Deferred to the next phase
 
-| Item | Por qué | Plan maestro ref |
+| Item | Why | Master plan ref |
 |---|---|---|
-| **Parser JSON export (modo Full)** | Requiere `aleaPRNG 1.1.0` + `randomizeOptions` (tramo setSeed→generateGrid) que NO se necesita para importar `.map` ya generados (fase-0 §13.4) | §23 Fase 1 "Parser JSON export Full DIFERIDO" |
-| **Formato `.vorn` (save/load binario)** | Fase 4 dedicada | §23 Fase 4 |
-| **Generación procedural nativa (heightmap, ríos, culturas, etc.)** | Fase 7 (XL) | §23 Fase 7 |
-| **Visor GPU (winit/wgpu/lyon)** | Fase 2 (M) — **PRÓXIMA** | §23 Fase 2 |
+| **JSON export parser (Full mode)** | Requires `aleaPRNG 1.1.0` + `randomizeOptions` (setSeed→generateGrid stretch) which is NOT needed to import already generated `.map` files (fase-0 §13.4) | §23 Phase 1 "JSON export Full parser DEFERRED" |
+| **`.vorn` format (binary save/load)** | Dedicated Phase 4 | §23 Phase 4 |
+| **Native procedural generation (heightmap, rivers, cultures, etc.)** | Phase 7 (XL) | §23 Phase 7 |
+| **GPU viewer (winit/wgpu/lyon)** | Phase 2 (M) — **NEXT** | §23 Phase 2 |
 
 ---
 
-## 9. Métricas de cierre Fase 1
+## 9. Phase 1 closing metrics
 
-| Métrica | Valor |
+| Metric | Value |
 |---|---|
-| Commits Fase 1 | 10 (desde `dc011e9` a `8142d94`) |
-| Días de reloj | 2 (24 jul 22:21 – 25 jul 23:46) |
-| Líneas Rust añadidas | ~8,500 (vor-core ~2.2k, vor-import ~6.3k) |
-| Fixtures JSON commiteados | ~12 MB (bits serializados) |
-| Tests workspace | 41 (29 unit + 12 integration) |
+| Phase 1 commits | 10 (from `dc011e9` to `8142d94`) |
+| Elapsed days | 2 (24 jul 22:21 – 25 jul 23:46) |
+| Rust lines added | ~8,500 (vor-core ~2.2k, vor-import ~6.3k) |
+| Committed JSON fixtures | ~12 MB (serialized bits) |
+| Workspace tests | 41 (29 unit + 12 integration) |
 | Clippy warnings | 0 |
 | Fmt issues | 0 |
-| Working tree | Clean (tras push `origin/main`) |
+| Working tree | Clean (after push `origin/main`) |
 
 ---
 
-## 10. Próximos pasos (Fase 2 — Visor GPU mínimo)
+## 10. Next steps (Phase 2 — Minimal GPU viewer)
 
-1. **Generar sub-spec** `docs/specs/fase-2.md` antes de implementar (plan §27).
-2. **Ventana winit + wgpu init** (device/queue/surface/swapchain).
-3. **Cámara ortográfica** con pan (drag) + zoom (scroll).
-4. **Render capa terreno**: triangulación `PackCells` puntos → `lyon::path::Path` → vertex buffer → shader color por `height` (u8 → normalized float).
-5. **Cargar Sorvik `.map` vía `Loader::load`** → render frame.
-6. **Demo**: "cargar mapa real Azgaar y verlo en visor nativo GPU".
+1. **Generate sub-spec** `docs/specs/fase-2.md` before implementing (plan §27).
+2. **winit window + wgpu init** (device/queue/surface/swapchain).
+3. **Orthographic camera** with pan (drag) + zoom (scroll).
+4. **Terrain layer rendering**: `PackCells` points triangulation → `lyon::path::Path` → vertex buffer → shader colored by `height` (u8 → normalized float).
+5. **Load Sorvik `.map` via `Loader::load`** → render frame.
+6. **Demo**: "load a real Azgaar map and view it in the native GPU viewer".
 
 ---
 
-## 11. Archivos clave (para reanudación rápida)
+## 11. Key files (for quick resumption)
 
 ```
 /home/hans/Proyectos/voronia/
-├── crates/vor-core/src/                          # World Data Model (congelado Fase 1)
+├── crates/vor-core/src/                          # World Data Model (frozen Phase 1)
 ├── crates/vor-import/src/
-│   ├── prng/alea.rs                              # Alea@1.0.1 bit-exacto
+│   ├── prng/alea.rs                              # bit-exact Alea@1.0.1
 │   ├── numbers/mod.rs                            # rn(v,d)
 │   ├── geometry/
 │   │   ├── mod.rs                                # place_points/boundary/jittered_grid
-│   │   ├── delaunay.rs                           # delaunator@5.1.0 porte manual (~1160 lin)
+│   │   ├── delaunay.rs                           # delaunator@5.1.0 manual port (~1160 lines)
 │   │   └── voronoi.rs                            # Voronoi class + circumcenter floor
-│   ├── regraph.rs                                # reGraph bit-exacto
+│   ├── regraph.rs                                # bit-exact reGraph
 │   ├── mapfile/
-│   │   ├── raw.rs                                # parser bytes → slots
+│   │   ├── raw.rs                                # bytes → slots parser
 │   │   ├── header.rs                             # slots 0/1/2
 │   │   ├── cells.rs                              # slots 6-11/16-27/36/40/44 + grid_features
 │   │   ├── catalogs.rs                           # slots 3/4/12-15/29-46/31
-│   │   └── loader.rs                             # Loader::load orquestador
-│   └── lib.rs                                    # re-exports públicos
+│   │   └── loader.rs                             # Loader::load orchestrator
+│   └── lib.rs                                    # public re-exports
 ├── crates/vor-import/tests/
-│   ├── sorvik_full_load.rs                       # 7 tests end-to-end
-│   ├── sorvik_handshake.rs                       # 1 test place_points bit-exacto
+│   ├── sorvik_full_load.rs                       # 7 end-to-end tests
+│   ├── sorvik_handshake.rs                       # 1 bit-exact place_points test
 │   ├── delaunay_bit_exact.rs
 │   ├── voronoi_bit_exact.rs
 │   ├── regraph_bit_exact.rs
-│   └── reference/                                # fixtures + generadores JS
-├── docs/fase-0-investigacion.md                  # Investigación congelada
-├── docs/fase-1.md                                # ESTE ARCHIVO
-├── .opencode/skills/voronia-dev/references/status.md  # Estado actual + decisiones
-└── voronia-plan-proyecto.md §23                  # Roadmap (Fase 1 tildada ✓)
+│   └── reference/                                # fixtures + JS generators
+├── docs/fase-0-investigacion.md                  # Frozen research
+├── docs/fase-1.md                                # THIS FILE
+├── .opencode/skills/voronia-dev/references/status.md  # Current state + decisions
+└── voronia-plan-proyecto.md §23                  # Roadmap (Phase 1 checked off ✓)
 ```
 
 ---
 
-## 12. Comandos de verificación (para CI / reanudación)
+## 12. Verification commands (for CI / resumption)
 
 ```bash
-# Tests completos
+# Full tests
 cargo test --workspace
 
 # Lint
@@ -446,14 +446,14 @@ cargo clippy --workspace --all-targets
 # Format
 cargo fmt --all --check
 
-# Build release (check optimiza)
+# Release build (check optimizations)
 cargo build --release --workspace
 
-# Verificar estado git
+# Verify git state
 git status
 git log --oneline -1
 ```
 
 ---
 
-*Fin del registro Fase 1. Congelado en commit `8142d94` (25 jul 2026). Próxima actualización: `docs/fase-2.md` al cerrar Fase 2.*
+*End of the Phase 1 record. Frozen at commit `8142d94` (25 jul 2026). Next update: `docs/fase-2.md` when Phase 2 closes.*

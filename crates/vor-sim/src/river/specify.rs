@@ -1,6 +1,6 @@
 use vor_core::entities::river::River;
 
-/// Port simplificado de `specify()` de Azgaar.
+/// Simplified port of Azgaar's `specify()`.
 pub fn specify_common(rivers: &mut [River]) {
     for i in 0..rivers.len() {
         let id = rivers[i].id;

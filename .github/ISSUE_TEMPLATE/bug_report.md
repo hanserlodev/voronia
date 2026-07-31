@@ -1,44 +1,44 @@
 ---
 name: "🐛 Bug report"
-about: "Reportar un bug del motor Voronia"
-title: "bug: [crate o módulo] descripción breve"
+about: "Report a bug in the Voronia engine"
+title: "bug: [crate or module] brief description"
 labels: ["bug"]
 assignees: []
 ---
 
-<!-- Antes de abrir: buscá si ya existe un issue similar y leé el plan maestro en docs/plan.md (§23) y docs/fase-*.md -->
+<!-- Before opening: search for an existing similar issue and read the master plan in docs/plan.md (§23) and docs/fase-*.md -->
 
-## Descripción
+## Description
 
-¿Qué hace el bug? (una o dos frases)
+What does the bug do? (one or two sentences)
 
-## Pasos para reproducir
+## Steps to Reproduce
 
-1. Abrir/importar: `...` (¿qué mapa? si es un `.map` de Azgaar, adjuntar o indicar nombre + seed)
-2. Click en / ejecutar: `...`
-3. Observar: `...`
+1. Open/import: `...` (which map? if it is an Azgaar `.map`, attach it or state the name + seed)
+2. Click on / run: `...`
+3. Observe: `...`
 
-## Comportamiento esperado
+## Expected Behavior
 
-¿Qué debería pasar?
+What should happen?
 
-## Comportamiento actual
+## Actual Behavior
 
-¿Qué pasa en realidad? Adjuntar screenshot si es posible (especialmente para bugs de render).
+What actually happens? Attach a screenshot if possible (especially for rendering bugs).
 
-## Contexto
+## Context
 
-- **Crate / módulo**: p.ej. `vor-import`, `vor-render/src/coastline.rs`
-- **Sistema**: Linux/macOS/Windows
-- **GPU** (si es bug de render): p.ej. Intel UHD / NVIDIA 3050
-- **Commit**: `git log -1` o versión
-- **Comando usado**: p.ej. `cargo run -p vor-app -- path/al/mapa.map`
+- **Crate / module**: e.g. `vor-import`, `vor-render/src/coastline.rs`
+- **OS**: Linux/macOS/Windows
+- **GPU** (if it is a rendering bug): e.g. Intel UHD / NVIDIA 3050
+- **Commit**: `git log -1` or version
+- **Command used**: e.g. `cargo run -p vor-app -- path/to/map.map`
 
-## Información adicional
+## Additional Information
 
-<!-- Logs, stack traces, lo que ayude. -->
+<!-- Logs, stack traces, anything that helps. -->
 
 ## Checklist
 
-- [ ] Pude reproducirlo siempre / a veces (explicar)
-- [ ] El mismo mapa y seed en Azgaar no muestra el problema (si aplica)
+- [ ] I could reproduce it always / sometimes (explain)
+- [ ] The same map and seed in Azgaar does not show the problem (if applicable)

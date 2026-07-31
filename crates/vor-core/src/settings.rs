@@ -1,79 +1,80 @@
-//! Ajustes del mapa (slots `[0]` header + `[1]` settings del `.map` de Azgaar).
+//! Map settings (slots `[0]` header + `[1]` settings of Azgaar's `.map`).
 //!
-//! Ref parse exacto en `docs/fase-0-investigacion.md` §12.1, §12.2. El header `[0]`
-//! es pipe-delimited `version|license|date|seed|graphWidth|graphHeight|mapId`. El
-//! settings `[1]` tiene ~27 campos pipe-delimited y un sub-JSON `options` embebido
-//! en la posición `[19]` (resultado del `randomizeOptions()` de Azgaar — ver §7.2).
+//! Exact parse reference in `docs/fase-0-investigacion.md` §12.1, §12.2. Header `[0]`
+//! is pipe-delimited `version|license|date|seed|graphWidth|graphHeight|mapId`. Settings
+//! `[1]` has ~27 pipe-delimited fields and an embedded sub-JSON `options` at
+//! position `[19]` (result of Azgaar's `randomizeOptions()` — see §7.2).
 
-/// Header del `.map` (slot `[0]`).
+/// Header of the `.map` (slot `[0]`).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct MapHeader {
-    /// Versión de Azgaar que produjo el archivo (`"1.138.0"` en Brample).
+    /// Azgaar version that produced the file (`"1.138.0"` in Brample).
     pub version: String,
-    /// Texto license/notice (`"File can be loaded in azgaar.github.io/Fantasy-Map-Generator"`).
+    /// License/notice text (`"File can be loaded in azgaar.github.io/Fantasy-Map-Generator"`).
     pub license: String,
-    /// Fecha (formato `año-mes-día` sin zero-pad: `"2026-7-22"`).
+    /// Date (`year-month-day` format without zero-padding: `"2026-7-22"`).
     pub date: String,
-    /// Semilla procedural de Azgaar como string (puede tener entre 1 y 10 dígitos numéricos).
-    /// Importante: Azgaar la usa como string para `Alea(seed)`, no como entero.
+    /// Azgaar's procedural seed as a string (may have between 1 and 10 numeric digits).
+    /// Important: Azgaar uses it as a string for `Alea(seed)`, not as an integer.
     pub seed: String,
-    /// Ancho del canvas (`graphWidth`) en unidades de Azgaar.
+    /// Canvas width (`graphWidth`) in Azgaar units.
     pub graph_width: u32,
-    /// Alto del canvas (`graphHeight`).
+    /// Canvas height (`graphHeight`).
     pub graph_height: u32,
-    /// Timestamp `Date.now()` al momento de creación — Id único del mapa.
+    /// `Date.now()` timestamp at creation time — unique map id.
     pub map_id: u64,
 }
 
-/// Settings de distancia/altura/unidades del mapa (slot `[1]`, primer tramo pipe-delimited).
+/// Map distance/height/unit settings (slot `[1]`, first pipe-delimited stretch).
 ///
-/// Los campos vacíos en Azgaar (slots `[6]`–`[11]`, `[14]`–`[18]`) son compat con
-/// migraciones antiguas — se preservan como `None` si el archivo los trae vacíos.
+/// Empty fields in Azgaar (slots `[6]`–`[11]`, `[14]`–`[18]`) are for backward
+/// compatibility with old migrations — they are preserved as `None` when the file
+/// carries them empty.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Settings {
-    /// Unidad de distancia (`"km"`, `"mi"`, ...).
+    /// Distance unit (`"km"`, `"mi"`, ...).
     pub distance_unit: String,
-    /// Escala de la unidad de distancia (p.ej. `1` = 1 km por pixel; multiplicador).
+    /// Distance unit scale (e.g. `1` = 1 km per pixel; multiplier).
     #[serde(default)]
     pub distance_scale: f32,
-    /// Unidad de área (`"square"`, ...).
+    /// Area unit (`"square"`, ...).
     pub area_unit: String,
-    /// Unidad de altura (`"m"`, `"ft"`, ...).
+    /// Height unit (`"m"`, `"ft"`, ...).
     pub height_unit: String,
-    /// Exponente de altura (Azgaar usa `2`).
+    /// Height exponent (Azgaar uses `2`).
     #[serde(default)]
     pub height_exponent: u32,
-    /// Unidad de temperatura (`"°C"`, `"°F"`, `"K"`).
+    /// Temperature unit (`"°C"`, `"°F"`, `"K"`).
     pub temperature_unit: String,
-    /// Tasa de población (puntos → habitantes, p. ej. `1000`).
+    /// Population rate (points → inhabitants, e.g. `1000`).
     #[serde(default)]
     pub population_rate: f32,
-    /// Tasa de urbanización (`1` por defecto en Brample).
+    /// Urbanization rate (`1` by default in Brample).
     #[serde(default)]
     pub urbanization: f32,
-    /// `options` completo — el sub-JSON que Azgaar serializa en la posición `[19]` de `[1]`.
-    /// Es el resultado del `randomizeOptions()` (primer consumo generativo del PRNG
-    /// `aleaPRNG` — NO `Alea@npm`). Si Voronia solo importa mapas ya generados,
-    /// este payload se come como opaco y NO se re-genera (ver §13.4 de fase-0).
+    /// Full `options` — the sub-JSON Azgaar serializes at position `[19]` of `[1]`.
+    /// It is the result of `randomizeOptions()` (first generative consumption of the
+    /// `aleaPRNG` PRNG — NOT `Alea@npm`). If Voronia only imports already-generated
+    /// maps, this payload is consumed as opaque and is NOT re-generated (see phase-0 §13.4).
     #[serde(default, with = "crate::serde_json_string")]
     pub options: serde_json::Value,
-    /// Nombre del mapa (slot `[1]` pos `[20]`).
+    /// Map name (slot `[1]` pos `[20]`).
     #[serde(default)]
     pub map_name: String,
-    /// Ocultar labels (`[21]`).
+    /// Hide labels (`[21]`).
     #[serde(default)]
     pub hide_labels: bool,
-    /// Preset de estilo (`[22]`).
+    /// Style preset (`[22]`).
     #[serde(default)]
     pub style_preset: Option<String>,
-    /// Rescalar labels (`[23]` — distinto del slot deprecated `[23]` del top-level .map;
-    /// confirmar con parseo real; mantener opaco por ahora).
+    /// Rescale labels (`[23]` — distinct from the deprecated `[23]` slot of the top-level .map;
+    /// confirm with real parsing; keep opaque for now).
     #[serde(default, with = "crate::serde_json_string")]
     pub rescale_labels: serde_json::Value,
-    /// Densidad urbana (`[24]`).
+    /// Urban density (`[24]`).
     #[serde(default, with = "crate::serde_json_string")]
     pub urban_density: serde_json::Value,
-    /// Tasa de crecimiento (`[26]`).
+    /// Growth rate (`[26]`).
     #[serde(default, with = "crate::serde_json_string")]
     pub growth_rate: serde_json::Value,
 }

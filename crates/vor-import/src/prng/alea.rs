@@ -1,66 +1,66 @@
-//! `Alea@1.0.1` — PRNG de Johannes Baagøe (npm `alea` 1.0.1), portado bit-exacto a Rust.
+//! `Alea@1.0.1` — Johannes Baagøe's PRNG (npm `alea` 1.0.1), ported bit-exact to Rust.
 //!
-//! Esto replica exactamente `node_modules/alea/alea@1.0.1` (el fuente original commiteado
-//! en `crates/vor-import/tests/reference/alea-1.0.1.original.js`).
+//! This replicates exactly `node_modules/alea/alea@1.0.1` (the original source
+//! committed at `crates/vor-import/tests/reference/alea-1.0.1.original.js`).
 //!
-//! Por qué bit-exactitud importa aquí: Azgaar (`graphUtils.ts:1`) hace
-//! `Math.random = Alea(seed)` antes de `getJitteredGrid`, así que el primer
-//! `Math.random()` que consume `getJitteredGrid` es el primero del stream del `Alea(seed)`
-//! recién construido (ver `docs/fase-0-investigacion.md` §6.5, §7.1, §13.4). Si nuestro
-//! Alea diverge aunque sea en 1 ULP, los `points` del grid no van a calzar con
-//! el slot `[6]` del `.map` de Azgaar, y los atributos caen en celdas equivocadas
-//! (bug silencioso sin error en runtime — §13.4 consequence 3).
+//! Why bit-exactness matters here: Azgaar (`graphUtils.ts:1`) does
+//! `Math.random = Alea(seed)` before `getJitteredGrid`, so the first
+//! `Math.random()` consumed by `getJitteredGrid` is the first one of the freshly
+//! built `Alea(seed)` stream (see `docs/fase-0-investigacion.md` §6.5, §7.1, §13.4).
+//! If our Alea diverges even by 1 ULP, the grid `points` will not match the `[6]`
+//! slot of the Azgaar `.map`, and attributes land in wrong cells (silent bug with
+//! no runtime error — §13.4 consequence 3).
 //!
-//! ## Equivalencias JS → Rust usadas
+//! ## JS → Rust equivalences used
 //!
-//! - JS `number` (f64): representado como `f64`.
-//! - `n >>> 0`: conversión a `Uint32` (descarta parte entera > 2^32 y signo);
-//!   en Rust `t as u32` (que truncae saturando el patrón de bits bajos, equivale a
-//!   `>>> 0` para los rangos que interviene).
-//! - `t | 0`: conversión a `Int32` (signed, wrap de dos complementos);
-//!   en Rust `t as i32`.
-//! - `+x`: coerce a `Number`/`f64`; aquí todas nuestras variables ya son `f64`.
-//! - `× 0x100000000`: `2^32` (supera el int32 pero calza en f64 sin pérdida hasta ~2^53).
+//! - JS `number` (f64): represented as `f64`.
+//! - `n >>> 0`: conversion to `Uint32` (drops the integer part > 2^32 and sign);
+//!   in Rust `t as u32` (which truncates saturating to the low-bit pattern,
+//!   equivalent to `>>> 0` for the ranges involved).
+//! - `t | 0`: conversion to `Int32` (signed, two's complement wrap);
+//!   in Rust `t as i32`.
+//! - `+x`: coerces to `Number`/`f64`; here all our variables are already `f64`.
+//! - `× 0x100000000`: `2^32` (exceeds int32 but fits in f64 losslessly up to ~2^53).
 
-/// Estado interno del generador Alea, equivalente al closure de `Alea()` en JS.
+/// Internal state of the Alea generator, equivalent to the `Alea()` closure in JS.
 #[derive(Debug, Clone)]
 pub struct Alea {
-    /// `s0`, `s1`, `s2` ∈ [0, 1). Siempre positivos (ver seeding + generador).
+    /// `s0`, `s1`, `s2` ∈ [0, 1). Always positive (see seeding + generator).
     s0: f64,
     s1: f64,
     s2: f64,
-    /// `c` arranca en 1; tras cada `next()` vale `t | 0` (signed int32). Lo guardamos
-    /// como `f64` para reproducir exacto el cómputo `c * 2^-32` del paso siguiente
-    /// (en JS, `c` no es reinterpretado como int antes de la multiplicación; es
-    /// siempre Number).
+    /// `c` starts at 1; after each `next()` it holds `t | 0` (signed int32). We store it
+    /// as `f64` to reproduce exactly the `c * 2^-32` computation of the next step
+    /// (in JS, `c` is not reinterpreted as int before the multiplication; it is
+    /// always a Number).
     c: f64,
 }
 
-/// Constante exacta del fuente JS: `2^-32 = 2.3283064365386963e-10`.
+/// Exact constant from the JS source: `2^-32 = 2.3283064365386963e-10`.
 const TWO_POW_NEG_32: f64 = 2.3283064365386963e-10;
-/// `2^32` (= `0x100000000` en JS). En Rust `0x100000000` rebasa i32, así que lo
-/// escribimos explícito. Es la constante exacta del fuente JS.
+/// `2^32` (= `0x100000000` in JS). In Rust `0x100000000` overflows i32, so we
+/// write it explicitly. It is the exact constant from the JS source.
 const TWO_POW_32: f64 = 4_294_967_296.0;
 
 impl Alea {
-    /// Equivalente a `new Alea(seed)` (con `seed` pasado como string en Azgaar).
-    /// `args` se pasa acá como slice de items; el comportamiento bit-exacto replica
-    /// `Alea(seed)` con `seed: &str` (Azgaar pasa siempre 1 string).
+    /// Equivalent to `new Alea(seed)` (with `seed` passed as a string in Azgaar).
+    /// `args` is passed here as a slice of items; the bit-exact behavior replicates
+    /// `Alea(seed)` with `seed: &str` (Azgaar always passes 1 string).
     pub fn new(seed: &str) -> Self {
-        // `Mash()` constructor — `n = 0xefc8249d` como Number (mantiene f64 interno):
-        // var n = 0xefc8249d;  (Uint32 literal = 4022871197. Antes de cualquier
-        // `>>> 0` el JS lo mantiene como Number (f64). En Rust, el literal `0xefc8249d`
-        // rebasa i32, así que lo escribimos como `u32` y formoseamos a f64 —
-        // si lo hubiéramos dejado como `-272096099i32 as f64` daría un valor negativo,
-        // distinto del JS.)
+        // `Mash()` constructor — `n = 0xefc8249d` as a Number (keeps internal f64):
+        // var n = 0xefc8249d;  (Uint32 literal = 4022871197. Before any
+        // `>>> 0` the JS keeps it as a Number (f64). In Rust, the literal `0xefc8249d`
+        // overflows i32, so we write it as `u32` and cast to f64 —
+        // if we had left it as `-272096099i32 as f64` it would yield a negative value,
+        // different from the JS.)
         let mut mash_n: f64 = 0xefc8249du32 as f64;
-        // Closures JS: cada `mash(data)` muta `n` interno. Definimos closures
-        // aquí para no exhibir `Mash` fuera de este constructor.
+        // JS closures: each `mash(data)` mutates internal `n`. We define closures
+        // here so as not to expose `Mash` outside this constructor.
         let mut mash = |data: &str| -> f64 {
-            // `data = data.toString()` — ya pasamos &str.
+            // `data = data.toString()` — we already pass &str.
             for ch in data.chars() {
-                // `n += data.charCodeAt(i)`: cada paso en su propia asignación
-                // para impedir que LLVM emita FMA y diverja en 1 ULP.
+                // `n += data.charCodeAt(i)`: each step in its own assignment
+                // to prevent LLVM from emitting FMA and diverging by 1 ULP.
                 mash_n += ch as u32 as f64;
                 // `h = 0.02519603282416938 * n`:
                 let mut h = 0.02519603282416938_f64 * mash_n;
@@ -88,8 +88,8 @@ impl Alea {
         let mut s1 = mash(" ");
         let mut s2 = mash(" ");
         // for (var i = 0; i < args.length; i++) { s0 -= mash(args[i]); ...}
-        // En Azgaar `Alea(seed)` always 1 arg; el API de Voronia acepta 1 seed string.
-        // Reproducimos el lazo exacto arg-por-arg:
+        // In Azgaar `Alea(seed)` always takes 1 arg; the Voronia API accepts 1 seed string.
+        // We reproduce the exact arg-by-arg loop:
         s0 -= mash(seed);
         if s0 < 0.0 {
             s0 += 1.0;
@@ -102,34 +102,34 @@ impl Alea {
         if s2 < 0.0 {
             s2 += 1.0;
         }
-        // mash = null;  sin efecto en Rust.
+        // mash = null;  no effect in Rust.
         Self { s0, s1, s2, c: 1.0 }
     }
 
-    /// Equivalente a `random()` (o su alias `.next()`):
+    /// Equivalent to `random()` (or its alias `.next()`):
     /// ```js
     /// var t = 2091639 * s0 + c * 2.3283064365386963e-10;
     /// s0 = s1; s1 = s2; s2 = t - (c = t | 0);
     /// ```
-    /// Retorna `f64 ∈ [0, 1)`.
+    /// Returns `f64 ∈ [0, 1)`.
     ///
-    /// ## Nota de bit-exactitud
-    /// El fuente JS hace dos multiplicaciones y una suma en orden textual:
-    /// `2091639 * s0` primero, `c * 2^-32` después, suma al final. LLVM puede que
-    /// tire FMA (fused multiply-add) en CPUs con `target-cpu=native` que reduce
-    /// redondeos intermedios — eso diverge de JS en 1 ULP del mantissa. Para que
-    /// Rust produzca exactamente los mismos redondeos que JS, evalúo los términos
-    /// en variables temporales separadas (sin FMA) y laítica `assume(FAST_MATH)`
-    /// nunca debe estar activa en este crate para no reordenar.
+    /// ## Bit-exactness note
+    /// The JS source performs two multiplications and one addition in textual order:
+    /// `2091639 * s0` first, `c * 2^-32` afterwards, sum last. LLVM may emit FMA
+    /// (fused multiply-add) on CPUs with `target-cpu=native`, which reduces
+    /// intermediate rounding — that diverges from JS by 1 ULP of the mantissa. For
+    /// Rust to produce exactly the same rounding as JS, we evaluate the terms
+    /// in separate temporary variables (no FMA), and the `assume(FAST_MATH)`
+    /// policy must never be active in this crate so nothing is reordered.
     #[inline]
     pub fn next_f64(&mut self) -> f64 {
-        // Asignaciones separadas fuerzan el redondeo en cada paso — no FMA.
+        // Separate assignments force the rounding at each step — no FMA.
         let term_a = 2091639.0_f64 * self.s0;
         let term_b = self.c * TWO_POW_NEG_32;
         let t = term_a + term_b;
         self.s0 = self.s1;
         self.s1 = self.s2;
-        // En JS: `c = t | 0` (signed int32); en Rust: `t as i32` (wrap de dos complementos).
+        // In JS: `c = t | 0` (signed int32); in Rust: `t as i32` (two's complement wrap).
         let new_c = t as i32;
         // `s2 = t - (c = t | 0)`:
         self.c = new_c as f64;
@@ -137,22 +137,22 @@ impl Alea {
         self.s2
     }
 
-    /// Equivalente a `random.uint32()` (no usado por Azgaar en el tramo geometric,
-    /// queda expuesto por fidelidad al source): `random() * 0x100000000`.
+    /// Equivalent to `random.uint32()` (not used by Azgaar in the geometric stretch,
+    /// kept exposed for fidelity to the source): `random() * 0x100000000`.
     #[inline]
     pub fn next_u32(&mut self) -> u32 {
         (self.next_f64() * TWO_POW_32) as u32
     }
 
-    /// Equivalente a `random.fract53()` — no usado por Azgaar en el tramo geometrico.
+    /// Equivalent to `random.fract53()` — not used by Azgaar in the geometric stretch.
     /// ```js
     /// return random() + (random() * 0x200000 | 0) * 1.1102230246251565e-16;
     /// ```
     #[inline]
     pub fn next_fract53(&mut self) -> f64 {
-        // 1.1102230246251565e-16 = 2^-53. constante exacta del JS.
+        // 1.1102230246251565e-16 = 2^-53. Exact constant from the JS.
         const TWO_POW_NEG_53: f64 = 1.1102230246251565e-16;
-        // 0x200000 = 2^21, calza en i32.
+        // 0x200000 = 2^21, fits in i32.
         let a = self.next_f64();
         let b = (self.next_f64() * (0x200000 as f64)) as i32;
         a + (b as f64) * TWO_POW_NEG_53
@@ -163,17 +163,17 @@ impl Alea {
 mod tests {
     use super::Alea;
 
-    /// Test básico no determinismo — genera una secuencia con seed fija y verifica
-    /// que los primeros floats son estables entre corridas. Vector de test备案 contra
-    /// la versión JS de `alea@1.0.1`: para obtener los valores de referencia correr
+    /// Basic determinism test — generates a sequence with a fixed seed and verifies
+    /// that the first floats are stable across runs. Test vector from the JS
+    /// version of `alea@1.0.1`: to obtain the reference values run
     /// ```
     /// node -e "const A=require('$ROOT/tests/reference/alea-1.0.1.original.js'); const r=A('861039636'); for (let i=0;i<10;i++) console.log(r());"
     /// ```
-    /// Reemplazar el array abajo con los valores exactos del node output (primeros 10
-    /// floats con la seed `861039636`, la misma del Brample).
+    /// Replace the array below with the exact values from the node output (first 10
+    /// floats with seed `861039636`, the same as Brample).
     ///
-    /// Hasta tener node, este test afirma determinismo intra-Rust (regresión)
-    /// aunque no bit-exactitud contra JS.
+    /// Until node is available, this test asserts intra-Rust determinism (regression)
+    /// even if not bit-exactness against JS.
     #[test]
     fn alea_seed_is_stable_between_runs() {
         let mut a1 = Alea::new("861039636");
@@ -183,18 +183,18 @@ mod tests {
         }
     }
 
-    /// `s0`, `s1`, `s2` arrancan en [0, 1) y todas las salidas deberían estar en [0, 1).
-    /// Test de invariantes, no de bit-exactitud.
+    /// `s0`, `s1`, `s2` start in [0, 1) and all outputs should be in [0, 1).
+    /// Invariant test, not a bit-exactness test.
     #[test]
     fn alea_outputs_are_in_unit_range() {
         let mut a = Alea::new("861039636");
         for _ in 0..10_000 {
             let v = a.next_f64();
-            assert!((0.0..1.0).contains(&v), "alea output fuera de [0,1): {v}");
+            assert!((0.0..1.0).contains(&v), "alea output outside [0,1): {v}");
         }
     }
 
-    /// Seeds distintas deben dar secuencias distintas.
+    /// Different seeds must yield different sequences.
     #[test]
     fn alea_different_seeds_diverge() {
         let mut a = Alea::new("1");
@@ -207,7 +207,7 @@ mod tests {
         }
         assert!(
             diffs > 90,
-            "seeds distintas producen secuencias casi idénticas"
+            "different seeds produce nearly identical sequences"
         );
     }
 }

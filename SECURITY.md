@@ -1,46 +1,46 @@
-# Política de Seguridad
+# Security Policy
 
-## Versiones soportadas
+## Supported Versions
 
-| Versión | Soportada |
+| Version | Supported |
 | ------- | --------- |
 | main    | ✅ |
-| Otras ramas / tags | ❌ |
+| Other branches / tags | ❌ |
 
-Únicamente la rama `main` recibe parches de seguridad. Los releases previos no tienen mantenimiento de seguridad activo.
+Only the `main` branch receives security patches. Previous releases have no active security maintenance.
 
-## Reportar una vulnerabilidad
+## Reporting a Vulnerability
 
-**No abras un issue público para vulnerabilidades de seguridad.**
+**Do not open a public issue for security vulnerabilities.**
 
-Enviá el reporte por correo a **hans@voronia.dev** (o por el canal que Hans indique en el perfil del repo).
+Send the report by email to **hanserlodev@gmail.com** (or through whatever channel Hans specifies in the repository profile).
 
-### Qué incluir en el reporte
+### What to Include in the Report
 
-- Descripción clara de la vulnerabilidad y su impacto.
-- Pasos para reproducirla (o un PoC si es posible).
-- Versión/commit afectado.
-- Si ya tenés una mitigación o parche sugerido, incluíla.
+- A clear description of the vulnerability and its impact.
+- Steps to reproduce it (or a PoC if possible).
+- The affected version/commit.
+- If you already have a suggested mitigation or patch, include it.
 
-### Qué esperar después de reportar
+### What to Expect After Reporting
 
-1. **Confirmación de recepción** en un plazo de 72 horas.
-2. **Evaluación y respuesta** (¿es válida?, severidad, plan de parche) en un plazo de 7 días.
-3. Coordinación del *disclosure*: trabajamos con un período de embargo razonable antes de publicar el fix y el aviso.
+1. **Acknowledgement of receipt** within 72 hours.
+2. **Evaluation and response** (is it valid?, severity, patch plan) within 7 days.
+3. **Disclosure coordination**: we work with a reasonable embargo period before publishing the fix and the advisory.
 
-Si la vulnerabilidad es crítica, priorizamos un hotfix sobre `main` antes que cualquier otra cosa.
+If the vulnerability is critical, we prioritize a hotfix on `main` over anything else.
 
-## Alcance
+## Scope
 
-Este repositorio contiene:
+This repository contains:
 
-- `vor-core` / `vor-import` / `vor-sim` / `vor-render` / `vor-edit` / `vor-app` / `vor-cli` — el motor Voronia (Rust + wgpu).
-- Herramientas de importación de mapas de Azgaar (`.map`/JSON) y el formato `.vorn`.
+- `vor-core` / `vor-import` / `vor-sim` / `vor-render` / `vor-edit` / `vor-app` / `vor-cli` — the Voronia engine (Rust + wgpu).
+- Azgaar map import tools (`.map`/JSON) and the `.vorn` format.
 
-**Está fuera de alcance** (no se consideran vulnerabilidades): código de terceros ya publicado en crates.io (reportar al maintainer del crate correspondiente), y dependencias desactualizadas sin explotación demostrada.
+**Out of scope** (not considered vulnerabilities): third-party code already published on crates.io (report to the maintainer of the corresponding crate), and outdated dependencies with no demonstrated exploit.
 
-## Buenas prácticas (recordatorio)
+## Best Practices (Reminder)
 
-- Todo lo generativo usa semilla explícita: **misma semilla + mismos parámetros = mismo resultado**. Si encontrás un generador sin semilla, es un bug.
-- El render **nunca escribe** al World Data Model (`vor-render` solo lee). Cualquier escritura desde render es una violación de arquitectura y un candidato a bug de seguridad/integridad de datos.
-- Nunca se commitean secretos ni claves. Los `.env` no existen en este repo.
+- Everything generative uses an explicit seed: **same seed + same parameters = same result**. If you find a generator without a seed, it is a bug.
+- The renderer **never writes** to the World Data Model (`vor-render` is read-only). Any write from the renderer is an architecture violation and a candidate security/data-integrity bug.
+- Secrets and keys are never committed. `.env` files do not exist in this repository.

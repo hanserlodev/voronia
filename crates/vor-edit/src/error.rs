@@ -1,27 +1,27 @@
-//! Errores de `vor-edit`.
+//! Errors of `vor-edit`.
 //!
-//! Mutaciones del World Data Model controladas — fallan con `thiserror` en vez
-//! de panickear (regla de `references/conventions.md` §"Manejo de errores").
+//! Controlled World Data Model mutations — they fail with `thiserror` instead
+//! of panicking (rule of `references/conventions.md` §"Manejo de errores").
 
 use thiserror::Error;
 
-/// Error de edición de Voronia.
+/// Voronia editing error.
 #[derive(Debug, Error)]
 pub enum EditError {
-    /// El id de entidad no existe en el catálogo (p.ej. `state_id = 99` cuando
-    /// `world.states` solo tiene 14 estados).
-    #[error("entidad {what} con id {id} no existe (colección de largo {len})")]
+    /// The entity id does not exist in the catalog (e.g. `state_id = 99` when
+    /// `world.states` only has 14 states).
+    #[error("entity {what} with id {id} does not exist (collection length {len})")]
     EntityNotFound {
         what: &'static str,
         id: u16,
         len: usize,
     },
 
-    /// El color hex provisto es inválido (no calza `#rrggbb`).
-    #[error("color hex inválido: {0:?} — se espera formato #rrggbb")]
+    /// The provided hex color is invalid (does not match `#rrggbb`).
+    #[error("invalid hex color: {0:?} — expected format #rrggbb")]
     InvalidHexColor(String),
 
-    /// El nombre provisto está vacío.
-    #[error("nombre vacío no permitido para {what} id={id}")]
+    /// The provided name is empty.
+    #[error("empty name not allowed for {what} id={id}")]
     EmptyName { what: &'static str, id: u16 },
 }

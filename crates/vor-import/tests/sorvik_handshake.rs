@@ -1,7 +1,7 @@
-//! Test de handshake con Sorvik .map real: regenera place_points con la semilla del
-//! header y compara los puntos contra los serializados en slot [6]. Si bit-exacto,
-//! el pipeline de regeneración de geometría está bien y el .map puede cargarse sobre
-//! la malla nativa sin riesgo de aplicar atributos en celdas equivocadas.
+//! Handshake test with the real Sorvik .map: regenerates place_points with the header
+//! seed and compares the points against those serialized in slot [6]. If bit-exact,
+//! the geometry regeneration pipeline is correct and the .map can be loaded onto the
+//! native mesh without risk of applying attributes to the wrong cells.
 use vor_import::geometry::place_points;
 use vor_import::mapfile::raw;
 

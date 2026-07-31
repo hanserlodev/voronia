@@ -151,7 +151,7 @@ struct State {
     texture_overlay: Option<vor_render::TextureOverlay>,
     text_system: Option<vor_render::TextSystem>,
 
-    // Indices de capas de líneas en renderer.line_layers
+    // Indices of line layers in renderer.line_layers
     line_cells_idx: usize,
     line_grid_idx: usize,
     line_contours_idx: usize,
@@ -242,7 +242,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     );
     let _l_heightmap = renderer.add_layer_mesh(&heightmap_color_mesh);
 
-    // --- Precomputar máscara de agua para water gap ---
+    // --- Precompute water mask for the water gap ---
     let is_water: Vec<bool> = {
         let n = world.pack.points_n();
         let mut w = Vec::with_capacity(n);
@@ -264,7 +264,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         is_water.iter().filter(|&&w| w).count()
     );
 
-    // --- Capas adicionales (orden de dibujo: bottom→top) ---
+    // --- Additional layers (draw order: bottom→top) ---
 
     // 1. Relief (landmass shading)
     let relief_mesh = build_relief_mesh(&world.pack);
@@ -339,7 +339,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     let _l_rivers = renderer.add_layer_mesh(&river_mesh);
 
     // 5. Human geography fills: states, provinces, cultures, religions, population, zones
-    // Cada una lleva su water gap para evitar que los colores sangren al océano.
+    // Each one carries its own water gap to keep colors from bleeding into the ocean.
 
     let mut state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states);
     append_water_gap(&mut state_mesh, &world.pack, &is_water, |p| {
@@ -846,7 +846,7 @@ impl State {
             .renderer
             .msaa_view
             .as_ref()
-            .expect("msaa_view presente si renderer se creó con MSAA");
+            .expect("msaa_view present when the renderer was created with MSAA");
 
         // Update viewport (glyphon)
         if let Some(ref mut ts) = self.text_system {
@@ -864,7 +864,7 @@ impl State {
                     label: Some("vor-frame"),
                 });
 
-        // Pass 1: capas de mapa (renderiza a MSAA 4x, resuelve a surface)
+        // Pass 1: map layers (renders to 4x MSAA, resolves to surface)
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("vor-map"),
@@ -911,7 +911,7 @@ impl State {
                     .draw_line_layer(&mut pass, self.line_routes_idx);
             }
 
-            // Text overlay (glyphon, dentro del MSAA pass)
+            // Text overlay (glyphon, inside the MSAA pass)
             if let Some(ref ts) = self.text_system {
                 ts.render(&mut pass);
             }
@@ -947,7 +947,7 @@ impl State {
             &screen_descriptor,
         );
 
-        // Pass 2: egui overlay (sobre la surface ya resuelta)
+        // Pass 2: egui overlay (on the already-resolved surface)
         {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -974,7 +974,7 @@ impl State {
             .submit(std::iter::once(encoder.finish()));
         surface_texture.present();
 
-        // Trim glyphon atlas (libera caché de glifos no usados)
+        // Trim glyphon atlas (frees the cache of unused glyphs)
         if let Some(ref mut ts) = self.text_system {
             ts.trim();
         }
@@ -1000,7 +1000,7 @@ impl State {
                         self.last_autosave = Instant::now();
                     }
                     Err(e) => {
-                        tracing::warn!("autosave falló: {e}");
+                        tracing::warn!("autosave failed: {e}");
                     }
                 }
             }
@@ -1140,14 +1140,14 @@ pub fn run_cli() -> anyhow::Result<()> {
     let export_only = args.iter().any(|a| a == "--export-vorn");
 
     if args.len() < 2 {
-        anyhow::bail!("uso: vor <path-.map> [--export-vorn]");
+        anyhow::bail!("usage: vor <path-to-.map> [--export-vorn]");
     }
     let path_idx = args
         .iter()
         .position(|a| !a.starts_with('-') && a != &args[0])
         .unwrap_or(1);
     let path = PathBuf::from(&args[path_idx]);
-    info!("cargando mapa: {}", path.display());
+    info!("loading map: {}", path.display());
 
     let bytes = std::fs::read(&path)?;
     let raw =
@@ -1159,7 +1159,7 @@ pub fn run_cli() -> anyhow::Result<()> {
         let vorn_path = path.with_extension("vorn");
         vor_format::save::save_world(&vorn_path, &loaded.world)
             .map_err(|e| anyhow::anyhow!("save .vorn: {e}"))?;
-        info!("exportado: {}", vorn_path.display());
+        info!("exported: {}", vorn_path.display());
         return Ok(());
     }
 
@@ -1184,5 +1184,5 @@ pub fn run_cli() -> anyhow::Result<()> {
         world: loaded.world,
         mesh: landmass_mesh,
     };
-    run(cfg).map_err(|e| anyhow::anyhow!("visor: {e}"))
+    run(cfg).map_err(|e| anyhow::anyhow!("viewer: {e}"))
 }

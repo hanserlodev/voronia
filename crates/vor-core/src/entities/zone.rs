@@ -1,20 +1,20 @@
-//! Zona (slot `[38]`: `pack.zones` JSON). Overlay de color custom sobre un set de celdas.
+//! Zone (slot `[38]`: `pack.zones` JSON). Custom color overlay over a set of cells.
 
-/// Una zona custom (p.ej. "región en guerra", "tierras de caza privativas", etc.).
+/// A custom zone (e.g. "region at war", "private hunting grounds", etc.).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Zone {
     pub id: u32,
     pub name: String,
-    /// Color hex del overlay.
+    /// Overlay hex color.
     #[serde(default)]
     pub color: String,
-    /// Cells que conforman la zona (ids de pack).
+    /// Cells that make up the zone (pack ids).
     #[serde(default)]
     pub cells: Vec<u32>,
-    /// `"random" | "solid"` u otros estilos de patrones de hatching en Azgaar (preservar opaco).
+    /// `"random" | "solid"` or other hatching pattern styles in Azgaar (keep opaque).
     #[serde(default)]
     pub style: Option<String>,
-    /// Descripción/leyenda libre para la UI.
+    /// Free-form description/lore for the UI.
     #[serde(default)]
     pub description: Option<String>,
 }

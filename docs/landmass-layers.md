@@ -1,25 +1,25 @@
-# Azgaar Landmass Layers — Documentación y plan de portabilidad
+# Azgaar Landmass Layers — Documentation and porting plan
 
-> **Categoría**: Landmass  
-> **Capas**: texture, heightmap, relief, cells, grid, coordinates  
-> **Fuente**: Azgaar's FMP v1.135.2 — `/home/hans/Proyectos/azgaar-fmg/`
+> **Category**: Landmass  
+> **Layers**: texture, heightmap, relief, cells, grid, coordinates  
+> **Source**: Azgaar's FMP v1.135.2 — `/home/hans/Proyectos/azgaar-fmg/`
 
 ---
 
 ## 1. Texture
 
-### Qué hace en Azgaar
-Superpone una imagen de textura raster sobre todo el mapa (papel, pergamino, tela, etc.). Es un `<image>` SVG escalado al tamaño del gráfico. No interactúa con celdas ni datos del mundo — es puramente decorativa.
+### What it does in Azgaar
+Overlays a raster texture image on top of the entire map (paper, parchment, cloth, etc.). It is an SVG `<image>` scaled to the size of the chart. It does not interact with cells or world data — it is purely decorative.
 
-### Código fuente
-| Archivo | Líneas | Rol |
+### Source code
+| File | Lines | Role |
 |---|---|---|
-| `layers.js` | 783-796 | `drawTexture()` — crea/appendea un `<image>` SVG |
-| `style.js` | 539-572 | Selector de textura (9 opciones: none, folded-paper, gray-paper, etc.) + shift X/Y |
-| `load.ts` | 347, 390-394 | Inicializa grupo `#texture` en SVG |
-| `index.html` | 782-796 | Selector de textura en Style editor |
+| `layers.js` | 783-796 | `drawTexture()` — creates/appends an SVG `<image>` |
+| `style.js` | 539-572 | Texture selector (9 options: none, folded-paper, gray-paper, etc.) + X/Y shift |
+| `load.ts` | 347, 390-394 | Initializes the `#texture` group in SVG |
+| `index.html` | 782-796 | Texture selector in the Style editor |
 
-### Implementación exacta (`layers.js:783-796`)
+### Exact implementation (`layers.js:783-796`)
 ```javascript
 function drawTexture() {
   const x = Number(texture.attr("data-x") || 0);
@@ -37,36 +37,36 @@ function drawTexture() {
 }
 ```
 
-### Datos que consume
-- `data-href`: URL/path de la imagen de textura
-- `data-x`, `data-y`: offset de la textura (shift)
-- `graphWidth`, `graphHeight`: dimensiones del SVG
+### Data consumed
+- `data-href`: URL/path of the texture image
+- `data-x`, `data-y`: texture offset (shift)
+- `graphWidth`, `graphHeight`: SVG dimensions
 
-### Portabilidad a Voronia
-**Enfoque**: Post-process effect en wgpu (textura aplicada como blend sobre el framebuffer final, o como capa translúcida en un fullscreen quad).
+### Portability to Voronia
+**Approach**: Post-process effect in wgpu (texture applied as a blend over the final framebuffer, or as a translucent layer on a fullscreen quad).
 
-| Etapa | Descripción |
+| Stage | Description |
 |---|---|
-| **Fase actual** | No implementado. `LayerFlags.texture` existe pero no renderiza. |
-| **Implementación** | Cargar textura PNG/JPG como `wgpu::Texture`, dibujar un fullscreen quad con blending `multiply` o `overlay` sobre la salida del mapa. |
-| **UI** | Selector de textura en tab Style (dropdown con 9 opciones, mismo que Azgaar). Controles shift X/Y. |
+| **Current phase** | Not implemented. `LayerFlags.texture` exists but does not render. |
+| **Implementation** | Load PNG/JPG texture as `wgpu::Texture`, draw a fullscreen quad with `multiply` or `overlay` blending over the map output. |
+| **UI** | Texture selector in the Style tab (dropdown with 9 options, same as Azgaar). X/Y shift controls. |
 
 ---
 
 ## 2. Heightmap
 
-### Qué hace en Azgaar
-Renderiza isolíneas de altura (contornos) coloreadas por un esquema de color configurable. Separa océano (height < 20) de tierra (height >= 20). Cada nivel de altura es un `<path>` SVG cerrado que forma bandas de elevación. Soporta terracing (sombra paralela en cada contorno).
+### What it does in Azgaar
+Renders altitude isolines (contours) colored by a configurable color scheme. Separates ocean (height < 20) from land (height >= 20). Each altitude level is a closed SVG `<path>` forming elevation bands. Supports terracing (parallel shadow on each contour).
 
-### Código fuente
-| Archivo | Líneas | Rol |
+### Source code
+| File | Lines | Role |
 |---|---|---|
-| `draw-heightmap.ts` | 1-198 | **Implementación completa TS** |
-| `style.js` | 43-70 | Esquemas de color (`heightmapColorSchemes`) |
-| `layers.js` | 263-276 | `toggleHeight()` + refresh en `drawLayers()` |
-| `load.ts` | 348 | Inicializa `#terrs` con subgrupos `#oceanHeights` y `#landHeights` |
+| `draw-heightmap.ts` | 1-198 | **Complete TS implementation** |
+| `style.js` | 43-70 | Color schemes (`heightmapColorSchemes`) |
+| `layers.js` | 263-276 | `toggleHeight()` + refresh in `drawLayers()` |
+| `load.ts` | 348 | Initializes `#terrs` with subgroups `#oceanHeights` and `#landHeights` |
 
-### Algoritmo (`draw-heightmap.ts`)
+### Algorithm (`draw-heightmap.ts`)
 ```
 1. Limpiar grupos #oceanHeights y #landHeights
 2. Ordenar celdas por altura asc
@@ -82,7 +82,7 @@ Renderiza isolíneas de altura (contornos) coloreadas por un esquema de color co
    - Para cada h con path: dibujar path relleno con color del scheme + terracing opcional
 ```
 
-### Función clave `connectVertices()` (`draw-heightmap.ts:161-187`)
+### Key function `connectVertices()` (`draw-heightmap.ts:161-187`)
 ```
 Input: cells, vertices, start_vertex, h, used[]
 Output: chain (lista de vértices formando contorno cerrado)
@@ -94,34 +94,34 @@ Output: chain (lista de vértices formando contorno cerrado)
 - Máximo 100K iteraciones (seguro contra loops infinitos)
 ```
 
-### Esquemas de color (`style.js:43-70`)
-Azgaar tiene múltiples esquemas: elevation, wiki, grayscale, wiki2, elevation2, fancy, wiki3, palettes. Cada esquema es una función `(t: number) => string` que mapea altura normalizada (0-1) a color CSS.
+### Color schemes (`style.js:43-70`)
+Azgaar has multiple schemes: elevation, wiki, grayscale, wiki2, elevation2, fancy, wiki3, palettes. Each scheme is a function `(t: number) => string` that maps normalized altitude (0-1) to a CSS color.
 
-### Portabilidad a Voronia
-**Enfoque**: El heightmap de Voronia YA está implementado como pipeline wgpu (layer 0, mesh de triángulos coloreados por altura). Los contornos (isolíneas) serían una capa adicional opcional.
+### Portability to Voronia
+**Approach**: Voronia's heightmap is ALREADY implemented as a wgpu pipeline (layer 0, mesh of triangles colored by altitude). The contours (isolines) would be an additional optional layer.
 
-| Etapa | Descripción |
+| Stage | Description |
 |---|---|
-| **Fase actual** | ✅ Heightmap como mesh de triángulos con `height_color()` en CPU (gradiente lineal azul→verde→marrón→blanco). |
-| **Pendiente** | Isolíneas de contorno (opcional). Esquemas de color configurables (ahora es fijo). Terracing. |
-| **Implementación** | Para isolíneas: generar paths en CPU similar a Azgaar, renderizar como líneas en shader wgpu. Esquemas de color: lookup table uniform en GPU. |
+| **Current phase** | ✅ Heightmap as a triangle mesh with `height_color()` on CPU (linear blue→green→brown→white gradient). |
+| **Pending** | Contour isolines (optional). Configurable color schemes (currently fixed). Terracing. |
+| **Implementation** | For isolines: generate paths on CPU similar to Azgaar, render as lines in a wgpu shader. Color schemes: uniform lookup table on GPU. |
 
 ---
 
 ## 3. Relief
 
-### Qué hace en Azgaar
-Dibuja íconos SVG de relieve (montañas, colinas, árboles) sobre el mapa usando muestreo Poisson-disc. Cada celda con altura < 50 recibe íconos de bioma (árboles), celdas con altura >= 50 reciben íconos de relieve (montañas/colinas). Los íconos se ordenan por Z (y + size). Soporta múltiples sets de íconos (simple, detailed, 3d).
+### What it does in Azgaar
+Draws SVG relief icons (mountains, hills, trees) over the map using Poisson-disc sampling. Each cell with altitude < 50 receives biome icons (trees); cells with altitude >= 50 receive relief icons (mountains/hills). Icons are sorted by Z (y + size). Supports multiple icon sets (simple, detailed, 3d).
 
-### Código fuente
-| Archivo | Líneas | Rol |
+### Source code
+| File | Lines | Role |
 |---|---|---|
-| `draw-relief-icons.ts` | 1-150 | Implementación completa TS |
-| `index.html` | 2942-3427 | Definiciones SVG de íconos (`<symbol>`) |
+| `draw-relief-icons.ts` | 1-150 | Complete TS implementation |
+| `index.html` | 2942-3427 | SVG icon definitions (`<symbol>`) |
 | `layers.js` | 746-757 | `toggleRelief()` |
-| `style.js` | 788-800 | Re-dibujado en cambios de preset/atributo |
+| `style.js` | 788-800 | Re-draw on preset/attribute changes |
 
-### Algoritmo (`draw-relief-icons.ts:17-91`)
+### Algorithm (`draw-relief-icons.ts:17-91`)
 ```
 1. Leer densidad y tamaño desde atributos del grupo #terrain
 2. Para cada celda i:
@@ -148,37 +148,37 @@ function placeBiomeIcons(cellIndex, density, size) {
 }
 ```
 
-### Sets de íconos disponibles
+### Available icon sets
 | Set | Source |
 |---|---|
-| simple | Líneas básicas (triángulo para montaña, círculo para árbol) |
-| detailed | SVG más elaborados con sombras |
-| 3d | Perspectiva 3D |
+| simple | Basic lines (triangle for mountain, circle for tree) |
+| detailed | More elaborate SVGs with shadows |
+| 3d | 3D perspective |
 
-### Portabilidad a Voronia
-**Enfoque**: Íconos como instancias de glifo (wgpu indirect draw) o sprites texturizados. Para complejidad baja: puntos coloridos en pantalla (círculo = árbol, triángulo = montaña).
+### Portability to Voronia
+**Approach**: Icons as glyph instances (wgpu indirect draw) or textured sprites. For low complexity: colored points on screen (circle = tree, triangle = mountain).
 
-| Etapa | Descripción |
+| Stage | Description |
 |---|---|
-| **Fase actual** | No implementado. `LayerFlags.relief` existe pero no renderiza. |
-| **Implementación MVP** | Calcular posiciones en CPU (Poisson-disc o centro de celda), renderizar como triángulos/círculos instanciados. |
-| **Implementación completa** | Sprites de glifo desde atlas, z-ordering, 3 sets de íconos. |
+| **Current phase** | Not implemented. `LayerFlags.relief` exists but does not render. |
+| **MVP implementation** | Compute positions on CPU (Poisson-disc or cell center), render as instanced triangles/circles. |
+| **Full implementation** | Glyph sprites from an atlas, z-ordering, 3 icon sets. |
 
 ---
 
 ## 4. Cells
 
-### Qué hace en Azgaar
-Renderiza los polígonos de celda (Voronoi) como líneas de borde. Esencialmente es un wireframe de la malla poligonal. Útil para debug y edición (river/burg/route editors lo activan automáticamente). Soporta tanto grid (pre-pack) como pack cells según el modo de customización.
+### What it does in Azgaar
+Renders the cell (Voronoi) polygons as border lines. Essentially a wireframe of the polygonal mesh. Useful for debug and editing (river/burg/route editors activate it automatically). Supports both grid (pre-pack) and pack cells depending on the customization mode.
 
-### Código fuente
-| Archivo | Líneas | Rol |
+### Source code
+| File | Lines | Role |
 |---|---|---|
-| `layers.js` | 446-451 | `drawCells()` — polyline path de bordes de celda |
+| `layers.js` | 446-451 | `drawCells()` — polyline path of cell borders |
 | `layers.js` | 434-444 | `toggleCells()` |
-| Múltiples editors | — | Activan `toggleCells()` al editar |
+| Multiple editors | — | Activate `toggleCells()` when editing |
 
-### Implementación exacta (`layers.js:446-451`)
+### Exact implementation (`layers.js:446-451`)
 ```javascript
 function drawCells() {
   const cells = customization === 1 ? grid.cells.i : pack.cells.i;
@@ -188,31 +188,31 @@ function drawCells() {
 }
 ```
 
-`getGridPolygon` / `getPackPolygon` devuelven las coordenadas SVG del polígono de cada celda (ej: `"10,20 L 30,40 L 50,60 Z"`). Todas las celdas se combinan en un solo `<path>` para performance.
+`getGridPolygon` / `getPackPolygon` return the SVG coordinates of each cell's polygon (e.g. `"10,20 L 30,40 L 50,60 Z"`). All cells are combined into a single `<path>` for performance.
 
-### Portabilidad a Voronia
-**Fase actual**: No implementado como capa toggle. Los bordes de celda subyacen a las capas de borde (state/province/culture). Se puede implementar como líneas entre centros de celda vecinos (Delaunay edges) renderizadas como líneas wgpu.
+### Portability to Voronia
+**Current phase**: Not implemented as a toggle layer. Cell borders underlie the border layers (state/province/culture). It can be implemented as lines between neighboring cell centers (Delaunay edges) rendered as wgpu lines.
 
-| Fase | Descripción |
+| Phase | Description |
 |---|---|
-| **MVP** | Dibujar líneas Delaunay entre centros de celda con un pipeline de líneas wgpu. |
-| **Completo** | Misma lógica que Azgaar: wireframe Voronoi por celda. |
+| **MVP** | Draw Delaunay lines between cell centers with a wgpu line pipeline. |
+| **Full** | Same logic as Azgaar: per-cell Voronoi wireframe. |
 
 ---
 
 ## 5. Grid
 
-### Qué hace en Azgaar
-Superpone una cuadrícula SVG configurable sobre el mapa. Usa SVG `<pattern>` para definir el tile de la grilla. Soporta tipos: pointyHex, flatHex, square, square45deg, triangle. La grilla se escala con el zoom (no es coordenada geográfica, es de diseño).
+### What it does in Azgaar
+Overlays a configurable SVG grid over the map. Uses an SVG `<pattern>` to define the grid tile. Supports types: pointyHex, flatHex, square, square45deg, triangle. The grid scales with zoom (it is not geographic coordinate-based, it is a design grid).
 
-### Código fuente
-| Archivo | Líneas | Rol |
+### Source code
+| File | Lines | Role |
 |---|---|---|
-| `layers.js` | 632-659 | `drawGrid()` — patrón SVG + rect |
-| `style.js` | 493-603 | Configuración de grid: tipo, escala, stroke, dash, shift |
-| `index.html` | 1087-1121 | Selector de tipo de grid, escala |
+| `layers.js` | 632-659 | `drawGrid()` — SVG pattern + rect |
+| `style.js` | 493-603 | Grid configuration: type, scale, stroke, dash, shift |
+| `index.html` | 1087-1121 | Grid type and scale selector |
 
-### Implementación exacta (`layers.js:632-659`)
+### Exact implementation (`layers.js:632-659`)
 ```javascript
 function drawGrid() {
   gridOverlay.selectAll("*").remove();
@@ -241,34 +241,34 @@ function drawGrid() {
 }
 ```
 
-### Patrones de grid predefinidos
-Definidos en `index.html` como `<pattern>` SVG:
-- `#pattern_pointyHex`: Hexágonos en punta
-- `#pattern_flatHex`: Hexágonos planos
-- `#pattern_square`: Cuadrados
-- `#pattern_square45deg`: Cuadrados rotados 45°
-- `#pattern_triangle`: Triángulos
+### Predefined grid patterns
+Defined in `index.html` as SVG `<pattern>`s:
+- `#pattern_pointyHex`: Pointy hexagons
+- `#pattern_flatHex`: Flat hexagons
+- `#pattern_square`: Squares
+- `#pattern_square45deg`: Squares rotated 45°
+- `#pattern_triangle`: Triangles
 
-### Portabilidad a Voronia
-| Fase | Descripción |
+### Portability to Voronia
+| Phase | Description |
 |---|---|
-| **MVP** | Implementar patrón de cuadrícula rectangular simple (líneas horizontales/verticales) como fullscreen shader. |
-| **Completo** | 5 patrones de grid renderizados como geometría de líneas instanciada. Controles de estilo en tab Style. |
+| **MVP** | Implement a simple rectangular grid pattern (horizontal/vertical lines) as a fullscreen shader. |
+| **Full** | 5 grid patterns rendered as instanced line geometry. Style controls in the Style tab. |
 
 ---
 
 ## 6. Coordinates
 
-### Qué hace en Azgaar
-Renderiza líneas de graticule (latitud/longitud) con etiquetas de coordenadas (ej: 10°N, 20°E). Usa `d3.geoGraticule()` para generar las líneas y `d3.geoEquirectangular()` para proyectarlas al SVG. Adapta automáticamente el step de la grilla basado en el zoom. Las etiquetas se colocan en los bordes del mapa.
+### What it does in Azgaar
+Renders graticule lines (latitude/longitude) with coordinate labels (e.g. 10°N, 20°E). Uses `d3.geoGraticule()` to generate the lines and `d3.geoEquirectangular()` to project them to the SVG. Automatically adapts the grid step based on zoom. The labels are placed at the map edges.
 
-### Código fuente
-| Archivo | Líneas | Rol |
+### Source code
+| File | Lines | Role |
 |---|---|---|
-| `layers.js` | 673-731 | `drawCoordinates()` — todo: graticule + labels |
-| `main.js` | 225 | Redraw en pan/zoom |
+| `layers.js` | 673-731 | `drawCoordinates()` — everything: graticule + labels |
+| `main.js` | 225 | Redraw on pan/zoom |
 
-### Implementación exacta (`layers.js:673-731`)
+### Exact implementation (`layers.js:673-731`)
 ```javascript
 function drawCoordinates() {
   coordinates.selectAll("*").remove();
@@ -288,35 +288,35 @@ function drawCoordinates() {
 }
 ```
 
-### Datos que consume
-- `mapCoordinates`: { lonW, lonE, latN, latS, lonT } — límites geográficos del mundo
-- `graphWidth`, `graphHeight`: tamaño del viewbox SVG
-- `scale`: factor de zoom actual
+### Data consumed
+- `mapCoordinates`: { lonW, lonE, latN, latS, lonT } — geographic bounds of the world
+- `graphWidth`, `graphHeight`: size of the SVG viewbox
+- `scale`: current zoom factor
 
-### Portabilidad a Voronia
-| Fase | Descripción |
+### Portability to Voronia
+| Phase | Description |
 |---|---|
-| **Implementación** | Voronia no tiene sistema de coordenadas geográficas (lat/lon) todavía. Depende de la Fase 0/geography que defina la proyección del mundo. |
-| **MVP** | Graticule hardcodeado (step fijo, sin proyección real). |
-| **Completo** | Graticule con proyección configurable, step adaptable al zoom, labels N/S/E/W. |
+| **Implementation** | Voronia does not have a geographic coordinate system (lat/lon) yet. Depends on Phase 0/geography to define the world projection. |
+| **MVP** | Hardcoded graticule (fixed step, no real projection). |
+| **Full** | Graticule with configurable projection, zoom-adaptive step, N/S/E/W labels. |
 
 ---
 
-## Resumen de estado de portabilidad
+## Portability status summary
 
-| Layer | Voronia actual | Dependencias | Prioridad |
+| Layer | Current Voronia state | Dependencies | Priority |
 |---|---|---|---|
-| texture | ❌ No implementado | Cargar textura PNG, fullscreen quad | Baja |
-| heightmap | ✅ Mesh base OK. Contours: ❌ | Esquemas de color, isolíneas | Media |
-| relief | ❌ No implementado | Biomas, Poisson-disc, sprite rendering | Baja |
-| cells | ❌ No toggle. Borders OK | Geometría Voronoi/Delaunay | Media |
-| grid | ❌ No implementado | Patrones de grid, shader líneas | Baja |
-| coordinates | ❌ No implementado | Sistema de coordenadas del mundo | Alta (dependencia) |
+| texture | ❌ Not implemented | Load PNG texture, fullscreen quad | Low |
+| heightmap | ✅ Base mesh OK. Contours: ❌ | Color schemes, isolines | Medium |
+| relief | ❌ Not implemented | Biomes, Poisson-disc, sprite rendering | Low |
+| cells | ❌ No toggle. Borders OK | Voronoi/Delaunay geometry | Medium |
+| grid | ❌ Not implemented | Grid patterns, line shader | Low |
+| coordinates | ❌ Not implemented | World coordinate system | High (dependency) |
 
-### Dependencias cruzadas
-- **coordinates** necesita que el World Data Model tenga coordenadas geográficas (`mapCoordinates` en Azgaar). Esto viene del header del `.map` (pack → `cells.coordinates`?).
-- **relief** necesita biomas implementados (✅) + Poisson-disc sampling (nuevo).
-- **texture** es independiente, solo necesita carga de imagen.
+### Cross dependencies
+- **coordinates** requires the World Data Model to have geographic coordinates (`mapCoordinates` in Azgaar). This comes from the `.map` header (pack → `cells.coordinates`?).
+- **relief** needs implemented biomes (✅) + Poisson-disc sampling (new).
+- **texture** is independent, it only needs image loading.
 
-### Próximo paso sugerido
-Implementar **cells** como capa toggle — es la más simple (wireframe de la malla Voronoi ya existente) y es necesaria para los editores de Fase 6 (rivers, routes). Usar el pipeline de líneas wgpu existente.
+### Suggested next step
+Implement **cells** as a toggle layer — it is the simplest (wireframe of the already-existing Voronoi mesh) and it is needed for the Phase 6 editors (rivers, routes). Use the existing wgpu line pipeline.

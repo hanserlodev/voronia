@@ -1,4 +1,4 @@
-//! Mutadores de entidades `Province`.
+//! Mutators for `Province` entities.
 
 use vor_core::world::World;
 

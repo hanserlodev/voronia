@@ -1,119 +1,119 @@
-//! Atributos de celdas en layout Structure-of-Arrays.
+//! Cell attributes in Structure-of-Arrays layout.
 //!
-//! En Azgaar, `grid.cells.*` y `pack.cells.*` son TypedArrays paralelos indexados
-//! por id de celda (id de grid y id de pack respectivamente — distintos namespaces,
-//! `pack.cells.g[packId]` mapea al id de grid original). En Voronia mantenemos
-//! exactamente el mismo layout SoA: jamás usamos `Vec<Cell>` con un struct gordo por elemento,
-//! porque en mapas de 10k–100k celdas la localidad de cache sí importa (regla
+//! In Azgaar, `grid.cells.*` and `pack.cells.*` are parallel TypedArrays indexed
+//! by cell id (grid id and pack id respectively — separate namespaces,
+//! `pack.cells.g[packId]` maps to the original grid id). Voronia keeps exactly
+//! the same SoA layout: we never use `Vec<Cell>` with a fat struct per element,
+//! because on maps of 10k–100k cells cache locality really matters (rule
 //! `references/conventions.md` §"Layout de datos").
 //!
-//! Importante: **ni `Grid`, ni `Pack`, ni `GridCells`, ni `PackCells` se leen de archivo**
-//! — la geometría (IDs de celdas, vértices, vecinos) se regenera bit-exacta desde
-//! semilla + parámetros (ver `docs/fase-0-investigacion.md` §13.4 por qué esto es
-//! crítico para no aplicar atributos a celdas equivocadas). Los atributos SÍ se
-//! persisten (aquí), la geometría no.
+//! Important: **neither `Grid`, nor `Pack`, nor `GridCells`, nor `PackCells` are read from file**
+//! — the geometry (cell IDs, vertices, neighbors) is regenerated bit-exact from
+//! seed + parameters (see `docs/fase-0-investigacion.md` §13.4 for why this is
+//! critical to avoid applying attributes to wrong cells). Attributes ARE
+//! persisted (here); geometry is not.
 
-/// Atributos de celdas del grid (slot `[7]`–`[11]` del `.map`).
+/// Grid cell attributes (slots `[7]`–`[11]` of the `.map`).
 ///
-/// La geometría asociada (IDs, vecinos, vértices) la repone `vor-import` regenerándola
-/// desde la semilla. Acá solo viven los atributos serializados.
+/// The associated geometry (IDs, neighbors, vertices) is restored by `vor-import`
+/// regenerating it from the seed. Only the serialized attributes live here.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GridCells {
-    /// Altura: 0–100, donde 20 es el nivel mínimo de tierra (slot `[7]`, Uint8).
+    /// Height: 0–100, where 20 is the minimum land level (slot `[7]`, Uint8).
     pub height: Vec<u8>,
-    /// Precipitación (slot `[8]`).
+    /// Precipitation (slot `[8]`).
     pub precipitation: Vec<u16>,
-    /// Id de la feature (isla/lago/océano) a la que pertenece la celda (slot `[9]`, Uint16).
+    /// Id of the feature (island/lake/ocean) the cell belongs to (slot `[9]`, Uint16).
     pub feature_id: Vec<u16>,
-    /// Tipo de celda respecto al agua/costa (slot `[10]`, Int8). Codificación de Azgaar:
-    /// - `-2` = lago (no-costero si `i % 4 != 0`),
-    /// - `-1` = agua costera (cercana a tierra),
-    /// - `1`  = tierra costera (cercana a agua),
-    /// - otro = tierra interior / océano profundo.
+    /// Cell type with respect to water/coast (slot `[10]`, Int8). Azgaar's encoding:
+    /// - `-2` = lake (non-coastal if `i % 4 != 0`),
+    /// - `-1` = coastal water (near land),
+    /// - `1`  = coastal land (near water),
+    /// - other = inland land / deep ocean.
     pub water_type: Vec<i8>,
-    /// Temperatura (slot `[11]`, Int8 en °C — puede ser negativa).
+    /// Temperature (slot `[11]`, Int8 in °C — may be negative).
     pub temperature: Vec<i8>,
 }
 
 impl GridCells {
-    /// Cantidad de celdas del grid. Debe calzar con `Grid::points.len()`.
+    /// Number of grid cells. Must match `Grid::points.len()`.
     #[inline]
     pub fn len(&self) -> usize {
         self.height.len()
     }
 
-    /// `true` si no hay celdas.
+    /// `true` if there are no cells.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.height.is_empty()
     }
 }
 
-/// Atributos de celdas del pack (slots `[16]`–`[44]` del `.map`).
+/// Pack cell attributes (slots `[16]`–`[44]` of the `.map`).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PackCells {
-    /// Id de grid original — mapeo pack→grid. Se llena durante el repacking en `vor-import`,
-    /// no viene directo del archivo Azgaar (está implícito en el orden de `reGraph`).
+    /// Original grid id — pack→grid mapping. Filled during repacking in `vor-import`,
+    /// not read directly from the Azgaar file (it is implicit in `reGraph`'s ordering).
     pub grid_id: Vec<u32>,
-    /// Altura replicada desde el grid de origen (Uint8). Azgaar rellenaa `pack.cells.h` durante `reGraph`.
+    /// Height replicated from the source grid (Uint8). Azgaar fills `pack.cells.h` during `reGraph`.
     pub height: Vec<u8>,
-    /// Área de la celda en pixels², capped a `UINT16_MAX` (Uint16).
+    /// Cell area in pixels², capped at `UINT16_MAX` (Uint16).
     pub area_px: Vec<u16>,
-    /// Bioma (slot `[16]`, Uint8; el slot `[3]` lleva la tabla de biomas, no el id por celda).
+    /// Biome (slot `[16]`, Uint8; slot `[3]` holds the biome table, not the per-cell id).
     pub biome: Vec<u8>,
-    /// Id de burgo (slot `[17]`, Uint16; `0` = sin burgo → `Option` se arma en `vor-import` con sentinel `0`).
+    /// Burg id (slot `[17]`, Uint16; `0` = no burg → `Option` is built in `vor-import` from the `0` sentinel).
     pub burg: Vec<u16>,
-    /// Confluencia fluvial (slot `[18]`).
+    /// River confluence (slot `[18]`).
     pub confluence: Vec<u16>,
-    /// Id de cultura (slot `[19]`, Uint16; `0` = Wildlands, no es `Option`).
+    /// Culture id (slot `[19]`, Uint16; `0` = Wildlands, not `Option`).
     pub culture: Vec<u16>,
-    /// Flujo de agua (slot `[20]`, Uint16).
+    /// Water flow (slot `[20]`, Uint16).
     pub flux: Vec<u16>,
-    /// Población en "puntos de población" (slot `[21]`, Float32 redondeado a 4 decimales; 1 pt = 1000 hab por defecto).
+    /// Population in "population points" (slot `[21]`, Float32 rounded to 4 decimal places; 1 pt = 1000 people by default).
     pub population: Vec<f32>,
-    /// Id de río que pasa por la celda (slot `[22]`, Uint16; `0` = sin río).
+    /// Id of the river passing through the cell (slot `[22]`, Uint16; `0` = no river).
     pub river: Vec<u16>,
-    /// Score de la celda para fundación de burgos (slot `[24]`, Uint16).
+    /// Cell score for burg foundation (slot `[24]`, Uint16).
     pub score: Vec<u16>,
-    /// Id de estado (slot `[25]`, Uint16; `0` = neutral/Wildlands).
+    /// State id (slot `[25]`, Uint16; `0` = neutral/Wildlands).
     pub state: Vec<u16>,
-    /// Id de religión (slot `[26]`, Uint16; `0` = sin religión).
+    /// Religion id (slot `[26]`, Uint16; `0` = no religion).
     pub religion: Vec<u16>,
-    /// Id de provincia (slot `[27]`, Uint16; `0` = sin provincia).
+    /// Province id (slot `[27]`, Uint16; `0` = no province).
     pub province: Vec<u16>,
-    /// Id de bien producido (slot `[40]`, Uint16; `0` = sin bien — sistema de economía, Fase 7).
+    /// Id of the produced good (slot `[40]`, Uint16; `0` = no good — economy system, Phase 7).
     pub good: Vec<u16>,
-    /// Id de mercado vinculado (slot `[44]`, Uint16; `0` = sin mercado).
+    /// Id of the linked market (slot `[44]`, Uint16; `0` = no market).
     pub market: Vec<u16>,
-    /// Rutas que parten de/atraviesan la celda (slot `[36]`, JSON adjacency map).
-    /// Layout confirmado contra slot `[36]` de Brample: `{"6":{"7":359, "39":359}, "7":{...}}`
-    /// (id de celda origen → {id de celda destino → id de ruta}).
+    /// Routes departing from/crossing the cell (slot `[36]`, JSON adjacency map).
+    /// Layout confirmed against Brample's slot `[36]`: `{"6":{"7":359, "39":359}, "7":{...}}`
+    /// (source cell id → {destination cell id → route id}).
     pub routes: Vec<RoutesFromCell>,
-    /// Id de la feature (isla/lago/océano) a la que pertenece la celda.
-    /// Poblado por `vor-import` desde `re_graph` + grid feature mapping.
+    /// Id of the feature (island/lake/ocean) the cell belongs to.
+    /// Populated by `vor-import` from `re_graph` + grid feature mapping.
     pub feature_id: Vec<u16>,
-    /// IDs de celdas pack adyacentes (vecinos interiores, sin boundary).
-    /// Poblado por `vor-import` durante `re_graph` (desde el segundo `calculate_voronoi`).
-    /// No se persiste — es derivable del Delaunay.
+    /// Adjacent pack cell IDs (inner neighbors, without boundary).
+    /// Populated by `vor-import` during `re_graph` (from the second `calculate_voronoi`).
+    /// Not persisted — derivable from the Delaunay.
     #[serde(skip)]
     pub adjacency: Vec<Vec<u32>>,
 }
 
-/// Rutas que parten de una celda. Sub-estructura de `PackCells::routes`.
+/// Routes departing from a cell. Sub-structure of `PackCells::routes`.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct RoutesFromCell {
-    /// Cada entrada = (celda destino, id de ruta).
+    /// Each entry = (destination cell, route id).
     pub to: Vec<(u32, u32)>,
 }
 
 impl PackCells {
-    /// Cantidad de celdas del pack. Debe calzar con `Pack::points.len()` (vor-import repoblará).
+    /// Number of pack cells. Must match `Pack::points.len()` (vor-import will repopulate).
     #[inline]
     pub fn len(&self) -> usize {
         self.biome.len()
     }
 
-    /// `true` si no hay celdas.
+    /// `true` if there are no cells.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.biome.is_empty()

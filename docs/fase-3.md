@@ -1,89 +1,89 @@
-# Fase 3 — Capas completas de renderizado
+# Phase 3 — Complete rendering layers
 
-> Registro cronológico de la sesión. Formato: `docs/fase-0-investigacion.md`.
-> Última actualización: 27 julio 2026 — Fase 3 COMPLETADA (todos los fixes aplicados).
-
----
-
-## Referencia de Azgaar
-
-- **Versión de Azgaar**: v1.138.0 (registrada en Fase 1).
-- **Commit clonado local**: `51d8e3e` (azgaar-fmg master, 21 jul 2026).
-- **Mapa de prueba**: `Sorvik 2026-07-24-23-39.map` (~7.3K pack cells, 141 ríos, 14 estados, 16 culturas, 226 provincias, 1010 burgos).
+> Chronological session log. Format: `docs/fase-0-investigacion.md`.
+> Last updated: July 27, 2026 — Phase 3 COMPLETED (all fixes applied).
 
 ---
 
-## Cronología de la sesión (27 julio 2026)
+## Azgaar reference
 
-### Punto de partida
+- **Azgaar version**: v1.138.0 (recorded in Phase 1).
+- **Cloned local commit**: `51d8e3e` (azgaar-fmg master, Jul 21, 2026).
+- **Test map**: `Sorvik 2026-07-24-23-39.map` (~7.3K pack cells, 141 rivers, 14 states, 16 cultures, 226 provinces, 1010 burgs).
 
-Fase 2 completada. Working tree con 15 archivos modificados de Fase 2, todos sin commitar. Se arranca desde el estado post-Fase 2.
+---
 
-### Paso 1 — Extensión de `vor-core` para datos de render
+## Session chronology (July 27, 2026)
 
-Se agregaron dos campos `#[serde(skip)]`:
+### Starting point
 
-**`PackCells::adjacency: Vec<Vec<u32>>`** (`crates/vor-core/src/cells.rs`): IDs de celdas pack adyacentes (vecinos interiores, sin boundary). Poblado por `vor-import::regraph` desde el segundo `calculate_voronoi` en el pack. Es el equivalente a `cells.c[p]` de Azgaar.
+Phase 2 completed. Working tree with 15 modified files from Phase 2, none committed. Work starts from the post-Phase 2 state.
 
-**`River::cell_path: Vec<u32>`** (`crates/vor-core/src/entities/river.rs`): Camino de celdas pack que recorre el río, desde `source_cell` hasta `mouth_cell`, siguiendo flujo downhill. Poblado por `vor-import::loader::trace_river_paths()`.
+### Step 1 — `vor-core` extension for render data
 
-### Paso 2 — Poblado de datos en `vor-import`
+Added two `#[serde(skip)]` fields:
 
-**`regraph.rs`**: Se agregó `voronoi.cells.c.clone()` como fuente de `adjacency` en el `PackCells` post-repack.
+**`PackCells::adjacency: Vec<Vec<u32>>`** (`crates/vor-core/src/cells.rs`): IDs of adjacent pack cells (interior neighbors, no boundary). Populated by `vor-import::regraph` from the second `calculate_voronoi` in the pack. It is the equivalent of Azgaar's `cells.c[p]`.
 
-**`loader.rs`**: Se agregó `trace_river_paths()` que para cada río con id>0 recorre desde `source_cell` siguiendo vecinos con mismo `river_id` y altura decreciente hasta `mouth_cell`. Algoritmo greedy: en cada paso elige el vecino con menor altura.
+**`River::cell_path: Vec<u32>`** (`crates/vor-core/src/entities/river.rs`): The path of pack cells the river traverses, from `source_cell` to `mouth_cell`, following downhill flow. Populated by `vor-import::loader::trace_river_paths()`.
 
-### Paso 3 — Helper `build_pack_mesh`
+### Step 2 — Data population in `vor-import`
 
-Archivo: `crates/vor-render/src/mesh.rs`.
+**`regraph.rs`**: Added `voronoi.cells.c.clone()` as the source of `adjacency` in the post-repack `PackCells`.
 
-Función genérica que dado un `VoronoiVertices`, `points_n` y un closure `color_fn(usize) -> [f32;4]`, produce un `HeightmapMesh` triangulando polígonos de Voronoi con lyon. Reutiliza el mismo patrón `ColorCtor` de `heightmap.rs`.
+**`loader.rs`**: Added `trace_river_paths()` which, for each river with id>0, traverses from `source_cell` following neighbors with the same `river_id` and decreasing height down to `mouth_cell`. Greedy algorithm: at each step it picks the neighbor with the lowest height.
 
-### Paso 4 — Capas de render
+### Step 3 — `build_pack_mesh` helper
 
-**`biome.rs`** (`crates/vor-render/src/biome.rs`): `build_biome_mesh(pack, biome_colors)` colorea cada celda pack según `pack.cells.biome[p]` → color del catálogo. Conversión hex `#rrggbb` → `[f32;4]` lineal (gamma 2.2 aproximado).
+File: `crates/vor-render/src/mesh.rs`.
 
-**`river.rs`** (`crates/vor-render/src/river.rs`): `build_river_mesh(points, rivers)` dibuja cada segmento del `cell_path` de cada río como un quad texturizado (dos triángulos) con grosor proporcional a `discharge_m3s` (1-6 px). Color azul semitransparente `[0.2, 0.4, 0.8, 0.85]`.
+Generic function that, given a `VoronoiVertices`, `points_n` and a `color_fn(usize) -> [f32;4]` closure, produces a `HeightmapMesh` by triangulating Voronoi polygons with lyon. It reuses the same `ColorCtor` pattern from `heightmap.rs`.
 
-**`border.rs`** (`crates/vor-render/src/border.rs`): `build_border_mesh(pack, BorderKind)` itera aristas de `adjacency` y dibuja un segmento (quad) entre centros de celdas con distinto id. Colores: estado rojo `[0.9,0.1,0.1]`, provincia amarillo `[0.7,0.7,0.1]`, cultura naranja `[1.0,0.65,0.0]`.
+### Step 4 — Render layers
 
-**`burg.rs`** (`crates/vor-render/src/burg.rs`): `build_burg_mesh(pack)` dibuja un triángulo equilátero de 4px en `pack.points[burg.cell]` por cada burgo. Color rojo `[0.9,0.2,0.1]`.
+**`biome.rs`** (`crates/vor-render/src/biome.rs`): `build_biome_mesh(pack, biome_colors)` colors each pack cell according to `pack.cells.biome[p]` → catalog color. Hex `#rrggbb` → linear `[f32;4]` conversion (approximate gamma 2.2).
 
-**`layers.rs`** (`crates/vor-render/src/layers.rs`): `LayerFlags` con 8 flags (heightmap, biomes, rivers, borders: state/province/culture, burgs, labels). `active_indices()` retorna qué capas dibujar. `NUM_LAYERS = 7` (layer 0 = heightmap, layers 1-6 = extras).
+**`river.rs`** (`crates/vor-render/src/river.rs`): `build_river_mesh(points, rivers)` draws each segment of each river's `cell_path` as a textured quad (two triangles) with thickness proportional to `discharge_m3s` (1-6 px). Semi-transparent blue color `[0.2, 0.4, 0.8, 0.85]`.
 
-### Paso 5 — Multi-layer en Renderer
+**`border.rs`** (`crates/vor-render/src/border.rs`): `build_border_mesh(pack, BorderKind)` iterates `adjacency` edges and draws a segment (quad) between the centers of cells with a different id. Colors: state red `[0.9,0.1,0.1]`, province yellow `[0.7,0.7,0.1]`, culture orange `[1.0,0.65,0.0]`.
 
-Se agregó `LayerBuffer` (vertex/index buffer + count) y `layers: Vec<LayerBuffer>` al struct `Renderer`. 
+**`burg.rs`** (`crates/vor-render/src/burg.rs`): `build_burg_mesh(pack)` draws a 4px equilateral triangle at `pack.points[burg.cell]` for each burg. Red color `[0.9,0.2,0.1]`.
 
-- `add_layer_mesh(mesh) -> usize`: crea buffers GPU y retorna índice (1-based).
-- `draw_layer(pass, index)`: dibuja cualquier capa por índice (0 = heightmap legacy, 1+ = extras).
+**`layers.rs`** (`crates/vor-render/src/layers.rs`): `LayerFlags` with 8 flags (heightmap, biomes, rivers, borders: state/province/culture, burgs, labels). `active_indices()` returns which layers to draw. `NUM_LAYERS = 7` (layer 0 = heightmap, layers 1-6 = extras).
 
-### Paso 6 — Integración en vor-app
+### Step 5 — Multi-layer in Renderer
 
-**`init_state`**: construye todas las mallas (biomes, rivers, borders x3, burgs), las registra en el renderer vía `add_layer_mesh`, almacena `world: World`, `layer_flags: LayerFlags`, `picked_cell: Option<usize>` en `State`.
+Added `LayerBuffer` (vertex/index buffer + count) and `layers: Vec<LayerBuffer>` to the `Renderer` struct.
 
-**`redraw()`**: 
-- Orden de capas: background (clear) → heightmap → biomes → rivers → borders state → borders province → borders culture → burgs → labels (egui overlay) → egui UI.
-- `active_indices()` filtra según flags.
-- Labels: dibuja nombres de burgo en egui `layer_painter`, proyectando coordenadas mundo→pantalla.
-- Panel derecho: checkboxes para cada capa.
-- Panel izquierdo: FPS, cursor, info de celda seleccionada.
+- `add_layer_mesh(mesh) -> usize`: creates GPU buffers and returns the index (1-based).
+- `draw_layer(pass, index)`: draws any layer by index (0 = legacy heightmap, 1+ = extras).
 
-**Picking**: click derecho → `screen_to_world` → `pick_cell()` (O(n) sobre puntos pack, threshold 20px).
+### Step 6 — Integration in vor-app
 
-### Hallazgo crítico — egui texture upload (26 jul 2026)
+**`init_state`**: builds all meshes (biomes, rivers, borders x3, burgs), registers them in the renderer via `add_layer_mesh`, stores `world: World`, `layer_flags: LayerFlags`, `picked_cell: Option<usize>` in `State`.
 
-La GUI egui (panel lateral, FPS, labels) no se veía. Causa raíz: egui escribe `output.textures_delta.set` para registrar que el font atlas ha cambiado (primera vez y cada vez que se añade un carácter nuevo), pero el código no llamaba a `egui_renderer.update_texture()`. Sin eso, `egui_wgpu::Renderer::render()` comprueba `self.textures.contains_key(id)`, falla y salta todos los draw calls — incluso rectángulos sólidos.
+**`redraw()`**:
+- Layer order: background (clear) → heightmap → biomes → rivers → borders state → borders province → borders culture → burgs → labels (egui overlay) → egui UI.
+- `active_indices()` filters by flags.
+- Labels: draws burg names in the egui `layer_painter`, projecting world→screen coordinates.
+- Right panel: checkboxes for each layer.
+- Left panel: FPS, cursor, info of the selected cell.
 
-**Fix**: iterar `output.textures_delta.set` y llamar `update_texture()` para cada `(id, delta)` antes de `update_buffers()`.
+**Picking**: right click → `screen_to_world` → `pick_cell()` (O(n) over pack points, 20px threshold).
 
-### Hallazgo crítico — cull_mode back-face en viewer 2D (27 jul 2026)
+### Critical finding — egui texture upload (Jul 26, 2026)
 
-Ríos, fronteras (estado/provincia/cultura) y burgos no se renderizaban aunque los meshes se construían correctamente con vértices e índices válidos. Causa raíz: la proyección ortográfica 2D en `camera.rs:77-78` invierte Y explícitamente (`bottom = cy + ey/2 > top = cy - ey/2` → `orthographic_rh` produce `rcp_height = 1/(top - bottom)` negativo). El pipeline usaba `cull_mode: Some(wgpu::Face::Back)` con `front_face: Ccw`. Esto funcionaba para el heightmap porque lyon tesela polígonos de Voronoi en sentido horario (CW) — que sobreviven al Y-flip y aparecen CCW en clip. Pero los quads de ríos/fronteras/burgos se construyen en CCW y tras el Y-flip quedan CW en clip → cullingados → invisibles.
+The egui GUI (side panel, FPS, labels) was not visible. Root cause: egui writes to `output.textures_delta.set` to register that the font atlas has changed (first time and every time a new character is added), but the code did not call `egui_renderer.update_texture()`. Without it, `egui_wgpu::Renderer::render()` checks `self.textures.contains_key(id)`, fails, and skips all draw calls — even solid rectangles.
 
-**Fix**: `cull_mode: None` — un viewer 2D con mapa plano nunca necesita back-face culling (no hay geometría ocluida).
+**Fix**: iterate `output.textures_delta.set` and call `update_texture()` for each `(id, delta)` before `update_buffers()`.
 
-### Paso 7 — Validación runtime
+### Critical finding — back-face cull_mode in the 2D viewer (Jul 27, 2026)
+
+Rivers, borders (state/province/culture) and burgs were not rendered even though the meshes were built correctly with valid vertices and indices. Root cause: the 2D orthographic projection in `camera.rs:77-78` explicitly inverts Y (`bottom = cy + ey/2 > top = cy - ey/2` → `orthographic_rh` produces a negative `rcp_height = 1/(top - bottom)`). The pipeline used `cull_mode: Some(wgpu::Face::Back)` with `front_face: Ccw`. This worked for the heightmap because lyon tessellates Voronoi polygons clockwise (CW) — they survive the Y-flip and appear CCW in clip space. But the river/border/burg quads are built CCW and after the Y-flip end up CW in clip space → culled → invisible.
+
+**Fix**: `cull_mode: None` — a 2D viewer with a flat map never needs back-face culling (there is no occluded geometry).
+
+### Step 7 — Runtime validation
 
 ```
 $ cargo run --bin vor -- "Sorvik 2026-07-24-23-39.map"
@@ -93,11 +93,11 @@ INFO  vor_app > heightmap mesh: 58010 vertices, 114030 indices (bounds [-9.0, -9
 INFO  vor_app > meshes: biomes=42179v/82926i, rivers=808v/1212i, borders(s/p/c)=(25632/44952/31856), burgs=3027v/3027i
 ```
 
-El visor abre correctamente con todas las capas renderizadas, incluyendo ríos (azul, grosor variable por caudal), fronteras (rojo estado, amarillo provincia, naranja cultura) y burgos (triángulos rojos). 47 tests verdes, clippy/fmt limpios.
+The viewer opens correctly with all layers rendered, including rivers (blue, thickness varying by discharge), borders (red state, yellow province, orange culture) and burgs (red triangles). 47 green tests, clippy/fmt clean.
 
 ---
 
-## Archivos tocados
+## Files touched
 
 ```
 M crates/vor-core/src/cells.rs                (+adjacency field)
@@ -109,33 +109,33 @@ M crates/vor-import/src/mapfile/catalogs.rs   (+cell_path: Vec::new())
 M crates/vor-render/src/camera.rs             (+world_to_screen)
 M crates/vor-render/src/heightmap.rs          (+pub(crate) ColorCtor)
 A crates/vor-render/src/mesh.rs               (helper build_pack_mesh)
-A crates/vor-render/src/biome.rs              (capa biomas)
-A crates/vor-render/src/river.rs              (capa ríos)
-A crates/vor-render/src/border.rs             (capa fronteras)
-A crates/vor-render/src/burg.rs               (capa burgos)
+A crates/vor-render/src/biome.rs              (biome layer)
+A crates/vor-render/src/river.rs              (rivers layer)
+A crates/vor-render/src/border.rs             (borders layer)
+A crates/vor-render/src/burg.rs               (burgs layer)
 A crates/vor-render/src/layers.rs             (LayerFlags)
 M crates/vor-render/src/renderer.rs           (+layers vec, add_layer_mesh, draw_layer)
 M crates/vor-render/src/lib.rs                (+export new modules)
 M crates/vor-app/src/lib.rs                   (+world, layers, picking en State/redraw)
-- - - (sesión 2: fixes post-Fase 2) - - -
+- - - (session 2: post-Phase 2 fixes) - - -
 M crates/vor-render/src/renderer.rs           (cull_mode: None fix)
 M .opencode/skills/voronia-dev/references/status.md (fix docs)
-A docs/fase-3.md                              (this file, update with hallazgos)
+A docs/fase-3.md                              (this file, update with findings)
 ```
 
 ---
 
-## Estado final
+## Final state
 
 ```
 cargo test --workspace:  ✓ 47 tests
-cargo clippy --all-targets: ✓ 0 errors, 2 warnings (dead_code pre-existente)
-cargo fmt --all:           ✓ limpio
-cargo run --bin vor:       ✓ visor abre con TODAS las capas (incluye ríos, fronteras, burgos)
+cargo clippy --all-targets: ✓ 0 errors, 2 warnings (pre-existing dead_code)
+cargo fmt --all:           ✓ clean
+cargo run --bin vor:       ✓ viewer opens with ALL layers (includes rivers, borders, burgs)
 ```
 
-### Checklist Fase 3 (plan maestro §23)
+### Phase 3 checklist (master plan §23)
 
-- [x] Ríos, fronteras de estados/provincias/culturas, biomas, burgos, labels básicos.
-- [x] Sistema de toggles de capas.
-- [x] Picking (click → info de celda/entidad).
+- [x] Rivers, state/province/culture borders, biomes, burgs, basic labels.
+- [x] Layer toggle system.
+- [x] Picking (click → cell/entity info).

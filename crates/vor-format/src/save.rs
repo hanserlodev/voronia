@@ -6,10 +6,10 @@ use vor_core::world::World;
 use crate::error::FormatError;
 use crate::header::{VornHeader, VornMetadata};
 
-/// Guarda un `World` en formato `.vorn`.
+/// Saves a `World` in `.vorn` format.
 ///
-/// Serializa el World con bincode, lo antecede del header + metadata,
-/// y escribe todo al archivo en `path`.
+/// Serializes the World with bincode, prepends the header + metadata,
+/// and writes everything to the file at `path`.
 pub fn save(
     path: impl AsRef<Path>,
     world: &World,
@@ -29,7 +29,7 @@ pub fn save(
     Ok(())
 }
 
-/// Guarda un `World` inferiendo metadata desde el propio World.
+/// Saves a `World` inferring metadata from the World itself.
 pub fn save_world(path: impl AsRef<Path>, world: &World) -> Result<(), FormatError> {
     let metadata = VornMetadata::new(
         world.settings.map_name.clone(),

@@ -1,184 +1,184 @@
-# Fase 2 — Visor GPU mínimo
+# Phase 2 — Minimal GPU viewer
 
-> Registro cronológico de la sesión. Formato: `docs/fase-0-investigacion.md`.
-> Última actualización: 26 julio 2026 — Fase 2 COMPLETADA.
-
----
-
-## Referencia de Azgaar
-
-- **Versión de Azgaar**: v1.138.0 (registrada en Fase 1 — la geometría del `.map` Sorvik se regenera bit-exacta contra este commit).
-- **Commit clonado local**: `51d8e3e` (azgaar-fmg master, 21 jul 2026 — ver divergencia de Brample en `docs/fase-1.md`).
-- **Mapas de prueba**: `~/Descargas/Brample 2026-07-22-21-24.map`, `Sorvik 2026-07-24-23-39.map`, `XD.map`.
-- **Formato de entrada**: `.map` legacy (slot-by-slot, 47 slots). La geometría no viene en el archivo — se regenera desde semilla (hallazgo fase-0 §3).
+> Chronological session log. Format: `docs/fase-0-investigacion.md`.
+> Last updated: July 26, 2026 — Phase 2 COMPLETED.
 
 ---
 
-## Cronología de la sesión (26 julio 2026)
+## Azgaar reference
 
-### Commit inicial: `758599e docs: registrar Fase 1 en docs/fase-1.md + protocolo checkpoint→phase-md en SKILL.md`
+- **Azgaar version**: v1.138.0 (recorded in Phase 1 — the geometry of the Sorvik `.map` is regenerated bit-exact against this commit).
+- **Cloned local commit**: `51d8e3e` (azgaar-fmg master, Jul 21, 2026 — see the Brample divergence in `docs/fase-1.md`).
+- **Test maps**: `~/Descargas/Brample 2026-07-22-21-24.map`, `Sorvik 2026-07-24-23-39.map`, `XD.map`.
+- **Input format**: legacy `.map` (slot-by-slot, 47 slots). The geometry is not stored in the file — it is regenerated from the seed (finding fase-0 §3).
 
-El punto de partida es el tag de Fase 1 completa. Working tree limpio.
+---
 
-### Paso 1 — Workspace deps y Cargo.toml
+## Session chronology (July 26, 2026)
 
-Se agregaron al `[workspace.dependencies]` de `Cargo.toml` raíz:
-- `wgpu = "22"` — fijado en 22 por compatibilidad con `egui-wgpu 0.29`. wgpu 23 causa conflicto de versiones en el resolver.
-- `winit = "0.30"` con features `x11`, `wayland`, `wayland-dlopen`, `rwh_06`.
+### Initial commit: `758599e docs: registrar Fase 1 en docs/fase-1.md + protocolo checkpoint→phase-md en SKILL.md`
+
+The starting point is the Phase 1 complete tag. Clean working tree.
+
+### Step 1 — Workspace deps and Cargo.toml
+
+Added to the root `Cargo.toml` `[workspace.dependencies]`:
+- `wgpu = "22"` — pinned to 22 for compatibility with `egui-wgpu 0.29`. wgpu 23 causes a version conflict in the resolver.
+- `winit = "0.30"` with features `x11`, `wayland`, `wayland-dlopen`, `rwh_06`.
 - `egui = "0.29"`, `egui-wgpu = "0.29"`, `egui-winit = "0.29"`.
-- `pollster = "0.3"` para bloquear async en `main`.
-- `bytemuck = "1.21"` (con feature `derive`) para `Pod`/`Zeroable` en vertex structs.
-- `raw-window-handle = "0.6"` (compatible con winit 0.30).
+- `pollster = "0.3"` to block async in `main`.
+- `bytemuck = "1.21"` (with the `derive` feature) for `Pod`/`Zeroable` on vertex structs.
+- `raw-window-handle = "0.6"` (compatible with winit 0.30).
 
-`lyon` subido de `"0.18"` a `"1.0"` (API breaking — `Path::builder()` en vez de `PathBuilder::new()`).
+`lyon` bumped from `"0.18"` to `"1.0"` (breaking API — `Path::builder()` instead of `PathBuilder::new()`).
 
-**Archivos tocados**: `Cargo.toml`, `crates/vor-render/Cargo.toml`, `crates/vor-app/Cargo.toml`, `crates/vor-cli/Cargo.toml`.
+**Files touched**: `Cargo.toml`, `crates/vor-render/Cargo.toml`, `crates/vor-app/Cargo.toml`, `crates/vor-cli/Cargo.toml`.
 
-### Paso 2 — `vor-core::VoronoiVertices::cell_rings`
+### Step 2 — `vor-core::VoronoiVertices::cell_rings`
 
-Se agregó el campo `cell_rings: Vec<Vec<u32>>` a `vor_core::voronoi::VoronoiVertices` con `#[serde(skip)]`.
+Added the field `cell_rings: Vec<Vec<u32>>` to `vor_core::voronoi::VoronoiVertices` with `#[serde(skip)]`.
 
-**Motivación**: El renderer necesita el mapeo celda→triángulos (`cells.v` de Azgaar) para triangular polígonos de Voronoi. En Fase 1 se omitió por ser "derivable del Delaunay" — correcto para persistencia, pero el renderer no debe recalcular geometría. Es una consecuencia pragmática del principio SoA con skip de serialización.
+**Motivation**: The renderer needs the cell→triangles mapping (`cells.v` of Azgaar) to triangulate Voronoi polygons. It was omitted in Phase 1 as "derivable from the Delaunay" — correct for persistence, but the renderer should not recompute geometry. It is a pragmatic consequence of the SoA principle with serialization skip.
 
-**Propagación**: Ambas funciones `voronoi_to_vor_core()` en `loader.rs` y `regraph.rs` ahora copian `v.cells.v.clone()` al nuevo campo.
+**Propagation**: Both `voronoi_to_vor_core()` functions in `loader.rs` and `regraph.rs` now copy `v.cells.v.clone()` to the new field.
 
-**Archivos tocados**: `crates/vor-core/src/voronoi.rs`, `crates/vor-import/src/mapfile/loader.rs`, `crates/vor-import/src/regraph.rs`.
+**Files touched**: `crates/vor-core/src/voronoi.rs`, `crates/vor-import/src/mapfile/loader.rs`, `crates/vor-import/src/regraph.rs`.
 
-### Paso 3 — `vor-render::Camera`
+### Step 3 — `vor-render::Camera`
 
-Módulo `camera.rs`: cámara ortográfica 2D con:
-- `CameraUniform` (`[f32; 16]` repr(C), Pod/Zeroable) para uniform buffer.
-- `Camera` con `center`, `extent_y`, `aspect`.
-- `view_proj()` vía `glam::Mat4::orthographic_rh` con inversión Y (+Y mundo→-Y NDC).
-- `screen_to_world()`: coordenadas de superficie a mundo.
-- `zoom_at_cursor()`: escala `extent_y` y compensa centro para preservar el punto bajo el cursor (zoom-to-cursor).
-- `pan_by_screen_delta()`: desplaza centro proporcional al viewport.
-- `frame_bounds()`: encuadre inicial con padding 10%.
+Module `camera.rs`: 2D orthographic camera with:
+- `CameraUniform` (`[f32; 16]` repr(C), Pod/Zeroable) for the uniform buffer.
+- `Camera` with `center`, `extent_y`, `aspect`.
+- `view_proj()` via `glam::Mat4::orthographic_rh` with Y inversion (+Y world→-Y NDC).
+- `screen_to_world()`: surface coordinates to world.
+- `zoom_at_cursor()`: scales `extent_y` and compensates the center to keep the point under the cursor fixed (zoom-to-cursor).
+- `pan_by_screen_delta()`: shifts the center proportionally to the viewport.
+- `frame_bounds()`: initial framing with 10% padding.
 
-**Tests**: 4 tests unitarios (screen_to_world center, zoom preserva cursor, pan mueve centro opuesto, frame_bounds ajusta extent_y).
+**Tests**: 4 unit tests (screen_to_world center, zoom keeps cursor fixed, pan moves center opposite, frame_bounds adjusts extent_y).
 
-### Paso 4 — `vor-render::HeightmapLayer`
+### Step 4 — `vor-render::HeightmapLayer`
 
-Módulo `heightmap.rs`:
+Module `heightmap.rs`:
 
 - `HeightmapVertex` (repr(C), Pod/Zeroable): `pos: [f32;2]` + `color: [f32;4]`.
 - `HeightmapMesh`: `vertices` + `indices` + `bounds_min/max`.
 - `build_mesh(grid: &Grid) -> HeightmapMesh`:
-  - Itera `grid.points_n()` celdas reales (sin boundary).
-  - Para cada celda con `cell_rings[p]` no vacío: construye path cerrado desde `grid.vertices.positions[ann[t]]`, tessellate con `lyon::FillTessellator`.
-  - Color por altura vía `height_color(h)` (rampa estilo Azgaar: azul marino 0-19, verde→marrón→blanco 20-100).
-  - Acumula en mesh global con offset de índices.
-  - Celdas degeneradas (tessellation falla) se saltan.
-- `height_color(u8) -> [f32;4]`: rampa hardcodeada con 5 stops para tierra.
+  - Iterates `grid.points_n()` real cells (no boundary).
+  - For each cell with a non-empty `cell_rings[p]`: builds a closed path from `grid.vertices.positions[ann[t]]`, tessellates with `lyon::FillTessellator`.
+  - Colors by height via `height_color(h)` (Azgaar-style ramp: navy blue 0-19, green→brown→white 20-100).
+  - Accumulates into a global mesh with index offset.
+  - Degenerate cells (tessellation fails) are skipped.
+- `height_color(u8) -> [f32;4]`: hardcoded ramp with 5 stops for land.
 
-**Tests**: 3 tests unitarios (azul marino, cima brillante, clamp >100 no panico).
+**Tests**: 3 unit tests (navy blue, bright summit, clamp >100 does not panic).
 
-### Paso 5 — `vor-render::Renderer`
+### Step 5 — `vor-render::Renderer`
 
-Módulo `renderer.rs`:
+Module `renderer.rs`:
 
 - `Renderer` struct: device, queue, surface, surface_config, format, camera_buf + bind group/layout, heightmap pipeline, vertex/index buffers.
-- `Renderer::new()`: crea device, surface config, uniform buffer, bind group, shader module y pipeline.
-- Shader WGSL inline: vertex `vs_main` recibe `VertexIn { position: vec2<f32>, color: vec4<f32> }`, transforma por `camera * vec4(position, 0, 1)`, pasa color al fragment. Fragment `fs_main` devuelve color.
-- `set_mesh()`: sube vertex/index buffers a GPU via `create_buffer_init`.
-- `render()` en Renderer ahora delegada a vor-app (el renderer expone `pub` fields: `camera_buf`, `heightmap_pipeline`, `vertex_buf`, `index_buf`, `index_count`, `surface`, `device`, `queue`, `format`).
+- `Renderer::new()`: creates device, surface config, uniform buffer, bind group, shader module and pipeline.
+- Inline WGSL shader: vertex `vs_main` receives `VertexIn { position: vec2<f32>, color: vec4<f32> }`, transforms by `camera * vec4(position, 0, 1)`, passes color to the fragment. Fragment `fs_main` returns the color.
+- `set_mesh()`: uploads vertex/index buffers to the GPU via `create_buffer_init`.
+- `render()` on Renderer is now delegated to vor-app (the renderer exposes `pub` fields: `camera_buf`, `heightmap_pipeline`, `vertex_buf`, `index_buf`, `index_count`, `surface`, `device`, `queue`, `format`).
 
-**API de cámara en shader**: `@group(0) @binding(0) var<uniform> camera : mat4x4<f32>`.
+**Camera API in shader**: `@group(0) @binding(0) var<uniform> camera : mat4x4<f32>`.
 
-### Paso 6 (reprise) — Fix integración vor-app (26 jul, post-checkpoint)
+### Step 6 (reprise) — vor-app integration fix (Jul 26, post-checkpoint)
 
-Tras el checkpoint, se reescribió `vor-app/src/lib.rs` completo con:
+After the checkpoint, `vor-app/src/lib.rs` was fully rewritten with:
 
-**Estructura winit 0.30 correcta**:
-- `Window` se crea dentro de `ApplicationHandler::resumed()` (winit 0.30 requiere esto; antes se creaba antes de `run_app`).
-- `Window` se envuelve en `Arc<Window>` para `Surface<'static>`.
-- `Camera` y `Renderer` se almacenan en `State`, sin duplicar `device`/`queue` (se usa `renderer.device` y `renderer.queue`).
-- egui 0.29 API: `Align2::LEFT_TOP` (no `Align::LEFT_TOP`), `on_window_event(&self.window, event)` (no `WindowId`).
+**Correct winit 0.30 structure**:
+- `Window` is created inside `ApplicationHandler::resumed()` (winit 0.30 requires this; previously it was created before `run_app`).
+- `Window` is wrapped in `Arc<Window>` for `Surface<'static>`.
+- `Camera` and `Renderer` are stored in `State`, without duplicating `device`/`queue` (`renderer.device` and `renderer.queue` are used).
+- egui 0.29 API: `Align2::LEFT_TOP` (not `Align::LEFT_TOP`), `on_window_event(&self.window, event)` (no `WindowId`).
 
 **Wgpu 22 API fixes**:
-- `Instance::new(InstanceDescriptor)` (no `&InstanceDescriptor`, no referencia).
-- `DeviceDescriptor` sin campo `trace` (eliminado en wgpu 22).
-- `adapter.request_device(&desc, None)` (trace_path es segundo arg, no campo del descriptor).
+- `Instance::new(InstanceDescriptor)` (not `&InstanceDescriptor`, no reference).
+- `DeviceDescriptor` without the `trace` field (removed in wgpu 22).
+- `adapter.request_device(&desc, None)` (trace_path is the second argument, not a descriptor field).
 
 **Egui-wgpu 0.29.1 render**:
-- `egui_wgpu::Renderer::render` toma `&mut RenderPass<'static>` — se usa `pass.forget_lifetime()` (safe, el lifetime es `PhantomData` de guardia).
-- `Context::tessellate(shapes, pixels_per_point)` (2 args, no 1).
-- `ScreenDescriptor::size_in_pixels` = pixels físicos (sin dividir por scale_factor).
+- `egui_wgpu::Renderer::render` takes `&mut RenderPass<'static>` — `pass.forget_lifetime()` is used (safe, the lifetime is a guard `PhantomData`).
+- `Context::tessellate(shapes, pixels_per_point)` (2 args, not 1).
+- `ScreenDescriptor::size_in_pixels` = physical pixels (not divided by scale_factor).
 
-**Render compuesto en 2 passes**:
-1. Heightmap con `ClearOp::Clear` (fondo azul oscuro `0.02, 0.02, 0.05`).
-2. Egui con `LoadOp::Load` sobre la misma surface texture.
+**Composite render in 2 passes**:
+1. Heightmap with `ClearOp::Clear` (dark blue background `0.02, 0.02, 0.05`).
+2. Egui with `LoadOp::Load` on the same surface texture.
 
-**Resultado**: `cargo check --workspace` → 0 errores. 48 tests verdes. Clippy 0 warnings. `cargo fmt --all` limpio.
+**Result**: `cargo check --workspace` → 0 errors. 48 green tests. Clippy 0 warnings. `cargo fmt --all` clean.
 
-### Paso 7 — `vor-cli::main.rs`
+### Step 7 — `vor-cli::main.rs`
 
-`lib.rs` intenta integrar winit + wgpu + egui-wgpu:
+`lib.rs` attempts to integrate winit + wgpu + egui-wgpu:
 
-- `App` struct implementa `winit::application::ApplicationHandler`.
-- `State` struct contiene window, device, queue, renderer, egui_ctx, egui_winit, egui_renderer, camera, mesh bounds, map_path, cursor, pan state.
-- `init_state()` async: crea instancia wgpu, adapter, device+queue, surface, Format, Renderer, egui_winit::State, egui_wgpu::Renderer. Sube mesh a GPU. Encuadra cámara.
-- `handle_window_event()`: CloseRequested, Resized, CursorMoved (pan activo), MouseInput (toggle pan), MouseWheel (zoom), RedrawRequested.
-- `redraw()` (ROTO): mezcla incompleta de las dos pasadas de render:
-  - Definiciones de `surface_texture`, `view`, `encoder` **faltan** (se perdieron al refactorizar el bloque de render).
-  - El pass 1 (heightmap) fue eliminado junto con las definiciones — solo sobrevive el pass 2 (egui).
-  - Referencias sueltas a `encoder` y `surface_texture` en líneas 327-351.
+- `App` struct implements `winit::application::ApplicationHandler`.
+- `State` struct holds window, device, queue, renderer, egui_ctx, egui_winit, egui_renderer, camera, mesh bounds, map_path, cursor, pan state.
+- `init_state()` async: creates wgpu instance, adapter, device+queue, surface, Format, Renderer, egui_winit::State, egui_wgpu::Renderer. Uploads mesh to GPU. Frames the camera.
+- `handle_window_event()`: CloseRequested, Resized, CursorMoved (pan active), MouseInput (toggle pan), MouseWheel (zoom), RedrawRequested.
+- `redraw()` (BROKEN): incomplete merge of the two render passes:
+  - The `surface_texture`, `view`, `encoder` definitions are **missing** (lost when refactoring the render block).
+  - Pass 1 (heightmap) was removed along with the definitions — only pass 2 (egui) survives.
+  - Loose references to `encoder` and `surface_texture` on lines 327-351.
 
-**Errores de compilación detectados** (24 totales):
-1. `encoder`, `view`, `surface_texture` no definidos.
-2. `wgpu::Instance::new` llamado con `&InstanceDescriptor` — no toma referencia en wgpu 22.
-3. `egui_winit::State::on_window_event` espera `&Window`, no `WindowId`.
-4. `Align::LEFT_TOP` eliminado en egui 0.29 (usar `Align::LEFT`).
-5. `Renderer` importado dos veces (`vor_render::Renderer` y `egui_wgpu::Renderer`).
-6. `tracing_subscriber::EnvFilter` requiere feature `env-filter`.
-7. `output.shapes` es `Vec<ClippedShape>`, `egui_wgpu::Renderer::render` espera `&[ClippedPrimitive]`. Falta `ctx.tessellate()`.
-8. `egui::epaint` import no resuelto.
+**Compilation errors detected** (24 total):
+1. `encoder`, `view`, `surface_texture` not defined.
+2. `wgpu::Instance::new` called with `&InstanceDescriptor` — it does not take a reference in wgpu 22.
+3. `egui_winit::State::on_window_event` expects `&Window`, not `WindowId`.
+4. `Align::LEFT_TOP` removed in egui 0.29 (use `Align::LEFT`).
+5. `Renderer` imported twice (`vor_render::Renderer` and `egui_wgpu::Renderer`).
+6. `tracing_subscriber::EnvFilter` requires the `env-filter` feature.
+7. `output.shapes` is `Vec<ClippedShape>`, `egui_wgpu::Renderer::render` expects `&[ClippedPrimitive]`. `ctx.tessellate()` is missing.
+8. `egui::epaint` import not resolved.
 
-### Paso 7 — `vor-cli::main.rs`
+### Step 7 — `vor-cli::main.rs`
 
-Creado binario `vor` que delega a `vor_app::run_cli()`.
-
----
-
-## Hallazgos críticos y decisiones
-
-1. **wgpu 22 vs 23**: `egui-wgpu 0.29` depende de wgpu 22. wgpu 23 no es compatible. La resolución automática de Cargo elige wgpu 22 cuando se especifica `"22"` como dep workspace.
-2. **`cell_rings` rompe pureza del modelo**: el campo `cell_rings` en `VoronoiVertices` es redundante (derivable del Delaunay) y no se persiste. Es un compromiso pragmático para que el renderer pueda triangular sin recalcular Delaunay en runtime. Alternativa considerada: recalcular en `Renderer::set_mesh()` vía `edgesAroundPoint` sobre el halfedge array de `vor_import::geometry`. Descartado porque `vor-render` no debería depender de `vor-import` (regla dura del plan §5).
-3. **`lyon` 1.0 API break**: `PathBuilder::new()` ya no existe. Reemplazo: `Path::builder()` devuelve un `PathBuilder` implícito con métodos `begin()`/`line_to()`/`end(closed)`.
-4. **egui-wgpu integración delicada**: `egui_wgpu::Renderer::render` toma `&mut RenderPass<'_>` y `&[ClippedPrimitive]` (NO `Vec<ClippedShape>`). Se debe tesselar antes: `let clipped = output.shapes` + `ctx.tessellate(clipped)`.
+Created the `vor` binary that delegates to `vor_app::run_cli()`.
 
 ---
 
-## Inventario de tests
+## Critical findings and decisions
 
-| Archivo | Tests | Qué valida |
+1. **wgpu 22 vs 23**: `egui-wgpu 0.29` depends on wgpu 22. wgpu 23 is not compatible. Cargo's automatic resolution picks wgpu 22 when `"22"` is specified as a workspace dep.
+2. **`cell_rings` breaks model purity**: the `cell_rings` field in `VoronoiVertices` is redundant (derivable from the Delaunay) and is not persisted. It is a pragmatic compromise so the renderer can triangulate without recomputing the Delaunay at runtime. Alternative considered: recompute in `Renderer::set_mesh()` via `edgesAroundPoint` over the halfedge array of `vor_import::geometry`. Discarded because `vor-render` should not depend on `vor-import` (hard rule of plan §5).
+3. **`lyon` 1.0 API break**: `PathBuilder::new()` no longer exists. Replacement: `Path::builder()` returns an implicit `PathBuilder` with `begin()`/`line_to()`/`end(closed)` methods.
+4. **Delicate egui-wgpu integration**: `egui_wgpu::Renderer::render` takes `&mut RenderPass<'_>` and `&[ClippedPrimitive]` (NOT `Vec<ClippedShape>`). It must be tessellated first: `let clipped = output.shapes` + `ctx.tessellate(clipped)`.
+
+---
+
+## Test inventory
+
+| File | Tests | What it validates |
 |---|---|---|
 | `crates/vor-render/src/camera.rs` | 4 | screen_to_world, zoom_at_cursor, pan, frame_bounds |
-| `crates/vor-render/src/heightmap.rs` | 3 | rampa azul marino, cima brillante, clamp >100 |
+| `crates/vor-render/src/heightmap.rs` | 3 | navy blue ramp, bright summit, clamp >100 |
 
-No se ejecutaron aún (`cargo test` no corrido). Los tests existentes de Fase 1 (22 tests en vor-import) deben seguir verdes.
+Not run yet (`cargo test` not executed). The existing Phase 1 tests (22 tests in vor-import) must remain green.
 
 ---
 
-## Estado final de la sesión
+## Final session state
 
 ```
-working tree: 15 archivos modificados/creados, 0 commiteados
-cargo check --workspace: ✓ todo compila
+working tree: 15 files modified/created, 0 committed
+cargo check --workspace: ✓ everything compiles
 cargo test --workspace: ✓ 48 tests (27 unit + 4 bit-exact + 9 e2e + 7 render + 1 doc-ignored)
 cargo clippy --all-targets: ✓ 0 warnings
-cargo fmt --all: ✓ limpio
+cargo fmt --all: ✓ clean
 ```
 
-### Checklist Fase 2 (plan maestro §23)
+### Phase 2 checklist (master plan §23)
 
-- [x] Configurar deps: workspace deps wgpu 22 / winit 0.30 / egui 0.29 / lyon 1.0 / bytemuck / pollster.
-- [x] vor-render::Camera — ortográfica 2D con pan/zoom, screen→world, frame_bounds (4 tests).
-- [x] vor-render::HeightmapLayer — `build_mesh(grid)` triangula celdas con lyon, rampa de color (3 tests).
-- [x] vor-render::Renderer — pipeline wgpu + shaders WGSL + buffers GPU. Campos `pub`.
-- [x] vor-app::State — winit 0.30 (ApplicationHandler), wgpu 22, egui 0.29 integrado. Overlay egui mínimo.
-- [x] vor-cli — bin `vor` que carga `.map` y abre el visor.
-- [x] Tests/sanity — 48 tests verdes, clippy 0 warnings, fmt clean.
-- [ ] Prueba end-to-end: `cargo run --bin vor -- /path/to/map.map` (pendiente de ejecutar).
+- [x] Configure deps: workspace deps wgpu 22 / winit 0.30 / egui 0.29 / lyon 1.0 / bytemuck / pollster.
+- [x] vor-render::Camera — 2D orthographic with pan/zoom, screen→world, frame_bounds (4 tests).
+- [x] vor-render::HeightmapLayer — `build_mesh(grid)` triangulates cells with lyon, color ramp (3 tests).
+- [x] vor-render::Renderer — wgpu pipeline + WGSL shaders + GPU buffers. `pub` fields.
+- [x] vor-app::State — winit 0.30 (ApplicationHandler), wgpu 22, egui 0.29 integrated. Minimal egui overlay.
+- [x] vor-cli — `vor` binary that loads a `.map` and opens the viewer.
+- [x] Tests/sanity — 48 green tests, clippy 0 warnings, fmt clean.
+- [ ] End-to-end test: `cargo run --bin vor -- /path/to/map.map` (pending execution).
 
-**Progreso real**: 100% del código de Fase 2. Compila, tests pasan, clippy/fmt verdes. Falta únicamente ejecutar el binario contra un `.map` real para validar el runtime.
+**Actual progress**: 100% of Phase 2 code. It compiles, tests pass, clippy/fmt green. The only remaining item is running the binary against a real `.map` to validate the runtime.

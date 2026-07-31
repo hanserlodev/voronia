@@ -1,33 +1,33 @@
-//! Porte bit-exacto de `delaunator@5.1.0` (npm, Mapbox) — algoritmo de triangulación Delaunay
-//! 2D. Réplica 1-a-1 del fuente JS (`delaunator.js`, 880 líneas), incluyendo los robust
-//! predicates inline de Shewchuk (`orient2d`, `orient2dadapt`).
+//! Bit-exact port of `delaunator@5.1.0` (npm, Mapbox) — 2D Delaunay triangulation
+//! algorithm. 1-to-1 replica of the JS source (`delaunator.js`, 880 lines), including the
+//! inline robust predicates of Shewchuk (`orient2d`, `orient2dadapt`).
 //!
-//! ## Por qué este porte (vs. usar el crate `delaunator = "1.1"` de crates.io)
+//! ## Why this port (vs. using the `delaunator = "1.1"` crate from crates.io)
 //!
-//! El crate `delaunator` de Rust, aunque porte conceptual del mismo algoritmo, **no es
-//! bit-exacto** contra `delaunator@5.1.0` (el npm que Azgaar usa según
+//! The Rust `delaunator` crate, although a conceptual port of the same algorithm, is **not
+//! bit-exact** against `delaunator@5.1.0` (the npm that Azgaar uses per
 //! `azgaar-fmg/package-lock.json:1599`):
-//!   1. Bug del `find_closest_point` (filtra `d > 0` indiscriminadamente).
-//!   2. Diferencias en el crate `robust = "1.2"` (Rust): signo no negado del `orient2dadapt`,
-//!      constantes `THETA` vs `ccwerrboundA` (corrección de segundo orden), comportamiento
-//!      divergente en ties degenerate.
+//!   1. Bug of `find_closest_point` (it filters `d > 0` indiscriminately).
+//!   2. Differences in the `robust = "1.2"` (Rust) crate: sign of `orient2dadapt` not
+//!      negated, `THETA` vs `ccwerrboundA` constants (second-order correction), diverging
+//!      behavior on degenerate ties.
 //!
-//! Probado en `tests/delaunay_bit_exact.rs`: con el crate Rust, sobre
-//! `place_points(2000,2000,10000,"861039636") + boundary`, divergen 6280 entradas de
-//! `triangles` y 12145 de `halfedges` contra el JS. Aceptar esa divergencia rompería
-//! el hallazgo fase-0 §13.4 (atributos caen en celdas equivocadas).
+//! Tested in `tests/delaunay_bit_exact.rs`: with the Rust crate, over
+//! `place_points(2000,2000,10000,"861039636") + boundary`, 6280 `triangles` entries and
+//! 12145 `halfedges` entries diverge from the JS. Accepting that divergence would break
+//! the finding of fase-0 §13.4 (attributes land in the wrong cells).
 //!
-//! Este porte evita todo eso compartiendo el código con el JS.
+//! This port avoids all of that by sharing the code with the JS.
 //!
-//! ## Buffers scratch
+//! ## Scratch buffers
 //!
-//! El JS usa globals module-level (`B`, `C1`, `C2`, `D`, `u`, `EDGE_STACK`) como scratch
-//! reusable. En Rust los hacemos `thread_local!` con `RefCell` para mantener single-thread
-//! safety sin tener que passar el contexto everywhere.
+//! The JS uses module-level globals (`B`, `C1`, `C2`, `D`, `u`, `EDGE_STACK`) as reusable
+//! scratch. In Rust we make them `thread_local!` with `RefCell` to keep single-thread
+//! safety without having to pass the context everywhere.
 
 //! ```js
-//! // Public API del JS:
-//! //   Delaunator.from(points) → triangula [x,y] pares.
+//! // Public JS API:
+//! //   Delaunator.from(points) → triangulates [x,y] pairs.
 //! //   result.triangles, result.halfedges, result.hull
 //! ```
 #![allow(
@@ -48,16 +48,16 @@ const CCWERRBOUND_C: f64 = (9.0 + 64.0 * EPSILON) * EPSILON * EPSILON;
 const EPS2_52: f64 = 2.220446049250313e-16; // = 2.0f64.powi(-52)
 const EDGE_STACK_CAP: usize = 512;
 
-/// `EMPTY` — índice de halfedge sin adyacente (en el hull exterior). JS usa `-1` (Int32);
-/// en Rust `usize::MAX` para guardar siempre `usize` en `halfedges`.
+/// `EMPTY` — index of a halfedge with no adjacent (on the outer hull). JS uses `-1` (Int32);
+/// in Rust `usize::MAX` to always store `usize` in `halfedges`.
 pub const EMPTY: usize = usize::MAX;
 
-// Buffers scratch globales del JS,(transformados en thread_local RefCell para safe Rust):
+// Scratch buffers of the JS, (turned into thread_local RefCell for safe Rust):
 //
 //   const B = vec(4); const C1 = vec(8); const C2 = vec(12); const D = vec(16); const u = vec(4);
 //   const EDGE_STACK = new Uint32Array(512);
 //
-// Todos se asignan perezosos con `thread_local!` y `RefCell::new(...)`.
+// All lazily allocated with `thread_local!` and `RefCell::new(...)`.
 
 use std::cell::RefCell;
 
@@ -70,27 +70,27 @@ thread_local! {
     static EDGE_STACK: RefCell<[u32; EDGE_STACK_CAP]> = const { RefCell::new([0; EDGE_STACK_CAP]) };
 }
 
-/// Resultado de la triangulación — equivalente al output del JS:
+/// Result of the triangulation — equivalent to the JS output:
 /// `delaunay.triangles`, `delaunay.halfedges`, `delaunay.hull`.
 #[derive(Debug, Clone)]
 pub struct Triangulation {
-    /// `Uint32Array` en JS. Cada triple `(triangles[3t], triangles[3t+1], triangles[3t+2])`
-    /// es un triángulo,取向 counter-clockwise.
+    /// `Uint32Array` in JS. Each triple `(triangles[3t], triangles[3t+1], triangles[3t+2])`
+    /// is a triangle, oriented counter-clockwise.
     pub triangles: Vec<u32>,
-    /// `Int32Array` en JS. `halfedges[i]` es el índice del halfedge gemelo en el triángulo
-    /// adyacente, o `EMPTY` (= `-1` en JS) si es un edge del hull exterior.
+    /// `Int32Array` in JS. `halfedges[i]` is the index of the twin halfedge in the adjacent
+    /// triangle, or `EMPTY` (= `-1` in JS) if it is an edge of the outer hull.
     pub halfedges: Vec<usize>,
-    /// `Uint32Array` en JS. Índices de puntos en el convex hull, counter-clockwise.
+    /// `Uint32Array` in JS. Indices of points on the convex hull, counter-clockwise.
     pub hull: Vec<u32>,
 }
 
-/// Réplica bit-exacta de `Delaunator.from(points)` (utilizando `[x,y]` pares).
+/// Bit-exact replica of `Delaunator.from(points)` (using `[x,y]` pairs).
 ///
-/// Azgaar usa `Delaunator.from(allPoints)` con `allPoints = points.concat(boundary)` en
-/// `voronoi.ts` (`calculateVoronoi`). Para bit-exactitud, pasá los mismos puntos en el
-/// mismo orden.
+/// Azgaar uses `Delaunator.from(allPoints)` with `allPoints = points.concat(boundary)` in
+/// `voronoi.ts` (`calculateVoronoi`). For bit-exactness, pass the same points in the
+/// same order.
 pub fn from_pairs(points: &[[f64; 2]]) -> Triangulation {
-    // Flattened coords: [x0,y0,x1,y1,...] — réplica exacta del JS `Float64Array(n*2)`.
+    // Flattened coords: [x0,y0,x1,y1,...] — exact replica of the JS `Float64Array(n*2)`.
     let n = points.len();
     let mut coords = Vec::with_capacity(n * 2);
     for p in points {
@@ -100,9 +100,9 @@ pub fn from_pairs(points: &[[f64; 2]]) -> Triangulation {
     triangulate(&coords)
 }
 
-/// Réplica bit-exacta del constructor `new Delaunator(coords)` + `update()` del JS.
+/// Bit-exact replica of the `new Delaunator(coords)` + `update()` constructor of the JS.
 ///
-/// `coords` es un flat array `[x0,y0,x1,y1,...]` (en JS, `Float64Array`).
+/// `coords` is a flat array `[x0,y0,x1,y1,...]` (in JS, `Float64Array`).
 pub fn triangulate(coords: &[f64]) -> Triangulation {
     let n = coords.len() >> 1;
     if n == 0 {
@@ -115,22 +115,22 @@ pub fn triangulate(coords: &[f64]) -> Triangulation {
 
     let max_triangles = if n > 2 { 2 * n - 5 } else { 0 };
 
-    // Arrays que JS inicializa en el constructor:
+    // Arrays that the JS initializes in the constructor:
     let mut triangles: Vec<u32> = vec![0; max_triangles * 3];
     let mut halfedges: Vec<usize> = vec![EMPTY; max_triangles * 3];
 
-    // Temporaries para tracking del hull:
+    // Temporaries for hull tracking:
     let hash_size = (n as f64).sqrt().ceil() as usize;
     let mut hull_prev: Vec<u32> = vec![0; n];
     let mut hull_next: Vec<u32> = vec![0; n];
     let mut hull_tri: Vec<u32> = vec![0; n];
     let mut hull_hash: Vec<i32> = vec![-1; hash_size];
 
-    // Para sorting:
+    // For sorting:
     let mut ids: Vec<u32> = (0..n as u32).collect();
     let mut dists: Vec<f64> = vec![0.0; n];
 
-    // Mutables del constructor:
+    // Mutables of the constructor:
     let mut triangles_len: usize = 0;
     let mut cx: f64 = 0.0;
     let mut cy: f64 = 0.0;
@@ -167,7 +167,7 @@ pub fn triangulate(coords: &[f64]) -> Triangulation {
     let mut i1: u32 = 0;
     let mut i2: u32 = 0;
 
-    // pick a seed point close to the center — JS: `if (d < minDist)`, sin filtro `d > 0`.
+    // pick a seed point close to the center — JS: `if (d < minDist)`, no `d > 0` filter.
     {
         let mut min_dist = f64::INFINITY;
         for i in 0..n {
@@ -299,7 +299,7 @@ pub fn triangulate(coords: &[f64]) -> Triangulation {
         EMPTY,
     );
 
-    // Iteración principal.
+    // Main iteration.
     let mut xp: f64 = 0.0;
     let mut yp: f64 = 0.0;
     for k in 0..n {
@@ -321,8 +321,8 @@ pub fn triangulate(coords: &[f64]) -> Triangulation {
 
         // find a visible edge on the convex hull using edge hash.
         // JS: `for (let j = 0, key = this._hashKey(x, y); j < this._hashSize; j++)`.
-        // Nota: en JS `start` queda en -1 si no encuentra ninguno (porque `hullHash` se rellena con -1).
-        // En Rust, los i32 negativos casted a u32 → 0xFFFFFFFF; mejor mantener signed.
+        // Note: in JS `start` stays at -1 if none is found (because `hullHash` is filled with -1).
+        // In Rust, negative i32 cast to u32 → 0xFFFFFFFF; better to keep signed.
         let mut start_signed: i32 = -1;
         let key = hash_key(cx, cy, x, y, hash_size) as usize;
         for j in 0..hash_size {
@@ -581,7 +581,7 @@ fn circumcenter(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64) -> (f64, f
     (x, y)
 }
 
-/// `swap(arr, i, j)` JS — intercambia `arr[i]` y `arr[j]`.
+/// `swap(arr, i, j)` JS — swaps `arr[i]` and `arr[j]`.
 #[inline]
 fn swap_u32(arr: &mut [u32], i: usize, j: usize) {
     let tmp = arr[i];
@@ -589,7 +589,7 @@ fn swap_u32(arr: &mut [u32], i: usize, j: usize) {
     arr[j] = tmp;
 }
 
-/// `quicksort(ids, dists, left, right)` JS — idéntico al JS (inestable, determinado).
+/// `quicksort(ids, dists, left, right)` JS — identical to the JS (unstable, deterministic).
 fn quicksort(ids: &mut [u32], dists: &[f64], left: i64, right: i64) {
     if right - left <= 20 {
         for i in left + 1..=right {
@@ -650,7 +650,7 @@ fn quicksort(ids: &mut [u32], dists: &[f64], left: i64, right: i64) {
     }
 }
 
-/// `_addTriangle(i0, i1, i2, a, b, c)` del JS — appende un triángulo nuevo y enlaza halfedges.
+/// `_addTriangle(i0, i1, i2, a, b, c)` of the JS — appends a new triangle and links halfedges.
 #[inline]
 fn add_triangle(
     triangles: &mut [u32],
@@ -674,7 +674,7 @@ fn add_triangle(
     t
 }
 
-/// `_link(a, b)` del JS — `halfedges[a] = b; if (b !== -1) halfedges[b] = a;`.
+/// `_link(a, b)` of the JS — `halfedges[a] = b; if (b !== -1) halfedges[b] = a;`.
 #[inline]
 fn link(halfedges: &mut [usize], a: usize, b: usize) {
     halfedges[a] = b;
@@ -683,7 +683,7 @@ fn link(halfedges: &mut [usize], a: usize, b: usize) {
     }
 }
 
-/// `_legalize(a)` del JS — retorna `ar`.
+/// `_legalize(a)` of the JS — returns `ar`.
 #[allow(clippy::too_many_arguments)]
 fn legalize(
     triangles: &mut [u32],
@@ -784,10 +784,10 @@ fn legalize(
     ar as u32
 }
 
-// === Robust predicates (bit-exactos contra el JS) ===
+// === Robust predicates (bit-exact against the JS) ===
 
-/// Réplica de `sum(elen, e, flen, f, h)` del JS (`fast_expansion_sum_zeroelim`).
-/// Escribe el resultado en `h` (preallocated >= elen + flen) y retorna el length usado.
+/// Replica of `sum(elen, e, flen, f, h)` of the JS (`fast_expansion_sum_zeroelim`).
+/// Writes the result into `h` (preallocated >= elen + flen) and returns the length used.
 fn sum(elen: usize, e: &[f64], flen: usize, f: &[f64], h: &mut [f64]) -> usize {
     let mut q;
     let mut q_new;
@@ -902,7 +902,7 @@ fn estimate(elen: usize, e: &[f64]) -> f64 {
     q
 }
 
-/// `orient2d` del JS — usa `orient2dadapt` solo si el |det| es chico respecto `detsum`.
+/// `orient2d` of the JS — uses `orient2dadapt` only if the |det| is small relative to `detsum`.
 pub fn orient2d(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64) -> f64 {
     let detleft = (ay - cy) * (bx - cx);
     let detright = (ax - cx) * (by - cy);
@@ -916,8 +916,8 @@ pub fn orient2d(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64) -> f64 {
     -orient2dadapt(ax, ay, bx, by, cx, cy, detsum)
 }
 
-/// `orient2dadapt` del JS — path adapt (precision adaptiva) para casi-ties.
-/// Bit-exacto contra el JS — replicación 1-a-1.
+/// `orient2dadapt` of the JS — adaptive-precision path for near-ties.
+/// Bit-exact against the JS — 1-to-1 replication.
 #[allow(
     clippy::many_single_char_names,
     clippy::needless_range_loop,
@@ -1100,19 +1100,19 @@ fn orient2dadapt(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64, detsum: f
     d_buf[dlen - 1]
 }
 
-// === Helpers half-edge (públicos para `voronoi.rs`) ===
+// === Half-edge helpers (public for `voronoi.rs`) ===
 //
-// Réplica 1-a-1 de los static methods de `delaunator@5.1.0.js` documentados en
-// https://mapbox.github.io/delaunator/#edge-and-triangle — mismos helpers que
-// `voronoi.ts:107-126` consume como `triangleOfEdge`, `nextHalfedge`, etc.
+// 1-to-1 replica of the static methods of `delaunator@5.1.0.js` documented in
+// https://mapbox.github.io/delaunator/#edge-and-triangle — the same helpers that
+// `voronoi.ts:107-126` consumes as `triangleOfEdge`, `nextHalfedge`, etc.
 
-/// `Math.floor(e / 3)` — índice del triángulo al que pertenece el half-edge `e`.
+/// `Math.floor(e / 3)` — index of the triangle that owns half-edge `e`.
 #[inline]
 pub fn triangle_of_edge(e: usize) -> usize {
     e / 3
 }
 
-/// Siguiente half-edge del mismo triángulo (e % 3 == 2 → e - 2, sino e + 1).
+/// Next half-edge of the same triangle (e % 3 == 2 → e - 2, otherwise e + 1).
 #[inline]
 pub fn next_halfedge(e: usize) -> usize {
     if e % 3 == 2 {
@@ -1122,8 +1122,8 @@ pub fn next_halfedge(e: usize) -> usize {
     }
 }
 
-/// Previous half-edge del mismo triángulo (e % 3 == 0 → e + 2, sino e - 1).
-/// (No se usa en `voronoi.ts` pero está por simetría con la API de Delaunator.)
+/// Previous half-edge of the same triangle (e % 3 == 0 → e + 2, otherwise e - 1).
+/// (Not used in `voronoi.ts` but kept for symmetry with the Delaunator API.)
 #[inline]
 pub fn prev_halfedge(e: usize) -> usize {
     if e.is_multiple_of(3) {
@@ -1133,21 +1133,21 @@ pub fn prev_halfedge(e: usize) -> usize {
     }
 }
 
-/// Los 3 half-edges del triángulo `t`: `[3t, 3t+1, 3t+2]`.
+/// The 3 half-edges of triangle `t`: `[3t, 3t+1, 3t+2]`.
 #[inline]
 pub fn edges_of_triangle(t: usize) -> [usize; 3] {
     [3 * t, 3 * t + 1, 3 * t + 2]
 }
 
-/// Los 3 puntos del triángulo `t`, índices en `triangles` (counter-clockwise).
+/// The 3 points of triangle `t`, indices into `triangles` (counter-clockwise).
 #[inline]
 pub fn points_of_triangle(triangles: &[u32], t: usize) -> [u32; 3] {
     let e = edges_of_triangle(t);
     [triangles[e[0]], triangles[e[1]], triangles[e[2]]]
 }
 
-/// Triángulos adyacentes al triángulo `t` vía cada half-edge. `EMPTY` si el half-edge
-/// es de borde (sin vecino) — replica `trianglesAdjacentToTriangle` de `voronoi.ts:66-73`.
+/// Triangles adjacent to triangle `t` via each half-edge. `EMPTY` if the half-edge
+/// is on the border (no neighbor) — replicates `trianglesAdjacentToTriangle` of `voronoi.ts:66-73`.
 #[inline]
 pub fn triangles_adjacent_to_triangle(halfedges: &[usize], t: usize) -> [usize; 3] {
     let e = edges_of_triangle(t);
@@ -1161,13 +1161,13 @@ pub fn triangles_adjacent_to_triangle(halfedges: &[usize], t: usize) -> [usize; 
     out
 }
 
-// === Export de interfaces pùblicas ===
+// === Export of public interfaces ===
 
 #[cfg(test)]
 mod internal_tests {
     use super::*;
 
-    /// Test determinismo simple — mismo input produce mismo output.
+    /// Simple determinism test — same input produces the same output.
     #[test]
     fn triangulate_is_deterministic() {
         let points: Vec<[f64; 2]> = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
@@ -1176,7 +1176,7 @@ mod internal_tests {
         assert_eq!(r1.triangles, r2.triangles);
         assert_eq!(r1.halfedges, r2.halfedges);
         assert_eq!(r1.hull, r2.hull);
-        // 4 puntos planares → 2 triangles × 3 = 6 entradas.
+        // 4 planar points → 2 triangles × 3 = 6 entries.
         assert_eq!(r1.triangles.len(), 6);
     }
 }

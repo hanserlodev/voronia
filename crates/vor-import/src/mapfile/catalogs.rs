@@ -1,19 +1,19 @@
-//! Parseo de los slots de catálogos JSON del `.map`:
-//! - `[3]` biomas (pipe-CSV de 3 sub-campos: colors, habitability, names).
+//! Parsing of the `.map` JSON catalog slots:
+//! - `[3]` biomes (pipe-CSV of 3 sub-fields: colors, habitability, names).
 //! - `[4]` notes (JSON).
-//! - `[12]` features (JSON; mapeamos tipo fuerte, vértices del perímetro, y
-//!   grupos tierra/lago; opacos como shore/area/height preservados como fallback).
+//! - `[12]` features (JSON; we map the strong type, perimeter vertices, and
+//!   land/lake groups; opaques like shore/area/height preserved as fallback).
 //! - `[13]` cultures; `[14]` states; `[15]` burgs; `[29]` religions; `[30]` provinces;
 //!   `[32]` rivers; `[35]` markers; `[37]` routes; `[38]` zones; `[39]` ice;
 //!   `[46]` measurers.
-//! - `[31]` namebases (formato custom `/`-delimited, `|`-separated fields: `name|min|max|d|m|b[|prob]`).
+//! - `[31]` namebases (custom `/`-delimited format, `|`-separated fields: `name|min|max|d|m|b[|prob]`).
 //!
-//! ## Naming mismatches con `vor-core`
+//! ## Naming mismatches with `vor-core`
 //!
-//! Azgaar usa `center`/`mapId`/`i` siempre para entidades, mientras que
-//! `vor-core::entities::*` usa `center_cell`/`id` etc. Resolvemos con structs
-//! intermedios (`XRaw`) que reflejan el JSON exacto, y un mapeo explícito a los tipos
-//! fuertes del core. Esto evita el truco de `#[serde(flatten)]` que es más frágil.
+//! Azgaar always uses `center`/`mapId`/`i` for entities, whereas
+//! `vor-core::entities::*` uses `center_cell`/`id` etc. We resolve this with
+//! intermediate structs (`XRaw`) that mirror the exact JSON, and an explicit mapping to the
+//! strong core types. This avoids the `#[serde(flatten)]` trick, which is more fragile.
 
 #![allow(non_snake_case)]
 
@@ -39,19 +39,19 @@ use vor_core::feature::{Feature, FeatureType, LakeGroup, LandGroup};
 
 #[derive(Debug, Error)]
 pub enum CatalogError {
-    #[error("slot [{0}] esperado pero ausente o vacío")]
+    #[error("slot [{0}] expected but absent or empty")]
     Missing(usize),
-    #[error("JSON inválido en slot [{0}]: {1}")]
+    #[error("invalid JSON in slot [{0}]: {1}")]
     BadJson(usize, #[source] serde_json::Error),
-    #[error("biomas malformados en slot [3]: esperaba 3 sub-campos, encontró {0}")]
+    #[error("malformed biomes in slot [3]: expected 3 sub-fields, found {0}")]
     BiomeShape(usize),
 }
 
 // ---------------------------------------------------------------------------
-// Biomas (slot `[3]`, pipe-CSV de 3 sub-campos: `colors|habitabilities|names`)
+// Biomes (slot `[3]`, pipe-CSV of 3 sub-fields: `colors|habitabilities|names`)
 // ---------------------------------------------------------------------------
 
-/// Parsea el slot `[3]` → `Vec<Biome>`. Id implícito por orden (0 = Marine / océano).
+/// Parses slot `[3]` → `Vec<Biome>`. Id implicit by order (0 = Marine / ocean).
 pub fn parse_biomes(slot3: &str) -> Result<Vec<Biome>, CatalogError> {
     let parts: Vec<&str> = slot3.split('|').collect();
     if parts.len() != 3 {
@@ -82,7 +82,7 @@ pub fn parse_biomes(slot3: &str) -> Result<Vec<Biome>, CatalogError> {
 }
 
 // ---------------------------------------------------------------------------
-// Features (slot `[12]` JSON) — mapeamos tipo fuerte, preservamos opacos
+// Features (slot `[12]` JSON) — map the strong type, preserve opaques
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
@@ -112,8 +112,8 @@ pub struct FeatureRaw {
     pub name: Option<String>,
 }
 
-/// Parsea el slot `[12]` → `Vec<Feature>`. Slot `[0]` de Azgaar es `0` (placeholder numérico);
-/// se salta en el mapeo (los ids reales arrancan en 1).
+/// Parses slot `[12]` → `Vec<Feature>`. Azgaar's slot `[0]` is `0` (numeric placeholder);
+/// it is skipped in the mapping (the real ids start at 1).
 pub fn parse_features(slot12: Option<&str>) -> Result<Vec<Feature>, CatalogError> {
     let Some(raw) = slot12 else {
         return Ok(Vec::new());
@@ -122,7 +122,7 @@ pub fn parse_features(slot12: Option<&str>) -> Result<Vec<Feature>, CatalogError
         serde_json::from_str(raw).map_err(|e| CatalogError::BadJson(12, e))?;
     let mut out = Vec::with_capacity(v.len().saturating_sub(1));
     for entry in v.iter().skip(1) {
-        // El slot [0] suele ser `0` (placeholder numérico, no object) en Azgaar.
+        // Azgaar's slot [0] is usually `0` (numeric placeholder, not an object).
         if !entry.is_object() {
             continue;
         }
@@ -181,7 +181,6 @@ pub fn parse_features(slot12: Option<&str>) -> Result<Vec<Feature>, CatalogError
 // ---------------------------------------------------------------------------
 // Notes (slot `[4]` JSON) — keys `id` (str), `name`, `legend`
 // ---------------------------------------------------------------------------
-
 #[derive(Debug, Deserialize)]
 pub struct NoteRaw {
     pub id: String,
@@ -194,13 +193,13 @@ pub fn parse_notes(slot4: Option<&str>) -> Result<Vec<Note>, CatalogError> {
     let Some(raw) = slot4 else {
         return Ok(Vec::new());
     };
-    // Azgaar serializa notes con emoji/no-BMP chars como `\uXXXX` escapes en el JSON,
-    // pero pueden aparecer *lone surrogates* (`\uD800`-`\uDBFF` o `\uDC00`-`\uDFFF`
-    // sin su contraparte), válidos en algunas rutas de JS pero ilegales en JSON RFC 8259.
-    // `serde_json` los rechaza con "unexpected end of hex escape" o "lone surrogate".
-    // Estrategia lossy: reemplazamos escapes `\uXXXX` sin su par (donde el próximo
-    // char no es `\u` formando surrogate pair) por un replacement char `?`. El dato
-    // se preserva parcial; los `notes` son texto legend libre sin invariantes duras.
+    // Azgaar serializes notes with emoji/no-BMP chars as `\uXXXX` escapes in the JSON,
+    // but *lone surrogates* may appear (`\uD800`-`\uDBFF` or `\uDC00`-`\uDFFF`
+    // without their counterpart), valid in some JS paths but illegal in JSON RFC 8259.
+    // `serde_json` rejects them with "unexpected end of hex escape" or "lone surrogate".
+    // Lossy strategy: we replace `\uXXXX` escapes without their pair (where the next
+    // char is not `\u` forming a surrogate pair) with a replacement char `?`. The data
+    // is partially preserved; `notes` are free-form legend text without hard invariants.
     let cleaned = sanitize_lone_surrogates(raw);
     let v: Vec<NoteRaw> =
         serde_json::from_str(&cleaned).map_err(|e| CatalogError::BadJson(4, e))?;
@@ -214,7 +213,7 @@ pub fn parse_notes(slot4: Option<&str>) -> Result<Vec<Note>, CatalogError> {
         .collect())
 }
 
-/// Reemplaza escapes `\uXXXX` solitarios (sin su contraparte de surrogate pair) por `?`.
+/// Replaces lone `\uXXXX` escapes (without their surrogate pair counterpart) with `?`.
 fn sanitize_lone_surrogates(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = String::with_capacity(s.len());
@@ -226,36 +225,36 @@ fn sanitize_lone_surrogates(s: &str) -> String {
                 let is_high = (0xD800..=0xDBFF).contains(&code);
                 let is_low = (0xDC00..=0xDFFF).contains(&code);
                 if is_high {
-                    // Si el próximo no es `\uXXXX` con low surrogate, es lone.
+                    // If the next is not `\uXXXX` with a low surrogate, it is lone.
                     if i + 11 < bytes.len() && bytes[i + 6] == b'\\' && bytes[i + 7] == b'u' {
                         let next_hex = &s[i + 8..i + 12];
                         if let Ok(next_code) = u16::from_str_radix(next_hex, 16) {
                             if (0xDC00..=0xDFFF).contains(&next_code) {
-                                // Pair válido — preservar ambos escapes.
+                                // Valid pair — preserve both escapes.
                                 out.push_str(&s[i..i + 12]);
                                 i += 12;
                                 continue;
                             }
                         }
                     }
-                    // Lone high surrogate — reemplazar por `?`.
+                    // Lone high surrogate — replace with `?`.
                     out.push('?');
                     i += 6;
                     continue;
                 }
                 if is_low {
-                    // Lone low surrogate — reemplazar por `?`.
+                    // Lone low surrogate — replace with `?`.
                     out.push('?');
                     i += 6;
                     continue;
                 }
-                // BMP escape normal — preservar.
+                // Normal BMP escape — preserve.
                 out.push_str(&s[i..i + 6]);
                 i += 6;
                 continue;
             }
         }
-        // Default case: copiar el byte como UTF-8.
+        // Default case: copy the byte as UTF-8.
         let ch = s[i..].chars().next().unwrap();
         out.push(ch);
         i += ch.len_utf8();
@@ -266,7 +265,6 @@ fn sanitize_lone_surrogates(s: &str) -> String {
 // ---------------------------------------------------------------------------
 // Culture (slot `[13]` JSON) — `i`, `name`, `base`, `type`, `center`, `code`, ...
 // ---------------------------------------------------------------------------
-
 #[derive(Debug, Deserialize)]
 pub struct CultureRaw {
     pub i: u16,
@@ -333,7 +331,7 @@ pub fn parse_cultures(slot13: Option<&str>) -> Result<Vec<Culture>, CatalogError
 }
 
 // ---------------------------------------------------------------------------
-// State (slot `[14]` JSON) — grande; preservamos `diplomacy`/`campaigns`/`military` opaco
+// State (slot `[14]` JSON) — large; preserve `diplomacy`/`campaigns`/`military` opaque
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
@@ -902,13 +900,13 @@ pub fn parse_measurers(slot46: Option<&str>) -> Result<Vec<Measurer>, CatalogErr
 }
 
 // ---------------------------------------------------------------------------
-// NameBases (slot `[31]` custom) — `/` entre entries, `|` entre campos,
-// 5..6 campos: `name|min|max|d|m|b[|prob]`
+// NameBases (slot `[31]` custom) — `/` between entries, `|` between fields,
+// 5..6 fields: `name|min|max|d|m|b[|prob]`
 // ---------------------------------------------------------------------------
 
-/// Formato Azgaar: `"German|5|12|lt|0|/English|6|11||0.1|/..."`.
-/// Los campos son: `name|min|max|d|m|b` (obligatorios), con un `prob` opcional al final
-/// (`multiword_probability` en `vor-core::NameBase`) que Azgaar añadió post-1.138.
+/// Azgaar format: `"German|5|12|lt|0|/English|6|11||0.1|/..."`.
+/// The fields are: `name|min|max|d|m|b` (mandatory), with an optional trailing `prob`
+/// (`multiword_probability` in `vor-core::NameBase`) that Azgaar added post-1.138.
 pub fn parse_namebases(slot31: Option<&str>) -> Result<Vec<NameBase>, CatalogError> {
     let Some(raw) = slot31 else {
         return Ok(Vec::new());

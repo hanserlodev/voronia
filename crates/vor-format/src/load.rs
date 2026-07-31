@@ -6,23 +6,23 @@ use vor_core::world::World;
 use crate::error::FormatError;
 use crate::header::{VornHeader, VornMetadata};
 
-/// Carga un `World` desde un archivo `.vorn`.
+/// Loads a `World` from a `.vorn` file.
 ///
-/// Lee el header, valida magic + versión, luego deserializa metadata y payload.
+/// Reads the header, validates magic + version, then deserializes metadata and payload.
 pub fn load(path: impl AsRef<Path>) -> Result<(World, VornMetadata), FormatError> {
     let mut file = std::fs::File::open(path.as_ref())?;
 
-    // Leer header fijo de 16 bytes
+    // Read fixed 16-byte header
     let mut header_buf = [0u8; 16];
     file.read_exact(&mut header_buf)?;
     let header = VornHeader::decode(&header_buf)?;
 
-    // Leer metadata
+    // Read metadata
     let mut meta_buf = vec![0u8; header.metadata_len as usize];
     file.read_exact(&mut meta_buf)?;
     let metadata: VornMetadata = bincode::deserialize(&meta_buf)?;
 
-    // Leer payload (resto del archivo)
+    // Read payload (rest of the file)
     let mut payload = Vec::new();
     file.read_to_end(&mut payload)?;
 
@@ -30,7 +30,7 @@ pub fn load(path: impl AsRef<Path>) -> Result<(World, VornMetadata), FormatError
     Ok((world, metadata))
 }
 
-/// Carga solo el metadata de un `.vorn` (sin deserializar el World completo).
+/// Loads only the metadata of a `.vorn` (without deserializing the full World).
 pub fn load_metadata(path: impl AsRef<Path>) -> Result<VornMetadata, FormatError> {
     let mut file = std::fs::File::open(path.as_ref())?;
 

@@ -1,45 +1,46 @@
-//! Camara ortografica 2D con pan/zoom.
+//! Orthographic 2D camera with pan/zoom.
 //!
-//! Coordenadas de mundo: pixels del canvas de Azgaar (origen arriba-izquierda,
-//! +Y hacia abajo). Proyeccion ortografica 2D sin rotacion (plan sec.9.3).
-//! Pan traslada `center`, zoom escala `extent` relativo al pixel bajo el cursor
-//! (zoom-to-cursor) para sensacion natural.
+//! World coordinates: pixels of the Azgaar canvas (top-left origin,
+//! +Y pointing down). Orthographic 2D projection without rotation (plan
+//! sec.9.3). Pan moves `center`, zoom scales `extent` relative to the pixel
+//! under the cursor (zoom-to-cursor) for a natural feel.
 //!
-//! Conviene pensar el modelo asi:
-//! - `center` = punto de mundo en el centro de la ventana.
-//! - `extent_y` = alto de mundo visible (en pixels). El ancho visible se deriva
-//!   del aspect del viewport: `extent_x = extent_y * aspect`.
-//! - Zoom = cambiar `extent_y`; alto visible mas chico = mas zoom.
+//! Think of the model like this:
+//! - `center` = world point at the center of the window.
+//! - `extent_y` = visible world height (in pixels). The visible width derives
+//!   from the viewport aspect: `extent_x = extent_y * aspect`.
+//! - Zoom = changing `extent_y`; a smaller visible height means more zoom.
 //!
-//! Pasamos a GPU una matriz `view_proj` (matriz 4x4 column-major, `f32`).
+//! We upload a `view_proj` matrix (column-major 4x4, `f32`) to the GPU.
 
 use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
 
-/// Uniform buffer de la camara, enviada al shader.
+/// Camera uniform buffer, sent to the shader.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Default, Debug)]
 pub struct CameraUniform {
-    /// `view_proj` column-major compatible con WGSL (`mat4x4<f32>`).
+    /// `view_proj` column-major, compatible with WGSL (`mat4x4<f32>`).
     pub view_proj: [f32; 16],
 }
 
-/// Camara ortografica 2D.
+/// Orthographic 2D camera.
 #[derive(Clone, Copy, Debug)]
 pub struct Camera {
-    /// Centro de la camara en coordenadas de mundo (pixels).
+    /// Camera center in world coordinates (pixels).
     pub center: [f32; 2],
-    /// Alto del viewport en pixels de mundo. Ancho = `extent_y * aspect`.
+    /// Viewport height in world pixels. Width = `extent_y * aspect`.
     pub extent_y: f32,
-    /// Aspect del viewport (ancho / alto en pixels de superficie).
+    /// Viewport aspect (width / height in surface pixels).
     pub aspect: f32,
-    /// Limites del mapa (min_x, min_y, max_x, max_y). Se setean con `frame_bounds`.
+    /// Map bounds (min_x, min_y, max_x, max_y). Set with `frame_bounds`.
     pub bounds_min: [f32; 2],
     pub bounds_max: [f32; 2],
 }
 
 impl Camera {
-    /// Construye con defaults razonables: centro en origen, alto visible 1000px, aspect segun ventana.
+    /// Builds with sensible defaults: center at origin, visible height 1000px,
+    /// aspect derived from the window.
     pub fn new(center: [f32; 2], extent_y: f32, width: u32, height: u32) -> Self {
         let aspect = if height == 0 {
             1.0
@@ -55,7 +56,7 @@ impl Camera {
         }
     }
 
-    /// Ajusta aspect cuando la ventana cambia de tamano.
+    /// Updates the aspect when the window size changes.
     pub fn set_viewport(&mut self, width: u32, height: u32) {
         self.aspect = if height == 0 {
             1.0
@@ -69,29 +70,30 @@ impl Camera {
         self.extent_y * self.aspect
     }
 
-    /// Matriz view*proj ortografica (clip space [-1,1] x [-1,1], Y arriba en NDC).
+    /// Orthographic view*proj matrix (clip space [-1,1] x [-1,1], Y up in NDC).
     ///
-    /// Mapeamos mundo (+Y abajo) a NDC (+Y arriba) invirtiendo Y explicitamente
-    /// para no tener geometria espejada verticalmente al renderizar.
+    /// We map world (+Y down) to NDC (+Y up) by inverting Y explicitly so the
+    /// geometry is not vertically mirrored when rendering.
     pub fn view_proj(&self) -> Mat4 {
         let ex = self.extent_x();
         let ey = self.extent_y;
         let (cx, cy) = (self.center[0], self.center[1]);
         let left = cx - ex * 0.5;
         let right = cx + ex * 0.5;
-        let bottom = cy + ey * 0.5; // +Y abajo en mundo
-        let top = cy - ey * 0.5; // -Y arriba en mundo
+        let bottom = cy + ey * 0.5; // +Y down in world
+        let top = cy - ey * 0.5; // -Y up in world
         Mat4::orthographic_rh(left, right, bottom, top, -1.0, 1.0)
     }
 
-    /// Empaqueta la matriz para el uniform buffer (column-major `f32x16`).
+    /// Packs the matrix for the uniform buffer (column-major `f32x16`).
     pub fn uniform(&self) -> CameraUniform {
         let m = self.view_proj();
         let cols = m.to_cols_array();
         CameraUniform { view_proj: cols }
     }
 
-    /// Pasa de coordenada de mundo (pixels, +Y abajo, origen TL) a pixel de pantalla.
+    /// Converts a world coordinate (pixels, +Y down, top-left origin) to a
+    /// screen pixel.
     pub fn world_to_screen(&self, world: [f32; 2], surface_size: [f32; 2]) -> [f32; 2] {
         let (sw, sh) = (surface_size[0], surface_size[1]);
         if sw <= 0.0 || sh <= 0.0 {
@@ -102,8 +104,8 @@ impl Camera {
         [nx * sw, ny * sh]
     }
 
-    /// Pasa de coordenada de pantalla (pixels de superficie, +Y abajo, origen TL)
-    /// a coordenada de mundo (pixels, +Y abajo, origen TL).
+    /// Converts a screen coordinate (surface pixels, +Y down, top-left origin)
+    /// to a world coordinate (pixels, +Y down, top-left origin).
     pub fn screen_to_world(&self, screen_px: [f32; 2], surface_size: [f32; 2]) -> [f32; 2] {
         let (sw, sh) = (surface_size[0], surface_size[1]);
         if sw <= 0.0 || sh <= 0.0 {
@@ -118,8 +120,8 @@ impl Camera {
         [world_x, world_y]
     }
 
-    /// Zoom preservando el punto de mundo bajo `cursor_screen`.
-    /// `factor > 1.0` acerca (`extent_y` se reduce); `< 1.0` aleja.
+    /// Zoom preserving the world point under `cursor_screen`.
+    /// `factor > 1.0` zooms in (`extent_y` shrinks); `< 1.0` zooms out.
     pub fn zoom_at_cursor(&mut self, cursor_screen: [f32; 2], surface_size: [f32; 2], factor: f32) {
         let world_before = self.screen_to_world(cursor_screen, surface_size);
         self.extent_y = (self.extent_y / factor).clamp(Self::MIN_EXTENT, Self::MAX_EXTENT);
@@ -129,7 +131,7 @@ impl Camera {
         self.constrain();
     }
 
-    /// Pan por delta en pixels de superficie (arrastrar el mapa).
+    /// Pan by a delta in surface pixels (dragging the map).
     pub fn pan_by_screen_delta(&mut self, delta_px: [f32; 2], surface_size: [f32; 2]) {
         if surface_size[0] <= 0.0 || surface_size[1] <= 0.0 {
             return;
@@ -141,7 +143,7 @@ impl Camera {
         self.constrain();
     }
 
-    /// Centra la camara en un bounding box de mundo (pixels) para encuadre inicial.
+    /// Centers the camera on a world bounding box (pixels) for the initial framing.
     pub fn frame_bounds(&mut self, min: [f32; 2], max: [f32; 2]) {
         self.bounds_min = min;
         self.bounds_max = max;
@@ -163,7 +165,7 @@ impl Camera {
         self.constrain();
     }
 
-    /// Restringe centro y zoom para no salirse del mapa.
+    /// Restrains center and zoom so the map cannot be lost.
     fn constrain(&mut self) {
         let half_w = self.extent_x() * 0.5;
         let half_h = self.extent_y * 0.5;
@@ -225,7 +227,7 @@ mod tests {
             (before[1] - after[1]).abs() < 1e-3,
             "y: {before:?} -> {after:?}"
         );
-        // extent_y debe haberse reducido a la mitad.
+        // extent_y should have been reduced to half.
         assert!((cam.extent_y - 50.0).abs() < 1e-3);
     }
 

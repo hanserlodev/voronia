@@ -2,7 +2,7 @@ use vor_core::entities::river::River;
 use vor_core::feature::FeatureType;
 use vor_core::pack::Pack;
 
-/// Port de Azgaar `resolveLakeDrainFeature()`. river-generator.ts:535-557
+/// Port of Azgaar's `resolveLakeDrainFeature()`. river-generator.ts:535-557
 pub fn resolve_lake_drain_feature(
     pack: &Pack,
     rivers: &[River],
@@ -43,7 +43,7 @@ pub fn resolve_lake_drain_feature(
     }
 }
 
-/// Port de Azgaar `resolveDrainFeature()`. river-generator.ts:560-582
+/// Port of Azgaar's `resolveDrainFeature()`. river-generator.ts:560-582
 pub fn resolve_drain_feature(pack: &Pack, rivers: &[River], cell_id: u32) -> Option<u32> {
     let start_river = pack.cells.river.get(cell_id as usize).copied()?;
     if start_river == 0 {
@@ -78,7 +78,7 @@ pub fn resolve_drain_feature(pack: &Pack, rivers: &[River], cell_id: u32) -> Opt
     }
 }
 
-/// Port de Azgaar `isNavigable()`.
+/// Port of Azgaar's `isNavigable()`.
 pub fn is_navigable(pack: &Pack, cell_id: u32) -> bool {
     let c = cell_id as usize;
     c < pack.cells.river.len()

@@ -1,89 +1,89 @@
-//! Porte bit-exacto de la `Voronoi` class de Azgaar (`src/generators/voronoi.ts`).
+//! Bit-exact port of Azgaar's `Voronoi` class (`src/generators/voronoi.ts`).
 //!
-//! Construye la malla de Voronoi dual a partir de una triangulación Delaunay
-//! (`crate::geometry::delaunay::Triangulation`) — repite 1-a-1 la lógica del TS.
+//! Builds the dual Voronoi mesh from a Delaunay triangulation
+//! (`crate::geometry::delaunay::Triangulation`) — 1-to-1 reproduction of the TS logic.
 //!
-//! ## Bit-exactitud de `circumcenter` — crítico
+//! ## `circumcenter` bit-exactness — critical
 //!
-//! Azgaar deliberadamente trunca el centro circunscrito a enteros con `Math.floor`
-//! (`voronoi.ts:151-152`). En Rust reproducimos con `f64::floor()` — **no** con `as i32`
-//! (que truncaría hacia cero en negativos). Aunque las coordenadas de celdas no son
-//! negativas en Azgaar, el circumcenter puede caer levemente fuera del rango de
-//! celdas cuando el triángulo es obtuso o tiene un punto en el hull, y ahí `as i32`
-//! divergiría de `Math.floor`. El hallazgo fase-0 §6.3 exige reproducción literal.
+//! Azgaar deliberately truncates the circumcenter to integers with `Math.floor`
+//! (`voronoi.ts:151-152`). In Rust we reproduce it with `f64::floor()` — **not** with `as i32`
+//! (which would truncate towards zero on negatives). Although cell coordinates are not
+//! negative in Azgaar, the circumcenter can fall slightly outside the cell
+//! range when the triangle is obtuse or has a hull point, and there `as i32`
+//! would diverge from `Math.floor`. Finding fase-0 §6.3 requires literal reproduction.
 //!
-//! ## Layout de salida
+//! ## Output layout
 //!
-//! Salida mapeada a los tipos de `vor-core`:
-//!   - `cells.v[p] : Vec<u32>` → los 3+ IDs de triángulos (= vértices Voronoi) que forman
-//!     la celda del punto `p`. Orden: counter-clockwise via `edgesAroundPoint`.
-//!   - `cells.c[p] : Vec<u32>` → IDs de celdas adyacentes (interiores solamente —
-//!     se filtran los boundary points con id >= `pointsN`).
-//!   - `cells.b[p] : u8` → 1 si la celda toca el borde (vecinos filtrados != vecinos
-//!     totales), 0 si no.
-//!   - `cells.i` no se materializa acá (es `[0,1,...,pointsN-1]`, implícito).
-//!   - `vertices.p[t] : [f32;2]` → coords del vértice Voronoi del triángulo `t`.
-//!     `f32` (cap fijo) — el `floor` ya impuso el límite de precisión.
-//!   - `vertices.v[t] : [i32;3]` → 3 triángulos vecinos (uno por half-edge opuesto).
-//!     `-1` = borde (sin vecino).
-//!   - `vertices.c[t] : [u32;3]` → 3 cells (points) que conforman el triángulo `t`.
+//! Output mapped to the `vor-core` types:
+//!   - `cells.v[p] : Vec<u32>` → the 3+ triangle IDs (= Voronoi vertices) that form
+//!     the cell of point `p`. Order: counter-clockwise via `edgesAroundPoint`.
+//!   - `cells.c[p] : Vec<u32>` → adjacent cell IDs (interiors only —
+//!     boundary points with id >= `pointsN` are filtered out).
+//!   - `cells.b[p] : u8` → 1 if the cell touches the border (filtered neighbors != total
+//!     neighbors), 0 otherwise.
+//!   - `cells.i` is not materialized here (it is `[0,1,...,pointsN-1]`, implicit).
+//!   - `vertices.p[t] : [f32;2]` → coords of the Voronoi vertex of triangle `t`.
+//!     `f32` (fixed cap) — the `floor` already imposed the precision limit.
+//!   - `vertices.v[t] : [i32;3]` → 3 neighboring triangles (one per opposite half-edge).
+//!     `-1` = border (no neighbor).
+//!   - `vertices.c[t] : [u32;3]` → 3 cells (points) that make up triangle `t`.
 
 use crate::geometry::delaunay::{
     next_halfedge, points_of_triangle, triangle_of_edge, triangles_adjacent_to_triangle,
     Triangulation, EMPTY,
 };
 
-/// Cap máximo de `edgesAroundPoint` (`voronoi.ts:87`). En el JS es un cap de seguridad
-/// anti-loopwoops en mallas con bugs de half-edge. En Rust lo mantenemos por bit-exactitud:
-/// si una malla legítima excede 20 edges, Azgaar trunca silenciosamente y nosotros también.
+/// Cap of `edgesAroundPoint` (`voronoi.ts:87`). In the JS it is a safety cap
+/// against infinite loops in meshes with half-edge bugs. In Rust we keep it for bit-exactness:
+/// if a legitimate mesh exceeds 20 edges, Azgaar truncates silently and we do too.
 const EDGES_AROUND_POINT_CAP: usize = 20;
 
-/// Coordenadas de un punto (par `[x, y]`).
+/// Coordinates of a point (pair `[x, y]`).
 pub type Point = [f64; 2];
 
-/// Salida de `calculate_voronoi` — equivalente al `Voronoi` class de Azgaar.
+/// Output of `calculate_voronoi` — equivalent to Azgaar's `Voronoi` class.
 ///
-/// Las celdas (`cells.*`) están indexadas por point-id `[0, pointsN)`.
-/// Los vértices (`vertices.*`) están indexados por triangle-id `[0, triangles.len()/3)`.
+/// Cells (`cells.*`) are indexed by point-id `[0, pointsN)`.
+/// Vertices (`vertices.*`) are indexed by triangle-id `[0, triangles.len()/3)`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Voronoi {
-    /// Ver `VoronoiCells`. `v`: vecinos vértices; `c`: vecinos cells; `b`: border flag.
+    /// See `VoronoiCells`. `v`: vertex neighbors; `c`: cell neighbors; `b`: border flag.
     pub cells: VoronoiCells,
-    /// Ver `VoronoiVertices`. `p`: coords; `v`: vecinos (triángulos); `c`: cells adyacentes.
+    /// See `VoronoiVertices`. `p`: coords; `v`: neighbors (triangles); `c`: adjacent cells.
     pub vertices: VoronoiVertices,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct VoronoiCells {
-    /// `cells.v[p]` — IDs de triángulos (vértices Voronoi) que conforman la celda `p`,
-    /// en orden CCW. `Vec::new()` si la celda no fue visitada (caso en que el punto `p`
-    /// está en el boundary y nunca llegó a ser `triangles[nextHalfedge(e)]`).
+    /// `cells.v[p]` — IDs of triangles (Voronoi vertices) that make up cell `p`,
+    /// in CCW order. `Vec::new()` if the cell was not visited (case where point `p`
+    /// is on the boundary and never became `triangles[nextHalfedge(e)]`).
     pub v: Vec<Vec<u32>>,
-    /// `cells.c[p]` — IDs de celdas adyacentes (interiores; boundary points filtrados).
+    /// `cells.c[p]` — adjacent cell IDs (interiors; boundary points filtered out).
     pub c: Vec<Vec<u32>>,
-    /// `cells.b[p]` — 1 si la celda toca el borde (algunos vecinos fueron filtrados), 0 si no.
+    /// `cells.b[p]` — 1 if the cell touches the border (some neighbors were filtered out), 0 otherwise.
     pub b: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct VoronoiVertices {
-    /// `vertices.p[t]` — coords `[x, y]` del circumcenter del triángulo `t`. **Enteros**
-    /// (`Math.floor` en JS); acá `f32` por consistencia con `vor-core::VoronoiVertices`.
+    /// `vertices.p[t]` — coords `[x, y]` of the circumcenter of triangle `t`. **Integers**
+    /// (`Math.floor` in JS); here `f32` for consistency with `vor-core::VoronoiVertices`.
     pub p: Vec<[f64; 2]>,
-    /// `vertices.v[t]` — los 3 triángulos vecinos (uno por half-edge opuesto). `EMPTY`
-    /// marcado como `None` por miedo a la confusión — el receptor decide si rellenar
-    /// con `-1` o `u32::MAX`. En `vor-core::VoronoiVertices` se guarda como `i32` con
-    /// `-1` por compat con Azgaar (`feature.rs` espera `[i32; 3]`).
+    /// `vertices.v[t]` — the 3 neighboring triangles (one per opposite half-edge). `EMPTY`
+    /// marked as `None` to avoid confusion — the receiver decides whether to fill
+    /// with `-1` or `u32::MAX`. In `vor-core::VoronoiVertices` it is stored as `i32` with
+    /// `-1` for compat with Azgaar (`feature.rs` expects `[i32; 3]`).
     pub v: Vec<[usize; 3]>,
-    /// `vertices.c[t]` — los 3 points (cells) que conforman el triángulo `t`.
+    /// `vertices.c[t]` — the 3 points (cells) that make up triangle `t`.
     pub c: Vec<[u32; 3]>,
 }
 
-/// Réplica bit-exacta del constructor `new Voronoi(delaunay, points, pointsN)` de Azgaar
+/// Bit-exact replica of Azgaar's `new Voronoi(delaunay, points, pointsN)` constructor
 /// (`voronoi.ts:25-50`).
 ///
-/// `points` son todos los puntos (incluyendo boundary points), y `pointsN` es la cantidad
-/// de puntos no-boundary (boundary points tienen id `[pointsN, points.len())`).
+/// `points` are all points (including boundary points), and `pointsN` is the number
+/// of non-boundary points (boundary points have id `[pointsN, points.len())`).
 pub fn calculate_voronoi(delaunay: &Triangulation, points: &[Point], points_n: u32) -> Voronoi {
     let n_triangles = delaunay.triangles.len() / 3;
 
@@ -91,9 +91,9 @@ pub fn calculate_voronoi(delaunay: &Triangulation, points: &[Point], points_n: u
     let mut cells_c: Vec<Vec<u32>> = vec![Vec::new(); points_n as usize];
     let mut cells_b: Vec<u8> = vec![0; points_n as usize];
 
-    // `vertices.p[t]` se inicializan como `None`/placeholder para distinguir "no set" de
-    // "seteado a [0.0, 0.0]". Usamos un Vec<Option<[f64;2]>> intermedio — el JS confía
-    // en `undefined` y `!this.vertices.p[t]`.
+    // `vertices.p[t]` is initialized as `None`/placeholder to distinguish "not set" from
+    // "set to [0.0, 0.0]". We use an intermediate Vec<Option<[f64;2]>> — the JS relies
+    // on `undefined` and `!this.vertices.p[t]`.
     let mut vertices_p: Vec<Option<[f64; 2]>> = vec![None; n_triangles];
     let mut vertices_v: Vec<[usize; 3]> = vec![[EMPTY; 3]; n_triangles];
     let mut vertices_c: Vec<[u32; 3]> = vec![[0; 3]; n_triangles];
@@ -101,10 +101,10 @@ pub fn calculate_voronoi(delaunay: &Triangulation, points: &[Point], points_n: u
     let triangles = delaunay.triangles.as_slice();
     let halfedges = delaunay.halfedges.as_slice();
 
-    // El bucle principal replica `voronoi.ts:34-49` línea-a-línea.
+    // The main loop replicates `voronoi.ts:34-49` line-by-line.
     for e in 0..delaunay.triangles.len() {
         let p = delaunay.triangles[next_halfedge(e)];
-        // `if (p < pointsN && !cells.c[p])` — solo puntos interiores y no-visitados.
+        // `if (p < pointsN && !cells.c[p])` — only interior and unvisited points.
         if p < points_n && cells_c.get(p as usize).is_none_or(|v| v.is_empty()) {
             // cells.v[p] = edges.map(e => triangleOfEdge(e))
             // cells.c[p] = edges.map(e => triangles[e]).filter(c => c < pointsN)
@@ -126,7 +126,7 @@ pub fn calculate_voronoi(delaunay: &Triangulation, points: &[Point], points_n: u
         }
 
         let t = triangle_of_edge(e);
-        // `if (!vertices.p[t])` — JS usa falsiness de `undefined`. Acá usamos `Option::is_none`.
+        // `if (!vertices.p[t])` — JS uses falsiness of `undefined`. Here we use `Option::is_none`.
         if vertices_p[t].is_none() {
             vertices_p[t] = Some(triangle_center(points, triangles, t));
             vertices_v[t] = triangles_adjacent_to_triangle(halfedges, t);
@@ -134,15 +134,15 @@ pub fn calculate_voronoi(delaunay: &Triangulation, points: &[Point], points_n: u
         }
     }
 
-    // El JS almacena `vertices.p[t]` como `[number, number]`. En Azgaar, los `vertices.p`
-    // pueden ser `undefined` si un triángulo no fue tocado por el bucle — pero todos los
-    // triángulos aparecen vía el bucle sobre `triangles.length` (`for e in 0..triangles.len()`),
-    // así que todos los `t` se setean. Aun así, por seguridad dejamos el deunwrap con
-    // `unwrap_or([0.0, 0.0])` para no panickear, y emitimos un assertion en debug builds.
+    // The JS stores `vertices.p[t]` as `[number, number]`. In Azgaar, `vertices.p`
+    // can be `undefined` if a triangle was not touched by the loop — but all
+    // triangles appear via the loop over `triangles.length` (`for e in 0..triangles.len()`),
+    // so every `t` is set. Even so, for safety we leave the unwrap as
+    // `unwrap_or([0.0, 0.0])` to avoid panicking, and emit an assertion in debug builds.
     let vertices_p_final: Vec<[f64; 2]> = vertices_p
         .into_iter()
         .map(|opt| {
-            debug_assert!(opt.is_some(), "vértice t no fue populado");
+            debug_assert!(opt.is_some(), "vertex t was not populated");
             opt.unwrap_or([0.0, 0.0])
         })
         .collect();
@@ -161,10 +161,10 @@ pub fn calculate_voronoi(delaunay: &Triangulation, points: &[Point], points_n: u
     }
 }
 
-/// `edgesAroundPoint(start)` de `voronoi.ts:80-89`.
+/// `edgesAroundPoint(start)` of `voronoi.ts:80-89`.
 ///
-/// Camina los half-edges que tocan el punto destino `start` (es decir, todos los
-/// incoming/outgoing del punto `triangles[start]`), en sentido CCW, con cap of 20.
+/// Walks the half-edges touching the target point `start` (that is, all the
+/// incoming/outgoing of point `triangles[start]`), CCW, with a cap of 20.
 fn edges_around_point(halfedges: &[usize], start: usize) -> Vec<usize> {
     let mut result: Vec<usize> = Vec::new();
     let mut incoming = start;
@@ -179,8 +179,8 @@ fn edges_around_point(halfedges: &[usize], start: usize) -> Vec<usize> {
     result
 }
 
-/// `triangleCenter(t)` de `voronoi.ts:96-99` — el circumcenter del triángulo `t`.
-/// Las coords se calculan en f64 y se truncan a enteros con `f64::floor()`.
+/// `triangleCenter(t)` of `voronoi.ts:96-99` — the circumcenter of triangle `t`.
+/// The coords are computed in f64 and truncated to integers with `f64::floor()`.
 fn triangle_center(points: &[Point], triangles: &[u32], t: usize) -> [f64; 2] {
     let pts = points_of_triangle(triangles, t);
     let a = points[pts[0] as usize];
@@ -189,10 +189,10 @@ fn triangle_center(points: &[Point], triangles: &[u32], t: usize) -> [f64; 2] {
     circumcenter(a, b, c)
 }
 
-/// `circumcenter(a, b, c)` de `voronoi.ts:142-154` — fórmula de Wikipedia, con
-/// `Math.floor` truncando el resultado a enteros (fase-0 §6.3).
+/// `circumcenter(a, b, c)` of `voronoi.ts:142-154` — Wikipedia's formula, with
+/// `Math.floor` truncating the result to integers (fase-0 §6.3).
 ///
-/// Reproducción literal del JS:
+/// Literal reproduction of the JS:
 /// ```js
 /// const ad = ax*ax + ay*ay;
 /// const bd = bx*bx + by*by;
@@ -202,11 +202,11 @@ fn triangle_center(points: &[Point], triangles: &[u32], t: usize) -> [f64; 2] {
 ///          Math.floor((1/D) * (ad*(cx-bx) + bd*(ax-cx) + cd*(bx-ax))) ];
 /// ```
 ///
-/// Importante para bit-exactitud: el JS efectúa `(1/D) * numerator` — en f64 esto es
-/// `numerator / D` aritméticamente, pero **no** es bit-idéntico. `(1/D)` calcula el
-/// recíproco en f64 (con su propio redondeo), y luego multiplica por `numerator`
-/// (con otro redondeo) — totale 2 des perfis de redondeo. `numerator / D` aplica u
-/// redondeo único. Reproducimos el patrón del JS: `recip * numerator`, no `numerator/D`.
+/// Important for bit-exactness: the JS computes `(1/D) * numerator` — in f64 this is
+/// arithmetically `numerator / D`, but **not** bit-identical. `(1/D)` computes the
+/// f64 reciprocal (with its own rounding), then multiplies by `numerator`
+/// (with another rounding) — 2 rounding profiles total. `numerator / D` applies a
+/// single rounding. We reproduce the JS pattern: `recip * numerator`, not `numerator/D`.
 fn circumcenter(a: Point, b: Point, c: Point) -> [f64; 2] {
     let [ax, ay] = a;
     let [bx, by] = b;
@@ -226,25 +226,25 @@ mod tests {
     use super::*;
     use crate::geometry::delaunay::from_pairs;
 
-    /// Sanity básico: cuadrado 1×1 con 4 puntos → 2 triángulos, 4 celdas (sin borde, sin boundary).
+    /// Basic sanity: 1×1 square with 4 points → 2 triangles, 4 cells (no border, no boundary).
     #[test]
     fn voronoi_square_no_boundary() {
         let points: Vec<[f64; 2]> = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
         let delaunay = from_pairs(&points);
         let v = calculate_voronoi(&delaunay, &points, points.len() as u32);
 
-        // 4 points = 4 cells (todas pobladas), 2 triangles = 2 vertices.
-        assert_eq!(v.cells.b.len(), 4, "cells.b tiene points_n entradas");
-        // Sin boundary, todas las celdas tienen tipo vecino =Cantidad de edges.
-        // (Las celdas son contiguas — todo es interior — b deberia ser 0 en todas.)
-        // En realidad, en cuadrado sin boundary los 4 puntos están en el hull (Delaunator
-        // los pone en `hull` automáticamente), así que `vertices.v` tendrá EMPTYs.
-        // Solo validamos la cantidad estructural.
+        // 4 points = 4 cells (all populated), 2 triangles = 2 vertices.
+        assert_eq!(v.cells.b.len(), 4, "cells.b has points_n entries");
+        // Without boundary, all cells have neighbor type = number of edges.
+        // (The cells are contiguous — everything is interior — b should be 0 everywhere.)
+        // Actually, in a boundary-less square the 4 points are on the hull (Delaunator
+        // puts them on `hull` automatically), so `vertices.v` will have EMPTYs.
+        // We only validate the structural count.
         assert_eq!(v.vertices.p.len(), delaunay.triangles.len() / 3);
         assert_eq!(v.vertices.c.len(), delaunay.triangles.len() / 3);
     }
 
-    /// Determinismo: misma entrada → misma salida.
+    /// Determinism: same input → same output.
     #[test]
     fn voronoi_is_deterministic() {
         let points: Vec<[f64; 2]> = vec![
@@ -261,10 +261,10 @@ mod tests {
         let delaunay = from_pairs(&points);
         let a = calculate_voronoi(&delaunay, &points, points.len() as u32);
         let b = calculate_voronoi(&delaunay, &points, points.len() as u32);
-        assert_eq!(a, b, "bit-exact determinismo");
+        assert_eq!(a, b, "bit-exact determinism");
     }
 
-    /// `circumcenter` de un triángulo rectángulo isósceles unitario:
+    /// `circumcenter` of a unit isosceles right triangle:
     /// A=(0,0), B=(1,0), C=(0,1). Circumcenter = (0.5, 0.5). `floor(0.5)=0`. → [0, 0].
     #[test]
     fn circumcenter_unit_right_triangle() {
@@ -272,10 +272,10 @@ mod tests {
         // 1/D = 1/(2 * (0*(0-1) + 1*(1-0) + 0*(0-0))) = 1/2
         // x = 0.5*(0*(0-1) + 1*(1-0) + 1*(0-0)) = 0.5 * 1 = 0.5 → floor = 0
         // y = 0.5*(0*(0-1) + 1*(0-0) + 1*(1-0)) = 0.5 * 1 = 0.5 → floor = 0
-        assert_eq!(cc, [0.0, 0.0], "circumcenter rectangle isósceles");
+        assert_eq!(cc, [0.0, 0.0], "isosceles right triangle circumcenter");
     }
 
-    /// Triángulo equilátero de lado 2: A=(0,0), B=(2,0), C=(1,√3).
+    /// Equilateral triangle of side 2: A=(0,0), B=(2,0), C=(1,√3).
     /// Circumcenter = (1, √3/3) ≈ (1, 0.5773...) → floor = [1, 0].
     #[test]
     fn circumcenter_equilateral() {
@@ -285,11 +285,11 @@ mod tests {
         // x = (1/(4√3)) * (0 + 4*(√3-0) + 4*(0-0)) = (1/(4√3)) * 4√3 = 1.0 → floor = 1
         // y = (1/(4√3)) * (0*(1-2) + 4*(0-1) + 4*(2-0)) = (1/(4√3)) * (-4 + 8)
         //   = (1/(4√3)) * 4 = 1/√3 ≈ 0.5773502691... → floor = 0
-        assert_eq!(cc, [1.0, 0.0], "equilátero circumcenter");
+        assert_eq!(cc, [1.0, 0.0], "equilateral circumcenter");
     }
 
-    /// Bit-exactitud del circumcenter contra `Math.floor` del JS — caso negativo:
-    /// triángulo con circumcenter en territorio negativo.
+    /// Bit-exactness of the circumcenter against JS `Math.floor` — negative case:
+    /// triangle with the circumcenter in negative territory.
     /// A=(-2,-2), B=(0,-2), C=(-1,-1). Circumcenter ≈ (-1, -3).
     #[test]
     fn circumcenter_negative_floor() {
@@ -306,6 +306,6 @@ mod tests {
         //   = (1/4) * (8*(-1) + 4*(-1) + 2*2)
         //   = (1/4) * (-8 -4 + 4) = (1/4) * -8 = -2.0 → floor(-2.0) = -2
         let cc = circumcenter([-2.0, -2.0], [0.0, -2.0], [-1.0, -1.0]);
-        assert_eq!(cc, [-1.0, -2.0], "circumcenter negativo con floor");
+        assert_eq!(cc, [-1.0, -2.0], "negative circumcenter with floor");
     }
 }

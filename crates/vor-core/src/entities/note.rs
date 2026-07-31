@@ -1,15 +1,15 @@
-//! Note (slot `[4]`: notes JSON). Texto libre del usuario asociado a cualquier entidad
-//! (burgo, estado, marker, etc.). Relevante para la integración con Atenea (plan §22).
+//! Note (slot `[4]`: notes JSON). Free-form user text associated with any entity
+//! (burg, state, marker, etc.). Relevant for the Atenea integration (plan §22).
 
-/// Una nota de leyenda/texto libre.
+/// A legend/free-form note.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Note {
     pub id: u32,
-    /// Texto de la leyenda (puede ser multi-línea).
+    /// Legend text (may be multi-line).
     #[serde(default)]
     pub content: String,
-    /// Id de la entidad vinculada (burgo/state/marker...). El tipo se infiere por contexto
-    /// en Azgaar; lo preservamos como `u32` opaco por ahora.
+    /// Id of the linked entity (burg/state/marker...). The type is inferred from context
+    /// in Azgaar; we keep it as an opaque `u32` for now.
     #[serde(default)]
     pub linked_id: Option<u32>,
 }

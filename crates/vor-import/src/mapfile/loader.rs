@@ -1,20 +1,20 @@
-//! Loader orquestador — combina `raw` + `header` + `cells` + `catalogs` + la
-//! regeneración de geometría (`place_points` + `calculate_voronoi` + `re_graph`)
-//! para producir un `vor_core::World` completo.
+//! Orchestrating loader — combines `raw` + `header` + `cells` + `catalogs` + the
+//! geometry regeneration (`place_points` + `calculate_voronoi` + `re_graph`)
+//! to produce a complete `vor_core::World`.
 //!
-//! Bit-exactitud garantías:
-//! 1. Geometría grid: `place_points(seed, graphWidth, graphHeight, cellsDesired)` debe
-//!    reproducir bit-exacto el slot `[6].points` del `.map` (handshake test en
+//! Bit-exactness guarantees:
+//! 1. Grid geometry: `place_points(seed, graphWidth, graphHeight, cellsDesired)` must
+//!    reproduce bit-exactly the `[6].points` slot of the `.map` (handshake test in
 //!    `tests/sorvik_handshake.rs`).
-//! 2. Voronoi grid: `calculate_voronoi(allPoints, pointsN)` debe reproducir
-//!    bit-exacto el `cells.v/c/b` + `vertices.p/v/c` que Azgaar computa.
-//! 3. Pack: `re_graph(...)` debe reproducir bit-exacto el `pack.points` count
-//!    (Sorvik espera 7268 pack cells tras `re_graph`).
-//! 4. Atributos: los slots `[7]`-`[11]` (grid) y `[16]`-`[27]` (pack) Yankees del .map
-//!    se aplican 1-a-1 sobre la malla regenerada, con el mismo id mapping
-//!    (`pack.cells.g[packId] → gridId`) que Azgaar generó originalmente. Si la malla
-//!    del caller diverge de la del header seed, estos atributos caen en celdas
-//!    equivocadas — bug silencioso. Acá lo garantimos por handshakes en tests.
+//! 2. Grid Voronoi: `calculate_voronoi(allPoints, pointsN)` must reproduce
+//!    bit-exactly the `cells.v/c/b` + `vertices.p/v/c` that Azgaar computes.
+//! 3. Pack: `re_graph(...)` must reproduce bit-exactly the `pack.points` count
+//!    (Sorvik expects 7268 pack cells after `re_graph`).
+//! 4. Attributes: the `.map` slots `[7]`-`[11]` (grid) and `[16]`-`[27]` (pack)
+//!    are applied 1-to-1 over the regenerated mesh, with the same id mapping
+//!    (`pack.cells.g[packId] → gridId`) that Azgaar originally generated. If the
+//!    caller's mesh diverges from the header seed's, these attributes land in the
+//!    wrong cells — a silent bug. Here we guarantee it via handshakes in tests.
 
 use thiserror::Error;
 use vor_core::cells::GridCells;
@@ -40,31 +40,31 @@ pub enum LoadError {
     Cells(#[from] crate::mapfile::cells::CellError),
     #[error(transparent)]
     Catalog(#[from] crate::mapfile::catalogs::CatalogError),
-    #[error("geometría inconsistente: {0}")]
+    #[error("inconsistent geometry: {0}")]
     Geometry(String),
 }
 
-/// Resultado de cargar un `.map`: el `World` poblado + los `new_points` del pack en
-/// f64 (antes del cast f32 al storage — ver `regraph::re_graph` docstring).
+/// Result of loading a `.map`: the populated `World` + the pack `new_points` in
+/// f64 (before the f32 cast to storage — see `regraph::re_graph` docstring).
 pub struct LoadResult {
     pub world: World,
     pub pack_new_points_f64: Vec<[f64; 2]>,
 }
 
-/// Loader API principal.
+/// Main loader API.
 ///
-/// Uso:
+/// Usage:
 /// ```ignore
 /// let bytes = std::fs::read("Sorvik.map")?;
 /// let raw = vor_import::mapfile::raw::parse(&bytes)?;
 /// let loaded = vor_import::mapfile::Loader::load(&raw)?;
 /// let world = loaded.world;
-/// // `loaded.pack_new_points_f64` si se quiere validar bit-exactitud del pack.
+/// // `loaded.pack_new_points_f64` if you want to validate pack bit-exactness.
 /// ```
 pub struct Loader;
 
 impl Loader {
-    /// Carga un `RawMap` (post `raw::parse`) en un `World` completo.
+    /// Loads a `RawMap` (post `raw::parse`) into a complete `World`.
     pub fn load(raw: &RawMap) -> Result<LoadResult, LoadError> {
         // --- Header ---
         let slot0 = raw.must(0);
@@ -75,7 +75,7 @@ impl Loader {
         // --- Grid general (slot [6] JSON) ---
         let grid_general = crate::mapfile::cells::parse_grid_general(raw.get(6))?;
 
-        // --- Geometría regenerada: place_points ---
+        // --- Regenerated geometry: place_points ---
         let placed = place_points(
             header.graph_width as f64,
             header.graph_height as f64,
@@ -83,7 +83,7 @@ impl Loader {
             &header.seed,
         );
 
-        // Sanity: el `place_points` debe yield el mismo número de celdas que el slot [6].points.
+        // Sanity: `place_points` must yield the same number of cells as slot [6].points.
         if placed.points.len() != grid_general.points.len() {
             return Err(LoadError::Geometry(format!(
                 "place_points count {} != slot[6].points count {} — seed/width/height/cellsDesired mismatch",
@@ -103,10 +103,10 @@ impl Loader {
         let delaunay = from_pairs(&all_points);
         let voronoi = calculate_voronoi(&delaunay, &all_points, points_n as u32);
 
-        // --- Slot [7]-[11] → grid.cells (atributos) ---
+        // --- Slots [7]-[11] → grid.cells (attributes) ---
         let grid_cells: GridCells =
             parse_grid_cells(raw.get(7), raw.get(8), raw.get(9), raw.get(10), raw.get(11));
-        // Sanity: GridCells debe tener el mismo largo que `points_n`.
+        // Sanity: GridCells must have the same length as `points_n`.
         let n_cells = grid_cells.height.len();
         if n_cells != points_n {
             return Err(LoadError::Geometry(format!(
@@ -116,9 +116,9 @@ impl Loader {
         }
 
         // --- reGraph → Pack ---
-        // Las features del grid (slot [6].features, no slot [12]) son las que Azgaar usa
-        // durante `reGraph` para distinguir lagos de océanos internos (`features[f].type === "lake"`).
-        // El slot [12] trae `pack.features` (post-markup), distintas del grid.
+        // The grid features (slot [6].features, not slot [12]) are the ones Azgaar uses
+        // during `reGraph` to distinguish lakes from internal oceans (`features[f].type === "lake"`).
+        // Slot [12] carries `pack.features` (post-markup), different from the grid ones.
         let features_kind: Vec<vor_core::feature::FeatureType> =
             crate::mapfile::cells::parse_grid_features_kind(raw.get(6))?;
 
@@ -133,7 +133,7 @@ impl Loader {
             placed.spacing,
         );
 
-        // --- PackCells atributos (slots [16]-[27], [36], [40], [44]) ---
+        // --- PackCells attributes (slots [16]-[27], [36], [40], [44]) ---
         let mut pack_cells = crate::mapfile::cells::parse_pack_cells(
             raw.get(16),
             raw.get(17),
@@ -150,15 +150,15 @@ impl Loader {
             raw.get(40),
             raw.get(44),
         );
-        // El largo esperado es pack.points.len() (según `re_graph`).
+        // The expected length is pack.points.len() (per `re_graph`).
         let expected = pack.points.len();
-        // tracks mismatches; emitimos un solo error agregado si los lengths difieren.
+        // Tracks mismatches; we emit a single aggregated error if lengths differ.
         let mut mismatches = Vec::new();
         macro_rules! chk {
             ($field:ident) => {
                 if pack_cells.$field.len() != 0 && pack_cells.$field.len() != expected {
                     mismatches.push(format!(
-                        "{}: {} (esperado {})",
+                        "{}: {} (expected {})",
                         stringify!($field),
                         pack_cells.$field.len(),
                         expected
@@ -187,10 +187,10 @@ impl Loader {
             )));
         }
 
-        // Actualizo el `pack.cells` con los atributos parseados + el `grid_id` y
-        // `height` y `area_px` que `re_graph` ya pobló en su PackCells interno.
-        // NOTA: `pack.cells` fue inicializado por `re_graph` con grid_id/height/area_px
-        // ya poblados. Reemplazamos solo los atributos parseados desde .map.
+        // Update `pack.cells` with the parsed attributes plus the `grid_id` and
+        // `height` and `area_px` that `re_graph` already populated in its internal PackCells.
+        // NOTE: `pack.cells` was initialized by `re_graph` with grid_id/height/area_px
+        // already populated. We replace only the attributes parsed from the .map.
         pack.cells.biome = std::mem::take(&mut pack_cells.biome);
         pack.cells.burg = std::mem::take(&mut pack_cells.burg);
         pack.cells.confluence = std::mem::take(&mut pack_cells.confluence);
@@ -217,8 +217,8 @@ impl Loader {
             })
             .collect();
 
-        // --- Grid model — la topología Voronoi no se persiste en vor-core::Grid
-        // (derivableavana), solo atributos serializados. Mantenemos points/boundary/cells/vertices.
+        // --- Grid model — the Voronoi topology is not persisted in vor-core::Grid
+        // (derivable), only serialized attributes. We keep points/boundary/cells/vertices.
         let grid = Grid {
             cells_desired: grid_general.cells_desired(),
             spacing: placed.spacing as f32,
@@ -241,7 +241,7 @@ impl Loader {
             features: crate::mapfile::cells::parse_grid_features(raw.get(6))?,
         };
 
-        // --- Catálogos (slot [3]/[4]/[12]-[15]/[29]-[46]) ---
+        // --- Catalogs (slots [3]/[4]/[12]-[15]/[29]-[46]) ---
         let biomes = crate::mapfile::catalogs::parse_biomes(raw.must(3))?;
         let notes = crate::mapfile::catalogs::parse_notes(raw.get(4))?;
         let features = crate::mapfile::catalogs::parse_features(raw.get(12))?;
@@ -258,14 +258,14 @@ impl Loader {
         let measurers = crate::mapfile::catalogs::parse_measurers(raw.get(46))?;
         let namebases = crate::mapfile::catalogs::parse_namebases(raw.get(31))?;
 
-        // Opacos: fonts [34], goods [41]/[42]/[43], custom_good_icons [45]
+        // Opaques: fonts [34], goods [41]/[42]/[43], custom_good_icons [45]
         let fonts = parse_json_opaque(raw.get(34));
         let goods = parse_json_opaque(raw.get(41));
         let markets = parse_json_opaque(raw.get(42));
         let deals = parse_json_opaque(raw.get(43));
         let custom_good_icons = parse_string_opaque(raw.get(45));
 
-        // --- Trazar path de cada río (cell_path desde source hasta mouth) ---
+        // --- Trace each river's path (cell_path from source to mouth) ---
         trace_river_paths(
             &mut rivers,
             &pack.cells.river,
@@ -273,7 +273,7 @@ impl Loader {
             &pack.cells.height,
         );
 
-        // --- features van al pack ---
+        // --- features go into the pack ---
         pack.features = features;
 
         let world = World {
@@ -310,10 +310,10 @@ impl Loader {
     }
 }
 
-/// Traza el `cell_path` de cada río siguiendo el flujo downhill.
+/// Traces each river's `cell_path` following the downhill flow.
 ///
-/// Para cada río con id > 0, parte de `source_cell` y recorre celdas adyacentes
-/// con el mismo `river_id` y altura decreciente hasta llegar a `mouth_cell`.
+/// For each river with id > 0, it starts at `source_cell` and walks adjacent
+/// cells with the same `river_id` and decreasing height until reaching `mouth_cell`.
 fn trace_river_paths(
     rivers: &mut [vor_core::entities::river::River],
     pack_river: &[u16],
@@ -337,7 +337,7 @@ fn trace_river_paths(
                 break;
             }
             let current_h = height.get(current).copied().unwrap_or(0);
-            // Busca el vecino con menor altura que también tenga este river_id
+            // Finds the neighbor with the lowest height that also has this river_id
             let next = adjacency.get(current).and_then(|neighbors| {
                 neighbors
                     .iter()
@@ -352,7 +352,7 @@ fn trace_river_paths(
             });
             match next {
                 Some(n) => current = n as usize,
-                None => break, // dead end, no se completa el path
+                None => break, // dead end, the path is not completed
             }
         }
         river.cell_path = path;
@@ -373,9 +373,9 @@ fn parse_string_opaque(slot: Option<&str>) -> serde_json::Value {
     }
 }
 
-/// Convierte `vor_import::geometry::voronoi::Voronoi` → `vor_core::VoronoiVertices`
-/// (vuelca `vertices.p/v/c` + `cells.v` como `cell_rings` para que el renderer no
-/// recalcule mallas).
+/// Converts `vor_import::geometry::voronoi::Voronoi` → `vor_core::VoronoiVertices`
+/// (dumps `vertices.p/v/c` + `cells.v` as `cell_rings` so the renderer does not
+/// recompute meshes).
 fn voronoi_to_vor_core(v: &Voronoi) -> vor_core::voronoi::VoronoiVertices {
     vor_core::voronoi::VoronoiVertices {
         positions: v

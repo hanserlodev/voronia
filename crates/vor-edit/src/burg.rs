@@ -1,4 +1,4 @@
-//! Mutadores de entidades `Burg`.
+//! Mutators for `Burg` entities.
 
 use vor_core::world::World;
 

@@ -1,45 +1,45 @@
-//! Burgos / asentamientos (slot `[15]`: `pack.burgs` JSON `[{}, {"cell":1133,"x":1468.66,...}]`).
+//! Burgs / settlements (slot `[15]`: `pack.burgs` JSON `[{}, {"cell":1133,"x":1468.66,...}]`).
 //!
-//! El slot `[0]` de `pack.burgs` es siempre `{}` (placeholder). En Voronia lo
-//! inicializamos como `Burg::placeholder()` para mantener ids 1-based.
+//! Slot `[0]` of `pack.burgs` is always `{}` (placeholder). In Voronia we
+//! initialize it as `Burg::placeholder()` to keep ids 1-based.
 
 use super::coat_of_arms::CoatOfArms;
 use super::culture::CultureType;
 
-/// Un burgo / asentamiento.
+/// A burg / settlement.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Burg {
-    /// Id (su índice en `pack.burgs`; 0 = placeholder).
+    /// Id (its index in `pack.burgs`; 0 = placeholder).
     pub id: u16,
-    /// Nombre del burgo (p.ej. "Tal").
+    /// Burg name (e.g. "Tal").
     pub name: String,
-    /// Celda del pack donde está ubicado.
+    /// Pack cell where it is located.
     pub cell: u32,
-    /// Coordenadas `[x, y]` en units de canvas (no cell center, pueden ser el punto exacto).
+    /// Coordinates `[x, y]` in canvas units (not cell center; may be the exact point).
     pub position: [f32; 2],
-    /// Id de cultura.
+    /// Culture id.
     pub culture: u16,
-    /// Id de estado.
+    /// State id.
     pub state: u16,
-    /// Id de feature (isla/lago/océano) en la que cae.
+    /// Id of the feature (island/lake/ocean) it falls in.
     pub feature: u32,
-    /// Población en "puntos" (`f32`; 1 pt = 1000 hab por defecto).
+    /// Population in "points" (`f32`; 1 pt = 1000 people by default).
     #[serde(default)]
     pub population: f32,
-    /// Tipo de cultura del burgo (mismo enum que `Culture`.
+    /// Burg's culture type (same enum as `Culture`).
     #[serde(default)]
     pub kind: CultureType,
-    /// Escudo (compatible con Armoria).
+    /// Coat of arms (Armoria-compatible).
     #[serde(default)]
     pub coat_of_arms: CoatOfArms,
-    /// `true` si es capital del estado.
+    /// `true` if it is the state capital.
     #[serde(default)]
     pub is_capital: bool,
-    /// Id de feature de tipo agua con puerto (`Some` si es puerto; celda de puerto via `haven_cell`).
+    /// Id of a water feature with a harbor (`Some` if it is a harbor; harbor cell via `haven_cell`).
     #[serde(default)]
     pub port_feature: Option<u32>,
-    /// Flags de MFCG (Watabou — Medieval Fantasy City Generator). Import guardarlos
-    /// para compatibilidad de re-export, aunque Voronia v1 no integre MFCG.
+    /// MFCG flags (Watabou — Medieval Fantasy City Generator). Important to keep them
+    /// for re-export compatibility, even though Voronia v1 does not integrate MFCG.
     #[serde(default)]
     pub has_citadel: bool,
     #[serde(default)]
@@ -57,7 +57,7 @@ pub struct Burg {
 }
 
 impl Burg {
-    /// Placeholder reservado — refleja el slot `[0]` (vacío) que Azgaar deja en `pack.burgs`.
+    /// Reserved placeholder — mirrors the (empty) slot `[0]` that Azgaar leaves in `pack.burgs`.
     #[inline]
     pub fn placeholder() -> Self {
         Self {

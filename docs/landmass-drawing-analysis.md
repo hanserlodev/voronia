@@ -1,109 +1,109 @@
-# Análisis exhaustivo: cómo Azgaar dibuja toda la masa de tierra
+# Exhaustive analysis: how Azgaar draws the entire landmass
 
-> **Fecha**: 30 jul 2026
-> **Fuente**: Azgaar's FMP — `/home/hans/Proyectos/azgaar-fmg/`
-> **Propósito**: Referencia completa para el port nativo de renderizado de tierra en Voronia
-> **Cubre**: TODO el pipeline de dibujo de landmass — desde la geometría base hasta las capas temáticas
-
----
-
-## Índice
-
-1. [Arquitectura de capas (Z-order)](#1-arquitectura-de-capas-z-order)
-2. [Base: Features (tierra, océano, costa, lagos)](#2-base-features-tierra-océano-costa-lagos)
-3. [Fractalización de costa](#3-fractalización-de-costa)
-4. [Océano: base y batimétrica](#4-océano-base-y-batimétrica)
-5. [Motor de isolíneas compartido](#5-motor-de-isolíneas-compartido)
-6. [Heightmap (contornos de elevación)](#6-heightmap-contornos-de-elevación)
-7. [Biomas](#7-biomas)
-8. [Culturas](#8-culturas)
-9. [Religiones](#9-religiones)
-10. [Estados](#10-estados)
-11. [Provincias](#11-provincias)
-12. [Bordes (fronteras)](#12-bordes-fronteras)
-13. [Ríos](#13-ríos)
-14. [Rutas (caminos, senderos, rutas marítimas)](#14-rutas-caminos-senderos-rutas-marítimas)
-15. [Íconos de relieve](#15-íconos-de-relieve)
-16. [Burgos (asentamientos)](#16-burgos-asentamientos)
-17. [Etiquetas de estado (texto curvo)](#17-etiquetas-de-estado-texto-curvo)
-18. [Etiquetas de burgo](#18-etiquetas-de-burgo)
-19. [Temperatura (isotermas)](#19-temperatura-isotermas)
-20. [Precipitación](#20-precipitación)
-21. [Población](#21-población)
-22. [Capa de hielo](#22-capa-de-hielo)
-23. [Bienes (goods)](#23-bienes-goods)
-24. [Mercados](#24-mercados)
-25. [Emblemas (escudos)](#25-emblemas-escudos)
-26. [Militar](#26-militar)
-27. [Textura satelital (3D)](#27-textura-satelital-3d)
-28. [Overlays: textura, grilla, coordenadas](#28-overlays-textura-grilla-coordenadas)
-29. [Patrones arquitectónicos clave](#29-patrones-arquitectónicos-clave)
-30. [Estado de portabilidad a Voronia](#30-estado-de-portabilidad-a-voronia)
+> **Date**: July 30, 2026
+> **Source**: Azgaar's FMP — `/home/hans/Proyectos/azgaar-fmg/`
+> **Purpose**: Complete reference for the native land rendering port in Voronia
+> **Covers**: the ENTIRE landmass drawing pipeline — from the base geometry to the thematic layers
 
 ---
 
-## 1. Arquitectura de capas (Z-order)
+## Table of contents
 
-**Archivo**: `public/modules/ui/layers.js:225-261` — `drawLayers()`
+1. [Layer architecture (Z-order)](#1-layer-architecture-z-order)
+2. [Base: Features (land, ocean, coastline, lakes)](#2-base-features-land-ocean-coastline-lakes)
+3. [Coastline fractalization](#3-coastline-fractalization)
+4. [Ocean: base and bathymetric](#4-ocean-base-and-bathymetric)
+5. [Shared isoline engine](#5-shared-isoline-engine)
+6. [Heightmap (elevation contours)](#6-heightmap-elevation-contours)
+7. [Biomes](#7-biomes)
+8. [Cultures](#8-cultures)
+9. [Religions](#9-religions)
+10. [States](#10-states)
+11. [Provinces](#11-provinces)
+12. [Borders](#12-borders)
+13. [Rivers](#13-rivers)
+14. [Routes (roads, trails, sea routes)](#14-routes-roads-trails-sea-routes)
+15. [Relief icons](#15-relief-icons)
+16. [Burgs (settlements)](#16-burgs-settlements)
+17. [State labels (curved text)](#17-state-labels-curved-text)
+18. [Burg labels](#18-burg-labels)
+19. [Temperature (isotherms)](#19-temperature-isotherms)
+20. [Precipitation](#20-precipitation)
+21. [Population](#21-population)
+22. [Ice layer](#22-ice-layer)
+23. [Goods](#23-goods)
+24. [Markets](#24-markets)
+25. [Emblems (coats of arms)](#25-emblems-coats-of-arms)
+26. [Military](#26-military)
+27. [Satellite texture (3D)](#27-satellite-texture-3d)
+28. [Overlays: texture, grid, coordinates](#28-overlays-texture-grid-coordinates)
+29. [Key architectural patterns](#29-key-architectural-patterns)
+30. [Portability status to Voronia](#30-portability-status-to-voronia)
 
-Es la función maestra de dibujo, llamada en cada generación/refresco del mapa. El orden visual (Z-order) lo determina el orden de los grupos `<g>` en el DOM del SVG.
+---
 
-| Z | Grupo SVG | Renderizador | Qué dibuja |
+## 1. Layer architecture (Z-order)
+
+**File**: `public/modules/ui/layers.js:225-261` — `drawLayers()`
+
+It is the master drawing function, called on every map generation/refresh. The visual order (Z-order) is determined by the order of the `<g>` groups in the SVG DOM.
+
+| Z | SVG group | Renderer | What it draws |
 |---|-----------|-------------|------------|
-| 1 | `#ocean` | template | Rectángulo base de océano + patrón |
-| 2 | `#oceanLayers` | `OceanLayers` | Anillos batimétricos de contorno |
-| 3 | `#oceanPattern` | — | Imagen de textura oceánica |
-| 4 | `#coastline` | `drawFeatures` | Líneas de costa (mar + lagos) |
-| 5 | `#lakes` | `drawFeatures` | Relleno de lagos (fresh/salt/sinkhole...) |
-| 6 | `#landmass` | (máscara) | Paths de tierra para reúso |
-| 7 | `#terrs` | `drawHeightmap` | Contornos de altura (océano + tierra) |
-| 8 | `#texture` | `drawTexture` | Textura de fondo (papel, pergamino...) |
-| 9 | `#biomes` | `drawBiomes` | Relleno de biomas por celda |
-| 10 | `#cells` | `drawCells` | Wireframe de celdas Voronoi (debug) |
-| 11 | `#gridOverlay` | `drawGrid` | Grilla hex/cuadrada |
-| 12 | `#coordinates` | `drawCoordinates` | Graticule lat/lon + etiquetas |
-| 13 | `#compass` | — | Rosa de los vientos |
-| 14 | `#rivers` | `drawRivers` | Polígonos de río |
-| 15 | `#terrain` | `drawReliefIcons` | Íconos de relieve (montañas, árboles) |
-| 16 | `#relig` | `drawReligions` | Relleno de religiones |
-| 17 | `#cults` | `drawCultures` | Relleno de culturas |
-| 18 | `#regions` | `drawStates` | Relleno de estados + halos |
-| 19 | `#provs` | `drawProvinces` | Relleno de provincias + etiquetas |
-| 20 | `#zones` | `drawZones` | Relleno de zonas |
-| 21 | `#borders` | `drawBorders` | Líneas de borde estado + provincia |
-| 22 | `#routes` | `drawRoutes` | Caminos, senderos, rutas marítimas |
-| 23 | `#temperature` | `drawTemperature` | Isotermas coloreadas + etiquetas |
-| 24 | `#prec` | `drawPrecipitation` | Círculos de precipitación |
-| 25 | `#population` | `drawPopulation` | Barras de población |
-| 26 | `#ice` | `drawIce` | Glaciares + icebergs |
-| 27 | `#goods` | `drawGoods` | Producción de bienes |
-| 28 | `#markets` | `drawMarketsLayer` | Zonas de influencia de mercado |
-| 29 | `#tradeAnimation` | `TradeAnimation` | Animación de rutas comerciales |
-| 30 | `#emblems` | `drawEmblems` | Escudos de burgo/provincia/estado |
-| 31 | `#labels` | `drawLabels` | Etiquetas de estado (curvas) + burgo |
-| 32 | `#icons` | `drawBurgIcons` | Puntos de asentamiento + anclas |
-| 33 | `#armies` | `drawMilitary` | Rectángulos de regimiento |
-| 34 | `#markers` | `drawMarkers` | Marcadores de usuario |
-| 35 | `#ruler` | `drawMeasurers` | Medición de distancia/área |
-| 36 | `#fogging` | — | Niebla de foco de estado |
-| 37 | `#vignette` | template | Viñeta oscura en bordes |
-| 38 | `#scaleBar` | `drawScalebar` | Barra de escala |
-| 39 | `#legend` | — | Leyenda del mapa |
+| 1 | `#ocean` | template | Base ocean rectangle + pattern |
+| 2 | `#oceanLayers` | `OceanLayers` | Bathymetric contour rings |
+| 3 | `#oceanPattern` | — | Ocean texture image |
+| 4 | `#coastline` | `drawFeatures` | Coastlines (sea + lakes) |
+| 5 | `#lakes` | `drawFeatures` | Lake fill (fresh/salt/sinkhole...) |
+| 6 | `#landmass` | (mask) | Land paths for reuse |
+| 7 | `#terrs` | `drawHeightmap` | Elevation contours (ocean + land) |
+| 8 | `#texture` | `drawTexture` | Background texture (paper, parchment...) |
+| 9 | `#biomes` | `drawBiomes` | Biome fill per cell |
+| 10 | `#cells` | `drawCells` | Voronoi cell wireframe (debug) |
+| 11 | `#gridOverlay` | `drawGrid` | Hex/square grid |
+| 12 | `#coordinates` | `drawCoordinates` | Lat/lon graticule + labels |
+| 13 | `#compass` | — | Compass rose |
+| 14 | `#rivers` | `drawRivers` | River polygons |
+| 15 | `#terrain` | `drawReliefIcons` | Relief icons (mountains, trees) |
+| 16 | `#relig` | `drawReligions` | Religions fill |
+| 17 | `#cults` | `drawCultures` | Cultures fill |
+| 18 | `#regions` | `drawStates` | States fill + halos |
+| 19 | `#provs` | `drawProvinces` | Provinces fill + labels |
+| 20 | `#zones` | `drawZones` | Zones fill |
+| 21 | `#borders` | `drawBorders` | State + province border lines |
+| 22 | `#routes` | `drawRoutes` | Roads, trails, sea routes |
+| 23 | `#temperature` | `drawTemperature` | Colored isotherms + labels |
+| 24 | `#prec` | `drawPrecipitation` | Precipitation circles |
+| 25 | `#population` | `drawPopulation` | Population bars |
+| 26 | `#ice` | `drawIce` | Glaciers + icebergs |
+| 27 | `#goods` | `drawGoods` | Goods production |
+| 28 | `#markets` | `drawMarketsLayer` | Market influence zones |
+| 29 | `#tradeAnimation` | `TradeAnimation` | Trade route animation |
+| 30 | `#emblems` | `drawEmblems` | Burg/province/state coats of arms |
+| 31 | `#labels` | `drawLabels` | State (curved) + burg labels |
+| 32 | `#icons` | `drawBurgIcons` | Settlement markers + anchors |
+| 33 | `#armies` | `drawMilitary` | Regiment rectangles |
+| 34 | `#markers` | `drawMarkers` | User markers |
+| 35 | `#ruler` | `drawMeasurers` | Distance/area measurement |
+| 36 | `#fogging` | — | State focus fog |
+| 37 | `#vignette` | template | Dark vignette on the edges |
+| 38 | `#scaleBar` | `drawScalebar` | Scale bar |
+| 39 | `#legend` | — | Map legend |
 
-> **Nota**: No hay un "relleno de tierra" explícito. La tierra se rellena indirectamente a través de la capa activa (heightmap, biomas, estados, culturas, etc.).
+> **Note**: There is no explicit "land fill". Land is filled indirectly through the active layer (heightmap, biomes, states, cultures, etc.).
 
 ---
 
-## 2. Base: Features (tierra, océano, costa, lagos)
+## 2. Base: Features (land, ocean, coastline, lakes)
 
-**Archivo**: `src/renderers/draw-features.ts:20-74` — `featuresRenderer()`  
-**Archivo**: `src/renderers/draw-features.ts:76-87` — `featurePathRenderer(feature)`
+**File**: `src/renderers/draw-features.ts:20-74` — `featuresRenderer()`  
+**File**: `src/renderers/draw-features.ts:76-87` — `featurePathRenderer(feature)`
 
-### Datos que consume
-- `pack.features[]` — array de Feature con `type` (landmass, sea_island, lake_island, lake), `vertices[]`, `group`, `i`
-- `pack.vertices.p` — coordenadas de vértices
+### Data it consumes
+- `pack.features[]` — array of Feature with `type` (landmass, sea_island, lake_island, lake), `vertices[]`, `group`, `i`
+- `pack.vertices.p` — vertex coordinates
 
-### Algoritmo
+### Algorithm
 ```
 1. Para cada feature no-oceánico:
    a. Mapear vértices → coordenadas (pack.vertices.p[vertex])
@@ -121,17 +121,17 @@ Es la función maestra de dibujo, llamada en cada generación/refresco del mapa.
 4. Lagos (#lakes): agrupados por feature.group
 ```
 
-### `buildCoastlinePath()` — Construcción del path (`coastline-fractal.ts:194-252`)
-- **Tramos suaves** (sin subdivisión entre vértices originales): B-spline Q midpoint (`curveBasisClosed`)
-- **Tramos dentados** (subdivididos por fractal): Catmull-Rum centrípeto (α=0.5) por cada sub-punto
+### `buildCoastlinePath()` — Building the path (`coastline-fractal.ts:194-252`)
+- **Smooth spans** (no subdivision between original vertices): B-spline Q midpoint (`curveBasisClosed`)
+- **Jagged spans** (subdivided by fractal): centripetal Catmull-Rom (α=0.5) for each sub-point
 
 ---
 
-## 3. Fractalización de costa
+## 3. Coastline fractalization
 
-**Archivo**: `src/renderers/coastline-fractal.ts`
+**File**: `src/renderers/coastline-fractal.ts`
 
-### Parámetros
+### Parameters
 ```typescript
 const defaultCoastSettings = {
   enabled: true,
@@ -146,55 +146,55 @@ const defaultCoastSettings = {
 };
 ```
 
-### Algoritmo
-1. **PRNG determinista**: `Alea(seed + "_c" + featureIndex)` para cada feature
-2. **Perfil de rugosidad**: Suma de cosenos armónicos (seam-free, `PROFILE_SIZE=256`)
-3. **Midpoint displacement** recursivo: `subdivideEdge()` desplaza puntos medios perpendicularmente por `(rand()-0.5) * sqrt(edgeLength) * amplitude * roughness`
-4. Los lagos reciben perfil más suave (`smoothThreshold * 2.0`)
-5. Bordes en el límite del mapa nunca se subdividen
+### Algorithm
+1. **Deterministic PRNG**: `Alea(seed + "_c" + featureIndex)` for each feature
+2. **Roughness profile**: Sum of harmonic cosines (seam-free, `PROFILE_SIZE=256`)
+3. **Recursive midpoint displacement**: `subdivideEdge()` displaces midpoints perpendicularly by `(rand()-0.5) * sqrt(edgeLength) * amplitude * roughness`
+4. Lakes receive a smoother profile (`smoothThreshold * 2.0`)
+5. Edges on the map boundary are never subdivided
 
-### Efecto visual
-La combinación de B-spline (tramos suaves) + Catmull-Rom (tramos fractales) produce costas fluidas que ocultan la angularidad del Voronoi, manteniendo detalle en zonas rugosas.
+### Visual effect
+The combination of B-spline (smooth spans) + Catmull-Rom (fractal spans) produces fluid coastlines that hide the angularity of the Voronoi tessellation while retaining detail in rough areas.
 
 ---
 
-## 4. Océano: base y batimétrica
+## 4. Ocean: base and bathymetric
 
-### 4a. Océano base
-**Archivo**: `index.html:326-328` — SVG `<pattern id="oceanic">`
+### 4a. Base ocean
+**File**: `index.html:326-328` — SVG `<pattern id="oceanic">`
 
-- Relleno base en SVG: `#466eab`
-- Patrón opcional: imagen superpuesta (6 opciones + Kiwiroo)
-- Controles de estilo: color hex configurable, opacidad de patrón (0-1)
+- Base SVG fill: `#466eab`
+- Optional pattern: overlaid image (6 options + Kiwiroo)
+- Style controls: configurable hex color, pattern opacity (0-1)
 
-### 4b. Capas batimétricas
-**Archivo**: `src/renderers/ocean-layers.ts:67-109` — `OceanModule.draw()`
+### 4b. Bathymetric layers
+**File**: `src/renderers/ocean-layers.ts:67-109` — `OceanModule.draw()`
 
-Dibuja anillos de contorno concéntricos en el océano a niveles de profundidad:
+Draws concentric contour rings in the ocean at depth levels:
 ```typescript
 const outline = this.oceanLayers.attr("layers");
 // Valores: "none" | "random" | "-6,-3,-1" (default) | "-9,-6,-3,-1" | etc.
 ```
 
-**Algoritmo**:
-1. Parsear el atributo `layers` para límites de profundidad (ej. `-6, -3, -1`)
-2. Para cada límite `t`, encontrar celdas donde `grid.cells.t[i] === t`
-3. Caminar vértices con `connectVertices()` → cadenas de contorno cerradas
-4. **Relajar**: filtrar cada N-ésimo punto (`N = 1 + abs(t) * -2`)
-5. Recortar a límites del mapa
-6. Renderizar como `<path>` SVG con fill `#ecf2f9` y `fill-opacity = 0.4 / numLimits`
+**Algorithm**:
+1. Parse the `layers` attribute for depth limits (e.g. `-6, -3, -1`)
+2. For each limit `t`, find cells where `grid.cells.t[i] === t`
+3. Walk vertices with `connectVertices()` → closed contour chains
+4. **Relax**: keep every Nth point (`N = 1 + abs(t) * -2`)
+5. Clip to map bounds
+6. Render as SVG `<path>` with fill `#ecf2f9` and `fill-opacity = 0.4 / numLimits`
 
 **Presets**: "No outline", "Random", "Standard 3" (-6,-3,-1), "Indented 3" (-6,-4,-2), "Smooth 6", "Smooth 9"
 
 ---
 
-## 5. Motor de isolíneas compartido
+## 5. Shared isoline engine
 
-**Archivo**: `src/utils/pathUtils.ts:84-177` — `getIsolines()`
+**File**: `src/utils/pathUtils.ts:84-177` — `getIsolines()`
 
-**Es el algoritmo de renderizado más crítico**. Genera paths SVG de relleno para cualquier atributo indexado por celda. Todas las capas de color regional (biomas, culturas, religiones, estados, provincias) comparten este mismo motor.
+**This is the most critical rendering algorithm**. It generates SVG fill paths for any cell-indexed attribute. All regional color layers (biomes, cultures, religions, states, provinces) share this same engine.
 
-### Algoritmo
+### Algorithm
 ```
 1. Iterar sobre todas las celdas; saltar celdas ya procesadas o tipo null
 2. Para cada celda no procesada de tipo T:
@@ -209,7 +209,7 @@ const outline = this.oceanLayers.attr("layers");
    - polygons: arrays de coordenadas crudos (para cálculo de polo de inaccesibilidad)
 ```
 
-### `connectVertices()` — El caminador de vértices fundamental
+### `connectVertices()` — The fundamental vertex walker
 ```typescript
 function connectVertices({ vertices, startingVertex, ofSameType, addToChecked, closeRing }) {
   // Sigue la teselación Voronoi: cada vértice conecta 3 celdas
@@ -219,25 +219,25 @@ function connectVertices({ vertices, startingVertex, ofSameType, addToChecked, c
 }
 ```
 
-**Este caminador es la base de**:
-- `getIsolines()` → todos los rellenos regionales
-- `drawBorders()` → bordes de estado/provincia
-- `drawHeightmap()` → líneas de contorno
-- `OceanLayers.draw()` → contornos batimétricos
-- `drawTemperature()` → líneas de isoterma
+**This walker is the foundation of**:
+- `getIsolines()` → all regional fills
+- `drawBorders()` → state/province borders
+- `drawHeightmap()` → contour lines
+- `OceanLayers.draw()` → bathymetric contours
+- `drawTemperature()` → isotherm lines
 
 ---
 
-## 6. Heightmap (contornos de elevación)
+## 6. Heightmap (elevation contours)
 
-**Archivo**: `src/renderers/draw-heightmap.ts:51-196` — `heightmapRenderer()`
+**File**: `src/renderers/draw-heightmap.ts:51-196` — `heightmapRenderer()`
 
-### Datos que consume
-- `grid.cells.h` — alturas (0-100, ≥20 = tierra)
-- `grid.vertices` — posiciones y conectividad de vértices
-- Dos grupos SVG: `#oceanHeights` y `#landHeights` dentro de `#terrs`
+### Data it consumes
+- `grid.cells.h` — heights (0-100, ≥20 = land)
+- `grid.vertices` — vertex positions and connectivity
+- Two SVG groups: `#oceanHeights` and `#landHeights` inside `#terrs`
 
-### Algoritmo
+### Algorithm
 ```
 1. Ordenar todas las celdas por altura ascendente
 2. Contornos de océano (alturas 0-19):
@@ -254,10 +254,10 @@ function connectVertices({ vertices, startingVertex, ofSameType, addToChecked, c
    - Si terracing activo: translate(0.7, 1.4) + fill más oscuro
 ```
 
-### Esquemas de color (`style.js`)
-Presets: bright (Spectral), light (RdYlGn), natural, green, olive, livid, monochrome, o stops hex personalizados separados por coma.
+### Color schemes (`style.js`)
+Presets: bright (Spectral), light (RdYlGn), natural, green, olive, livid, monochrome, or custom comma-separated hex stops.
 
-### Controles de estilo
+### Style controls
 - Render ocean heights toggle
 - Terracing power (0=off)
 - Reduce layers (skip)
@@ -267,16 +267,16 @@ Presets: bright (Spectral), light (RdYlGn), natural, green, olive, livid, monoch
 
 ---
 
-## 7. Biomas
+## 7. Biomes
 
-**Archivo**: `public/modules/ui/layers.js:302-316` — `drawBiomes()`
+**File**: `public/modules/ui/layers.js:302-316` — `drawBiomes()`
 
-### Datos que consume
-- `pack.cells.biome[]` — biome ID por celda
-- `biomesData.color[]` — color por biome ID
-- `biomesData.i[]` — array de índices de bioma
+### Data it consumes
+- `pack.cells.biome[]` — biome ID per cell
+- `biomesData.color[]` — color per biome ID
+- `biomesData.i[]` — array of biome indices
 
-### Algoritmo
+### Algorithm
 ```typescript
 const isolines = getIsolines(pack, cellId => cells.biome[cellId], { fill: true, waterGap: true });
 Object.entries(isolines).forEach(([index, { fill, waterGap }]) => {
@@ -285,47 +285,47 @@ Object.entries(isolines).forEach(([index, { fill, waterGap }]) => {
 });
 ```
 
-Usa el motor de isolíneas con `{fill: true, waterGap: true}`. `getGappedFillPaths()` genera:
-- `<path d="{fill}" fill="{color}" id="biome{index}">` — relleno
-- `<path d="{waterGap}" fill="none" stroke="{color}" stroke-width="3" id="biome-gap{index}">` — borde contra agua
+Uses the isoline engine with `{fill: true, waterGap: true}`. `getGappedFillPaths()` generates:
+- `<path d="{fill}" fill="{color}" id="biome{index}">` — fill
+- `<path d="{waterGap}" fill="none" stroke="{color}" stroke-width="3" id="biome-gap{index}">` — edge against water
 
 ---
 
-## 8. Culturas
+## 8. Cultures
 
-**Archivo**: `public/modules/ui/layers.js:480-494` — `drawCultures()`
+**File**: `public/modules/ui/layers.js:480-494` — `drawCultures()`
 
-### Datos que consume
-- `pack.cells.culture[]` — culture ID por celda
-- `pack.cultures[].color` — color por cultura
+### Data it consumes
+- `pack.cells.culture[]` — culture ID per cell
+- `pack.cultures[].color` — color per culture
 
-### Algoritmo
-Idéntico a biomas: `getIsolines(pack, cellId => cells.culture[cellId], { fill: true, waterGap: true })`, luego relleno con `cultures[index].color`.
-
----
-
-## 9. Religiones
-
-**Archivo**: `public/modules/ui/layers.js:509-523` — `drawReligions()`
-
-### Datos que consume
-- `pack.cells.religion[]` — religion ID por celda
-- `pack.religions[].color` — color por religión
-
-### Algoritmo
-Idéntico a culturas: `getIsolines(pack, cellId => cells.religion[cellId], { fill: true, waterGap: true })`.
+### Algorithm
+Identical to biomes: `getIsolines(pack, cellId => cells.culture[cellId], { fill: true, waterGap: true })`, then fill with `cultures[index].color`.
 
 ---
 
-## 10. Estados
+## 9. Religions
 
-**Archivo**: `public/modules/ui/layers.js:537-566` — `drawStates()`
+**File**: `public/modules/ui/layers.js:509-523` — `drawReligions()`
 
-### Datos que consume
-- `pack.cells.state[]` — state ID por celda
-- `pack.states[].color` — color por estado
+### Data it consumes
+- `pack.cells.religion[]` — religion ID per cell
+- `pack.religions[].color` — color per religion
 
-### Algoritmo
+### Algorithm
+Identical to cultures: `getIsolines(pack, cellId => cells.religion[cellId], { fill: true, waterGap: true })`.
+
+---
+
+## 10. States
+
+**File**: `public/modules/ui/layers.js:537-566` — `drawStates()`
+
+### Data it consumes
+- `pack.cells.state[]` — state ID per cell
+- `pack.states[].color` — color per state
+
+### Algorithm
 ```typescript
 const isolines = getIsolines(pack, cellId => cells.state[cellId], { fill: true, waterGap: true, halo: renderHalo });
 Object.entries(isolines).forEach(([index, { fill, waterGap, halo }]) => {
@@ -336,38 +336,38 @@ Object.entries(isolines).forEach(([index, { fill, waterGap, halo }]) => {
 });
 ```
 
-- **Water gap**: stroke donde el borde del estado toca agua
-- **Halo**: cuando shape-rendering es "geometricPrecision", renderiza un borde borroso debajo del estado (grupo `#statesHalo` con `filter="blur(5px)"`)
+- **Water gap**: stroke where the state border touches water
+- **Halo**: when shape-rendering is "geometricPrecision", renders a blurred border beneath the state (group `#statesHalo` with `filter="blur(5px)"`)
 
 ---
 
-## 11. Provincias
+## 11. Provinces
 
-**Archivo**: `public/modules/ui/layers.js:592-617` — `drawProvinces()`
+**File**: `public/modules/ui/layers.js:592-617` — `drawProvinces()`
 
-### Datos que consume
-- `pack.cells.province[]` — province ID por celda
+### Data it consumes
+- `pack.cells.province[]` — province ID per cell
 - `pack.provinces[].color` — color
-- `pack.provinces[].pole` o `pack.cells.p[province.center]` — posición de etiqueta
+- `pack.provinces[].pole` or `pack.cells.p[province.center]` — label position
 
-### Algoritmo
-- Usa motor de isolíneas con `{fill: true, waterGap: true}`
-- Renderiza etiquetas de provincia como SVG `<text>` en grupo `#provinceLabels`
-- Las etiquetas se colocan en el `pole` (polo de inaccesibilidad) o en la celda central
+### Algorithm
+- Uses the isoline engine with `{fill: true, waterGap: true}`
+- Renders province labels as SVG `<text>` in the `#provinceLabels` group
+- Labels are placed at the `pole` (pole of inaccessibility) or at the central cell
 
 ---
 
-## 12. Bordes (fronteras)
+## 12. Borders
 
-**Archivo**: `src/renderers/draw-borders.ts:7-165` — `bordersRenderer()`
+**File**: `src/renderers/draw-borders.ts:7-165` — `bordersRenderer()`
 
-### Datos que consume
+### Data it consumes
 - `pack.cells.state[]`, `pack.cells.province[]`
-- `pack.cells.h[]` (≥20 = tierra)
+- `pack.cells.h[]` (≥20 = land)
 - `pack.cells.v[]`, `pack.cells.c[]`
 - `pack.vertices.c[]`, `pack.vertices.v[]`, `pack.vertices.p[]`
 
-### Algoritmo (NO usa el motor de isolíneas — es un renderizador especializado de líneas)
+### Algorithm (does NOT use the isoline engine — it is a specialized line renderer)
 ```
 1. Para cada celda con provincia:
    a. Si algún vecino tiene provincia diferente pero mismo estado → borde provincial
@@ -380,41 +380,41 @@ Object.entries(isolines).forEach(([index, { fill, waterGap, halo }]) => {
    - Usa vertices.v[current] (3 vértices vecinos) para determinar el próximo paso
 ```
 
-### Estilos (`auto-update.js:41-52`)
-| Borde | Opacidad | Stroke | Width | Dasharray |
+### Styles (`auto-update.js:41-52`)
+| Border | Opacity | Stroke | Width | Dasharray |
 |-------|----------|--------|-------|-----------|
-| Estado | 0.8 | `#56566d` | 1 | `"2"` |
-| Provincia | 0.8 | `#56566d` | 0.5 | `"1"` |
+| State | 0.8 | `#56566d` | 1 | `"2"` |
+| Province | 0.8 | `#56566d` | 0.5 | `"1"` |
 
 ---
 
-## 13. Ríos
+## 13. Rivers
 
-**Ver también**: `docs/analisis-rios-azgaar.md` (análisis exhaustivo de 977 líneas)
+**See also**: `docs/analisis-rios-azgaar.md` (exhaustive 977-line analysis)
 
-### Archivos
+### Files
 - `public/modules/ui/layers.js:810-831` — `drawRivers()`
 - `src/generators/river-generator.ts:425-456` — `RiverModule.getRiverPath()`
 - `src/generators/river-generator.ts:369-387` — `RiverModule.addMeandering()`
 - `src/generators/river-generator.ts:400-418` — `RiverModule.getOffset()`
 
-### Algoritmo de dibujo
-1. **Meandering**: `addMeandering()` interpola entre centros de celda con meander factor 0.5 (más meandro upstream, menos en agua: `WATER_MEANDER_SCALE = 0.25`)
-2. **Path generation**: Para cada punto, calcula offset (ancho) basado en flujo + posición → dos orillas (left bank, right bank)
-3. **Offset/Width**: `FLUX_FACTOR = 500`, `MAX_FLUX_WIDTH = 1`, `LENGTH_STEP_WIDTH = 1/200`, progresión Fibonacci
-4. **Renderizado**: polígono cerrado SVG con `curveCatmullRom.alpha(0.1)` en ambas orillas
+### Drawing algorithm
+1. **Meandering**: `addMeandering()` interpolates between cell centers with meander factor 0.5 (more meander upstream, less in water: `WATER_MEANDER_SCALE = 0.25`)
+2. **Path generation**: For each point, computes an offset (width) based on flow + position → two banks (left bank, right bank)
+3. **Offset/Width**: `FLUX_FACTOR = 500`, `MAX_FLUX_WIDTH = 1`, `LENGTH_STEP_WIDTH = 1/200`, Fibonacci progression
+4. **Rendering**: closed SVG polygon with `curveCatmullRom.alpha(0.1)` on both banks
 
 ---
 
-## 14. Rutas (caminos, senderos, rutas marítimas)
+## 14. Routes (roads, trails, sea routes)
 
-**Archivo**: `public/modules/ui/layers.js:845-862` — `drawRoutes()`
-**Archivo**: `src/generators/routes-generator.ts:867-873` — `RoutesModule.getPath()`
+**File**: `public/modules/ui/layers.js:845-862` — `drawRoutes()`
+**File**: `src/generators/routes-generator.ts:867-873` — `RoutesModule.getPath()`
 
-### Datos que consume
-- `pack.routes[]` — array con `i`, `group` ("roads"|"trails"|"searoutes"), `points[]`
+### Data it consumes
+- `pack.routes[]` — array with `i`, `group` ("roads"|"trails"|"searoutes"), `points[]`
 
-### Algoritmo
+### Algorithm
 ```typescript
 getPath({ group, points }) {
   const curve = {
@@ -426,20 +426,20 @@ getPath({ group, points }) {
 }
 ```
 
-Renderizado como `<path>` SVG con `fill="none"`, agrupado por tipo en `#roads`, `#trails`, `#searoutes`.
+Rendered as SVG `<path>` with `fill="none"`, grouped by type in `#roads`, `#trails`, `#searoutes`.
 
 ---
 
-## 15. Íconos de relieve
+## 15. Relief icons
 
-**Archivo**: `src/renderers/draw-relief-icons.ts:17-148` — `reliefIconsRenderer()`
+**File**: `src/renderers/draw-relief-icons.ts:17-148` — `reliefIconsRenderer()`
 
-### Datos que consume
+### Data it consumes
 - `pack.cells.h[]`, `pack.cells.r[]`, `pack.cells.biome[]`
-- `grid.cells.temp[]` (para snowline)
+- `grid.cells.temp[]` (for snowline)
 - `biomesData.iconsDensity[]`, `biomesData.icons[][]`
 
-### Algoritmo
+### Algorithm
 ```
 1. Para cada celda de tierra (h≥20) sin río:
    a. Lowlands (h < 50): biome icons via poisson-disc sampling
@@ -455,37 +455,37 @@ Renderizado como `<path>` SVG con `fill="none"`, agrupado por tipo en `#roads`, 
 4. Render: <use href="#relief-{type}-{variant}" x y width height>
 ```
 
-### Parámetros clave
+### Key parameters
 ```typescript
 const density = terrain.attr("density") || 0.4; // 0.3-0.8
 const size = 2 * (terrain.attr("size") || 1); // 0.2-4.0
 ```
 
-### Sets de íconos: "simple" (minimal), "gray", "colored" (más detallado)
+### Icon sets: "simple" (minimal), "gray", "colored" (more detailed)
 
 ---
 
-## 16. Burgos (asentamientos)
+## 16. Burgs (settlements)
 
-**Archivo**: `src/renderers/draw-burg-icons.ts:10-115` — `burgIconsRenderer()`
+**File**: `src/renderers/draw-burg-icons.ts:10-115` — `burgIconsRenderer()`
 
-### Datos que consume
+### Data it consumes
 - `pack.burgs[]` — `i`, `x`, `y`, `group`, `port`, `removed`
-- `options.burgs.groups[]` — grupos ordenados que definen jerarquía
+- `options.burgs.groups[]` — ordered groups that define hierarchy
 
-### Algoritmo
-1. Crear grupos de íconos ordenados por jerarquía
-2. Para cada burgo: `<use href="#icon-{shape}" id="burg{i}" x="{x}" y="{y}">`
-3. Si `burg.port`: también ícono de ancla en misma posición
-4. Formas: circle, square, triangle, cross, star, circled, squared, star-circled, star-squared, y variantes Watabou (capital, city, town, village, hamlet, fort, monastery, caravanserai, trade post)
+### Algorithm
+1. Create icon groups ordered by hierarchy
+2. For each burg: `<use href="#icon-{shape}" id="burg{i}" x="{x}" y="{y}">`
+3. If `burg.port`: also an anchor icon at the same position
+4. Shapes: circle, square, triangle, cross, star, circled, squared, star-circled, star-squared, and Watabou variants (capital, city, town, village, hamlet, fort, monastery, caravanserai, trade post)
 
 ---
 
-## 17. Etiquetas de estado (texto curvo)
+## 17. State labels (curved text)
 
-**Archivo**: `src/renderers/draw-state-labels.ts:25-373` — `stateLabelsRenderer()`
+**File**: `src/renderers/draw-state-labels.ts:25-373` — `stateLabelsRenderer()`
 
-### Algoritmo (raycasting complejo)
+### Algorithm (complex raycasting)
 ```
 1. Desde el pole de cada estado, emitir rayos cada 9° hacia afuera
 2. Para cada rayo, avanzar de 5px en 5px hasta salir del estado
@@ -500,7 +500,7 @@ const size = 2 * (terrain.attr("size") || 1); // 0.2-4.0
 7. Fallback a nombre corto si no cabe el completo
 ```
 
-### Constantes clave
+### Key constants
 ```typescript
 ANGLE_STEP = 9;        // grados entre rayos
 LENGTH_START = 5;      // paso inicial
@@ -510,134 +510,134 @@ LENGTH_MAX = 300;      // longitud máxima
 
 ---
 
-## 18. Etiquetas de burgo
+## 18. Burg labels
 
-**Archivo**: `src/renderers/draw-burg-labels.ts:10-91` — `burgLabelsRenderer()`
+**File**: `src/renderers/draw-burg-labels.ts:10-91` — `burgLabelsRenderer()`
 
-SVG `<text>` simple en coordenadas del burgo con offset (`dx`, `dy` en em). Agrupado por grupo de burgo, cada uno con estilo independiente.
+Simple SVG `<text>` at the burg's coordinates with offset (`dx`, `dy` in em). Grouped by burg group, each with independent styling.
 
 ---
 
-## 19. Temperatura (isotermas)
+## 19. Temperature (isotherms)
 
-**Archivo**: `src/renderers/draw-temperature.ts:19-136` — `temperatureRenderer()`
+**File**: `src/renderers/draw-temperature.ts:19-136` — `temperatureRenderer()`
 
-### Algoritmo
-1. Calcular min/max temperatura y auto-determinar step size
-2. Para cada nivel de isoterma, caminar vértices → isolíneas
-3. Relajar: mantener cada 4º vértice (o bordes)
-4. Cada banda se rellena con escala Spectral: `fill = scheme(1 - (t - tMin) / delta)` donde scheme = `interpolateSpectral`
+### Algorithm
+1. Compute min/max temperature and auto-determine step size
+2. For each isotherm level, walk vertices → isolines
+3. Relax: keep every 4th vertex (or edges)
+4. Each band is filled with the Spectral scale: `fill = scheme(1 - (t - tMin) / delta)` where scheme = `interpolateSpectral`
 5. Stroke: `darker(fill, 0.2)`
-6. Etiquetas en centro-superior e centro-inferior de cada banda
+6. Labels at the top-center and bottom-center of each band
 
 ---
 
-## 20. Precipitación
+## 20. Precipitation
 
-**Archivo**: `public/modules/ui/layers.js:333-359` — `drawPrecipitation()`
+**File**: `public/modules/ui/layers.js:333-359` — `drawPrecipitation()`
 
-### Algoritmo
-- Por cada celda de tierra con datos de precipitación: círculo centrado en la celda
-- Radio = `sqrt(prec/4) / cellsModifier`
-- Animación de aparición (800ms transition de r=0 al radio calculado)
-
----
-
-## 21. Población
-
-**Archivo**: `public/modules/ui/layers.js:394-432` — `drawPopulation()`
-
-### Algoritmo
-- **Rural**: Líneas verticales desde el centro de la celda hacia abajo, largo proporcional a la población
-- **Urbano**: Líneas verticales desde el centro del burgo hacia abajo, largo proporcional a población × urbanización
-- Animación 2000ms transition
+### Algorithm
+- For each land cell with precipitation data: circle centered on the cell
+- Radius = `sqrt(prec/4) / cellsModifier`
+- Appearance animation (800ms transition from r=0 to the computed radius)
 
 ---
 
-## 22. Capa de hielo
+## 21. Population
 
-**Archivo**: `src/renderers/draw-ice.ts:10-74` — `iceRenderer()`
+**File**: `public/modules/ui/layers.js:394-432` — `drawPopulation()`
 
-### Datos que consume
-- `pack.ice[]` — array de Ice con `type` ("glacier"|"iceberg"), `points`, `offset`
-
-Renderizado como SVG `<polygon>` con los puntos almacenados. Glaciares/icebergs individuales redibujables via `redrawIceberg()` y `redrawGlacier()`.
-
----
-
-## 23. Bienes (goods)
-
-**Archivo**: `src/renderers/draw-goods.ts:31-168` — `drawGoods()`
-
-Tres sub-capas:
-- **`goodsCells`**: Polígonos de celda coloreados por tipo de producción, opacidad normalizada al máximo global
-- **`goodsIcons`**: Íconos de bien a nivel de celda (símbolos SVG) con círculos opcionales
-- **`goodsBurgs`**: Placas de burgo — rectángulos redondeados con top-3 bienes producidos + valores
+### Algorithm
+- **Rural**: Vertical lines from the cell center downward, length proportional to population
+- **Urban**: Vertical lines from the burg center downward, length proportional to population × urbanization
+- 2000ms transition animation
 
 ---
 
-## 24. Mercados
+## 22. Ice layer
 
-**Archivo**: `src/renderers/draw-markets.ts:17-118` — `drawMarketsLayer()`
+**File**: `src/renderers/draw-ice.ts:10-74` — `iceRenderer()`
 
-- Cada mercado recibe su zona de influencia (isoline polygon) rellena con el color del mercado
-- El burgo central recibe un círculo con emoji (default ⚖️)
-- Animación hover highlight
+### Data it consumes
+- `pack.ice[]` — array of Ice with `type` ("glacier"|"iceberg"), `points`, `offset`
 
----
-
-## 25. Emblemas (escudos)
-
-**Archivo**: `src/renderers/draw-emblems.ts:28-156` — `emblemsRenderer()`
-
-- Escudos de burgo, provincia y estado renderizados como SVG `<use>`
-- Tamaños auto-calculados según número de entidades y dimensiones del mapa
-- Simulación D3 force (`forceCollide`) para separar emblemas solapados
+Rendered as an SVG `<polygon>` with the stored points. Individual glaciers/icebergs are redrawable via `redrawIceberg()` and `redrawGlacier()`.
 
 ---
 
-## 26. Militar
+## 23. Goods
 
-**Archivo**: `src/renderers/draw-military.ts:13-169`
+**File**: `src/renderers/draw-goods.ts:31-168` — `drawGoods()`
 
-Regimientos como rectángulos coloreados con conteo de tropas, íconos de unidad e imágenes. Coloreados por estado con bordes más oscuros. Movimiento animado a lo largo de paths.
+Three sub-layers:
+- **`goodsCells`**: Cell polygons colored by production type, opacity normalized to the global maximum
+- **`goodsIcons`**: Good icons at cell level (SVG symbols) with optional circles
+- **`goodsBurgs`**: Burg plates — rounded rectangles with top-3 produced goods + values
 
 ---
 
-## 27. Textura satelital (3D)
+## 24. Markets
 
-**Archivo**: `src/renderers/draw-satellite-texture.ts:474-580` — `generateSatelliteTexture()`
+**File**: `src/renderers/draw-markets.ts:17-118` — `drawMarketsLayer()`
 
-**Ruta de renderizado completamente separada** para la vista 3D (Three.js/WebGL). Usa shaders GLSL personalizados en un fullscreen quad.
+- Each market receives its influence zone (isoline polygon) filled with the market's color
+- The central burg receives a circle with an emoji (default ⚖️)
+- Hover highlight animation
 
-### Datos que consume
-- Altura con erosión + datos de costa
-- Datos climáticos (temp, prec, height)
-- Biomas por celda
+---
 
-### Pipeline del fragment shader
-1. **Texturas de entrada**: Clima (temp+128/R, prec/G, height/B), Bioma (albedo RGB, densidad A)
-2. **Cálculos por píxel**:
-   - **Slope** por diferencias centrales en height field
+## 25. Emblems (coats of arms)
+
+**File**: `src/renderers/draw-emblems.ts:28-156` — `emblemsRenderer()`
+
+- Burg, province and state coats of arms rendered as SVG `<use>`
+- Sizes auto-calculated from the number of entities and map dimensions
+- D3 force simulation (`forceCollide`) to separate overlapping emblems
+
+---
+
+## 26. Military
+
+**File**: `src/renderers/draw-military.ts:13-169`
+
+Regiments as colored rectangles with troop counts, unit icons and images. Colored by state with darker borders. Animated movement along paths.
+
+---
+
+## 27. Satellite texture (3D)
+
+**File**: `src/renderers/draw-satellite-texture.ts:474-580` — `generateSatelliteTexture()`
+
+**Completely separate render path** for the 3D view (Three.js/WebGL). Uses custom GLSL shaders on a fullscreen quad.
+
+### Data it consumes
+- Height with erosion + coastline data
+- Climate data (temp, prec, height)
+- Biomes per cell
+
+### Fragment shader pipeline
+1. **Input textures**: Climate (temp+128/R, prec/G, height/B), Biome (albedo RGB, density A)
+2. **Per-pixel computations**:
+   - **Slope** via central differences on the height field
    - **Dithering noise** (FBM 5-octave value noise)
-   - **Albedo de bioma** con UV wobble para variación natural de borde
-   - **Roca** en pendientes pronunciadas, bandas de estrato, oscurecimiento de acantilados
-   - **Arena/grava** en playas costeras
-   - **Nieve** basada en temperatura + altitud
-   - **Riparian darkening** cerca de drenajes
-   - **Cavity shading** (gullies oscuro, crestas brillante)
-   - **Hillshade** (estilo Swiss-relief: sol NW cálido, sombra azul fría)
-   - **Perspectiva aérea** (tierras altas pálidas hacia el cielo)
-   - **Agua**: bathymetric shelf-to-abyss, lagunas teñidas por clima, foam line
-   - **Lagos**: por grupo (fresh/salt/sinkhole/dry/lava/frozen)
-   - **Ríos**: canal teal profundo, bancos de sedimento, white water en pendientes, hielo en climas fríos
+   - **Biome albedo** with UV wobble for natural edge variation
+   - **Rock** on steep slopes, stratum bands, cliff darkening
+   - **Sand/gravel** on coastal beaches
+   - **Snow** based on temperature + altitude
+   - **Riparian darkening** near drains
+   - **Cavity shading** (dark gullies, bright crests)
+   - **Hillshade** (Swiss-relief style: warm NW sun, cool blue shadow)
+   - **Aerial perspective** (highlands fading pale toward the sky)
+   - **Water**: bathymetric shelf-to-abyss, climate-tinted lagoons, foam line
+   - **Lakes**: by group (fresh/salt/sinkhole/dry/lava/frozen)
+   - **Rivers**: deep teal channel, sediment banks, white water on slopes, ice in cold climates
 
 ---
 
-## 28. Overlays: textura, grilla, coordenadas
+## 28. Overlays: texture, grid, coordinates
 
-### 28a. Textura decorativa
-**Archivo**: `public/modules/ui/layers.js:783-796` — `drawTexture()`
+### 28a. Decorative texture
+**File**: `public/modules/ui/layers.js:783-796` — `drawTexture()`
 
 ```javascript
 function drawTexture() {
@@ -649,98 +649,98 @@ function drawTexture() {
 }
 ```
 
-### 28b. Grilla
-**Archivo**: `public/modules/ui/layers.js:632-659` — `drawGrid()`
+### 28b. Grid
+**File**: `public/modules/ui/layers.js:632-659` — `drawGrid()`
 
-- Patrón SVG (`<pattern>`) para tiles: pointyHex, flatHex, square, square45deg, triangle
-- Escala, stroke, dash, shift configurables
+- SVG pattern (`<pattern>`) for tiles: pointyHex, flatHex, square, square45deg, triangle
+- Configurable scale, stroke, dash, shift
 
-### 28c. Coordenadas (graticule)
-**Archivo**: `public/modules/ui/layers.js:673-731` — `drawCoordinates()`
+### 28c. Coordinates (graticule)
+**File**: `public/modules/ui/layers.js:673-731` — `drawCoordinates()`
 
-- Usa `d3.geoGraticule()` + `d3.geoEquirectangular()`
-- Step adaptable al zoom (steps posibles: 0.5, 1, 2, 5, 10, 15, 30)
-- Etiquetas N/S/E/W en bordes del mapa
-
----
-
-## 29. Patrones arquitectónicos clave
-
-### Patrón 1: Motor de isolíneas universal
-`getIsolines()` + `connectVertices()` son el **motor universal de renderizado regional**. Cualquier atributo indexado por celda produce fills SVG con el mismo algoritmo: agrupar celdas → caminar bordes Voronoi → generar polígonos cerrados → water gaps opcionales.
-
-### Patrón 2: Water Gap
-Cada región se renderiza con un **stroke adicional** (`waterGap`) del mismo color que el fill. Donde el borde regional toca agua o el borde del mapa, el stroke se interrumpe — evita que los colores se desborden visualmente al océano.
-
-### Patrón 3: Máscaras de tierra/agua
-Se generan dos máscaras SVG en `#deftemp`:
-- `<mask id="land">`: blanco para tierra, negro para lagos
-- `<mask id="water">`: negro para tierra, blanco para lagos
-Usadas para clipping de capas que no deben salir de la tierra o del agua.
-
-### Patrón 4: Fractalización de costa
-Pipeline: RDP simplificación (0.3px) → clip a bounds → midpoint displacement fractal (4 niveles, seed por feature) → path mixto B-spline/Catmull-Rom.
-
-### Patrón 5: Sin relleno de tierra explícito
-No hay un "fill tierra" global. En cambio:
-- La capa base de tierra es el rect fill del heightmap en altura 20
-- Las capas temáticas renderizan **polígonos regionales individuales** que cubren toda la tierra colectivamente
-- La máscara `#land` existe para clipping, no como fill visual
+- Uses `d3.geoGraticule()` + `d3.geoEquirectangular()`
+- Step adapts to zoom (possible steps: 0.5, 1, 2, 5, 10, 15, 30)
+- N/S/E/W labels on the map edges
 
 ---
 
-## 30. Estado de portabilidad a Voronia
+## 29. Key architectural patterns
 
-| Capa | Voronia actual | Dependencias | Prioridad |
+### Pattern 1: Universal isoline engine
+`getIsolines()` + `connectVertices()` are the **universal regional rendering engine**. Any cell-indexed attribute produces SVG fills with the same algorithm: group cells → walk Voronoi edges → generate closed polygons → optional water gaps.
+
+### Pattern 2: Water Gap
+Each region is rendered with an **additional stroke** (`waterGap`) of the same color as the fill. Where the regional border touches water or the map edge, the stroke is interrupted — this prevents colors from visually bleeding into the ocean.
+
+### Pattern 3: Land/water masks
+Two SVG masks are generated in `#deftemp`:
+- `<mask id="land">`: white for land, black for lakes
+- `<mask id="water">`: black for land, white for lakes
+Used for clipping layers that must not extend outside the land or the water.
+
+### Pattern 4: Coastline fractalization
+Pipeline: RDP simplification (0.3px) → clip to bounds → fractal midpoint displacement (4 levels, per-feature seed) → hybrid B-spline/Catmull-Rom path.
+
+### Pattern 5: No explicit land fill
+There is no global "land fill". Instead:
+- The base land layer is the heightmap's rect fill at height 20
+- Thematic layers render **individual regional polygons** that collectively cover all the land
+- The `#land` mask exists for clipping, not as a visual fill
+
+---
+
+## 30. Portability status to Voronia
+
+| Layer | Current Voronia | Dependencies | Priority |
 |------|---------------|-------------|-----------|
-| **Features** (tierra/océano/costa) | ❌ No implementado | Geometría Voronoi, masks | **Alta** |
-| **Coastline fractal** | ❌ No implementado | Midpoint displacement, Catmull-Rom | **Alta** |
-| **Ocean base** | ❌ Color fijo `[0.20, 0.45, 0.80]` | Color configurable, patrón | Media |
-| **Ocean bathymetric** | ❌ No implementado | connectVertices(), contornos | Baja |
-| **Heightmap contours** | ✅ Mesh base OK. Contornos ❌ | connectVertices(), esquemas de color | Media |
-| **Biomes** | ❌ No implementado | getIsolines(), waterGap | **Alta** |
-| **Cultures** | ❌ No implementado | getIsolines(), waterGap | **Alta** |
-| **Religions** | ❌ No implementado | getIsolines(), waterGap | **Alta** |
-| **States** | ❌ No implementado | getIsolines(), waterGap, halo | **Alta** |
-| **Provinces** | ❌ No implementado | getIsolines(), waterGap, labels | **Alta** |
-| **Borders** | ❌ No implementado | getVerticesLine(), dashed strokes | **Alta** |
-| **Rivers** | ✅ Implementado en vor-sim + vor-render | — | ✅ Hecho |
-| **Routes** | ❌ No implementado | Catmull-Rom paths | Media |
-| **Relief icons** | ❌ No implementado | Poisson-disc, sprites, biomas | Baja |
-| **Burg icons** | ❌ No implementado | Sprites, jerarquía | Media |
-| **State labels** | ❌ No implementado | Raycasting, textPath curvo | Media |
-| **Burg labels** | ❌ No implementado | SVG text, offset | Media |
-| **Temperature** | ❌ No implementado | Isolineas, Spectral scale | Baja |
-| **Precipitation** | ❌ No implementado | Círculos, radio por prec | Baja |
-| **Population** | ❌ No implementado | Barras verticales | Baja |
-| **Ice** | ❌ No implementado | Polígonos | Baja |
-| **Goods** | ❌ No implementado | Múltiples sub-capas | Baja |
-| **Markets** | ❌ No implementado | Isolineas, emoji | Baja |
-| **Emblems** | ❌ No implementado | D3 force, SVG use | Baja |
-| **Military** | ❌ No implementado | Rectángulos, animación | Baja |
-| **Satellite texture** | ❌ No implementado | Shaders GLSL, full pipeline | Muy baja |
-| **Texture overlay** | ❌ Parcial (carga textura OK, blend no) | Fullscreen quad, blend modes | Baja |
-| **Grid overlay** | ❌ No implementado | Patrones, shader líneas | Baja |
-| **Coordinates** | ❌ No implementado | Proyección geográfica | Media |
+| **Features** (land/ocean/coastline) | ❌ Not implemented | Voronoi geometry, masks | **High** |
+| **Coastline fractal** | ❌ Not implemented | Midpoint displacement, Catmull-Rom | **High** |
+| **Ocean base** | ❌ Fixed color `[0.20, 0.45, 0.80]` | Configurable color, pattern | Medium |
+| **Ocean bathymetric** | ❌ Not implemented | connectVertices(), contours | Low |
+| **Heightmap contours** | ✅ Base mesh OK. Contours ❌ | connectVertices(), color schemes | Medium |
+| **Biomes** | ❌ Not implemented | getIsolines(), waterGap | **High** |
+| **Cultures** | ❌ Not implemented | getIsolines(), waterGap | **High** |
+| **Religions** | ❌ Not implemented | getIsolines(), waterGap | **High** |
+| **States** | ❌ Not implemented | getIsolines(), waterGap, halo | **High** |
+| **Provinces** | ❌ Not implemented | getIsolines(), waterGap, labels | **High** |
+| **Borders** | ❌ Not implemented | getVerticesLine(), dashed strokes | **High** |
+| **Rivers** | ✅ Implemented in vor-sim + vor-render | — | ✅ Done |
+| **Routes** | ❌ Not implemented | Catmull-Rom paths | Medium |
+| **Relief icons** | ❌ Not implemented | Poisson-disc, sprites, biomes | Low |
+| **Burg icons** | ❌ Not implemented | Sprites, hierarchy | Medium |
+| **State labels** | ❌ Not implemented | Raycasting, curved textPath | Medium |
+| **Burg labels** | ❌ Not implemented | SVG text, offset | Medium |
+| **Temperature** | ❌ Not implemented | Isolines, Spectral scale | Low |
+| **Precipitation** | ❌ Not implemented | Circles, radius per prec | Low |
+| **Population** | ❌ Not implemented | Vertical bars | Low |
+| **Ice** | ❌ Not implemented | Polygons | Low |
+| **Goods** | ❌ Not implemented | Multiple sub-layers | Low |
+| **Markets** | ❌ Not implemented | Isolines, emoji | Low |
+| **Emblems** | ❌ Not implemented | D3 force, SVG use | Low |
+| **Military** | ❌ Not implemented | Rectangles, animation | Low |
+| **Satellite texture** | ❌ Not implemented | GLSL shaders, full pipeline | Very low |
+| **Texture overlay** | ❌ Partial (texture load OK, blend no) | Fullscreen quad, blend modes | Low |
+| **Grid overlay** | ❌ Not implemented | Patterns, line shader | Low |
+| **Coordinates** | ❌ Not implemented | Geographic projection | Medium |
 
-### Dependencias críticas (orden de implementación)
-1. **`connectVertices()`** + **`getIsolines()`** — prerrequisito para TODAS las capas temáticas (biomas, culturas, religiones, estados, provincias, borders, heightmap contours)
-2. Máscaras land/water — clipping de capas temáticas
-3. Coastline fractal — calidad visual de la costa
-4. Paleta de colores configurable por capa — esquemas estilo Azgaar
-5. Water gap technique — para que las capas temáticas no sangren al océano
+### Critical dependencies (implementation order)
+1. **`connectVertices()`** + **`getIsolines()`** — prerequisite for ALL thematic layers (biomes, cultures, religions, states, provinces, borders, heightmap contours)
+2. Land/water masks — clipping of thematic layers
+3. Coastline fractal — visual quality of the coastline
+4. Per-layer configurable color palette — Azgaar-style schemes
+5. Water gap technique — so thematic layers do not bleed into the ocean
 
-### Nota sobre el motor de isolíneas
-El `connectVertices()` de Azgaar es un algoritmo que camina sobre la teselación Voronoi siguiendo aristas entre celdas de diferente tipo. **No requiere la geometría Delaunay** — solo necesita:
-- `cells.c[i]` — vecinos de cada celda
-- `cells.v[i]` — vértices de cada celda
-- `vertices.c[v]` — celdas que comparten un vértice
-- `vertices.v[v]` — vecinos de cada vértice (3 en Voronoi estándar)
+### Note on the isoline engine
+Azgaar's `connectVertices()` is an algorithm that walks over the Voronoi tessellation following edges between cells of different types. **It does not require the Delaunay geometry** — it only needs:
+- `cells.c[i]` — neighbors of each cell
+- `cells.v[i]` — vertices of each cell
+- `vertices.c[v]` — cells that share a vertex
+- `vertices.v[v]` — neighbors of each vertex (3 in standard Voronoi)
 
-Todo esto ya está disponible en `vor-core` (PackCells).
+All of this is already available in `vor-core` (PackCells).
 
 ---
 
-> **Documento generado a partir del análisis del código fuente de Azgaar FMG v1.135.2**.
-> Para el análisis de ríos, ver `docs/analisis-rios-azgaar.md` (977 líneas).
-> Para documentación previa de capas de tierra, ver `docs/landmass-layers.md` (análisis inicial, menos detallado).
+> **Document generated from the analysis of the Azgaar FMG v1.135.2 source code**.
+> For the rivers analysis, see `docs/analisis-rios-azgaar.md` (977 lines).
+> For previous landmass layers documentation, see `docs/landmass-layers.md` (initial, less detailed analysis).

@@ -7,7 +7,7 @@ use vor_core::world::World;
 #[test]
 fn rename_state_found_by_id() {
     let mut world = World::default();
-    // El loader pone ids reales skip 0; simulamos igual
+    // The loader assigns real ids skipping 0; simulate the same
     world.states.push(State {
         id: 1,
         name: "Old".into(),
@@ -35,7 +35,7 @@ fn rename_state_empty_name_fails() {
     let err = vor_edit::rename_state(&mut world, 1, "  ").unwrap_err();
     assert!(
         matches!(err, vor_edit::EditError::EmptyName { .. }),
-        "empty name debe devolver EmptyName, got {err:?}"
+        "empty name should return EmptyName, got {err:?}"
     );
 }
 
@@ -45,7 +45,7 @@ fn rename_state_id_zero_not_found() {
     let err = vor_edit::rename_state(&mut world, 0, "Whatever").unwrap_err();
     assert!(
         matches!(err, vor_edit::EditError::EntityNotFound { what, .. } if what == "state"),
-        "id=0 debe dar EntityNotFound, got {err:?}"
+        "id=0 should give EntityNotFound, got {err:?}"
     );
 }
 
@@ -164,11 +164,11 @@ fn toggle_burg_capital_clears_others() {
         cell: 1,
         ..Burg::placeholder()
     });
-    // Promote burg 1 to capital — debería quitar capital de burg 2
+    // Promote burg 1 to capital — should remove capital status from burg 2
     vor_edit::toggle_burg_capital(&mut world, 1, true).unwrap();
     assert!(world.burgs[0].is_capital);
     assert!(!world.burgs[1].is_capital);
-    // state center_cell debe seguir a la capital
+    // state center_cell should follow the capital
     assert_eq!(world.states[0].center_cell, 0);
 }
 

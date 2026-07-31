@@ -1,28 +1,28 @@
-//! Generador fonético de nombres por cultura (`namesData`, slot `[31]`).
+//! Phonetic name generator per culture (`namesData`, slot `[31]`).
 //!
-//! Formato de Azgaar en el Brample: `"German|5|12|lt|0|/English|6|11|..."` — cada
-//! namebase separado por `/`, campos por `|`: `name|min|max|d|m|b`.
-//! `d/m/b` son arrays serializados como strings (p.ej. `"lt"` = letras que se duplican,
-//! `m` = array middle, `b` = array begin). Voronia los preserva como `String` opaco
-//! en Fase 1; el deserializado exacto va a Fase 7 cuando se implemente el generador nativo.
+//! Azgaar's format in Brample: `"German|5|12|lt|0|/English|6|11|..."` — each
+//! namebase separated by `/`, fields by `|`: `name|min|max|d|m|b`.
+//! `d/m/b` are arrays serialized as strings (e.g. `"lt"` = letters that get doubled,
+//! `m` = middle array, `b` = begin array). Voronia preserves them as opaque `String`
+//! in Phase 1; the exact deserialization goes to Phase 7 when the native generator is implemented.
 
-/// Una namebase (catálogo de entrenamiento + parámetros de un generador fonético).
+/// A namebase (training catalog + parameters of a phonetic generator).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct NameBase {
     pub id: u16,
-    /// Nombre de la namebase ("English", "German", ...).
+    /// Namebase name ("English", "German", ...).
     pub name: String,
-    /// Longitud mínima de un nombre generado.
+    /// Minimum length of a generated name.
     pub min_length: u32,
-    /// Longitud máxima.
+    /// Maximum length.
     pub max_length: u32,
-    /// Comando `d` (de Azgaar) — array serializado. Preservar opaco en Fase 1.
+    /// `d` command (from Azgaar) — serialized array. Keep opaque in Phase 1.
     pub d: String,
-    /// Comando `m` — array serializado opaco.
+    /// `m` command — opaque serialized array.
     pub m: String,
-    /// Comando `b` — array serializado opaco.
+    /// `b` command — opaque serialized array.
     pub b: String,
-    /// Probabilidad (0–1) de generar un nombre multi-palabra (pl. spec del plan §7.8).
+    /// Probability (0–1) of generating a multi-word name (per the plan §7.8 spec).
     #[serde(default)]
     pub multiword_probability: Option<f32>,
 }

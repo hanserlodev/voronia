@@ -6,12 +6,12 @@ use vor_core::voronoi::VoronoiVertices;
 
 use crate::heightmap::{ColorCtor, HeightmapMesh, HeightmapVertex};
 
-/// Suaviza la malla de Voronoi moviendo cada vértice hacia el promedio de sus
-/// vecinos (Laplacian smoothing). Las celdas se mantienen estancas porque los
-/// vértices son compartidos.
+/// Smooths the Voronoi mesh by moving each vertex toward the average of its
+/// neighbors (Laplacian smoothing). Cells stay watertight because the vertices
+/// are shared.
 ///
-/// - `factor`: qué tanto moverse hacia el centro de vecinos (0.0 = nada, 0.5 = mitad)
-/// - `iterations`: cuántas pasadas de suavizado aplicar
+/// - `factor`: how much to move toward the neighbor center (0.0 = none, 0.5 = half)
+/// - `iterations`: how many smoothing passes to apply
 pub fn laplacian_smooth_vertices(
     vertices: &VoronoiVertices,
     factor: f32,
@@ -54,10 +54,10 @@ pub fn laplacian_smooth_vertices(
     result
 }
 
-/// Construye un `HeightmapMesh` a partir de datos de Voronoi (posiciones + cell_rings)
-/// coloreando cada celda según `color_fn(cell_id)`.
-/// La malla Voronoi se suaviza con Laplacian smoothing para redondear las celdas
-/// sin romper la estanqueidad entre adyacentes.
+/// Builds a `HeightmapMesh` from Voronoi data (positions + cell_rings),
+/// coloring each cell according to `color_fn(cell_id)`.
+/// The Voronoi mesh is smoothed with Laplacian smoothing to round the cells
+/// without breaking watertightness between adjacent ones.
 pub fn build_pack_mesh(
     vertices: &VoronoiVertices,
     points_n: usize,
@@ -132,9 +132,9 @@ pub fn build_pack_mesh(
     result
 }
 
-/// Subdivide un polígono cerrado con Catmull-Rom cúbico uniforme (α=0).
-/// Cada arista produce `subdivisions` puntos a lo largo de la curva.
-/// Usa 3 subdivisiones por defecto para un suavizado tipo Azgaar.
+/// Subdivides a closed polygon with uniform cubic Catmull-Rom (α=0).
+/// Each edge produces `subdivisions` points along the curve.
+/// Uses 3 subdivisions by default for an Azgaar-like smoothing.
 pub(crate) fn catmull_rom_closed(points: &[[f32; 2]], subdivisions: usize) -> Vec<[f32; 2]> {
     let n = points.len();
     if n < 4 || subdivisions == 0 {
@@ -166,8 +166,8 @@ pub(crate) fn catmull_rom_closed(points: &[[f32; 2]], subdivisions: usize) -> Ve
     result
 }
 
-/// Subdivide una polilínea abierta con Catmull-Rom cúbico uniforme (α=0).
-/// El primer y último segmento repiten su punto extremo para amortiguar.
+/// Subdivides an open polyline with uniform cubic Catmull-Rom (α=0).
+/// The first and last segments repeat their endpoint to dampen the curve.
 pub(crate) fn catmull_rom_open(points: &[[f32; 2]], subdivisions: usize) -> Vec<[f32; 2]> {
     let n = points.len();
     if n < 2 || subdivisions == 0 {
@@ -217,13 +217,13 @@ pub(crate) fn catmull_rom_open(points: &[[f32; 2]], subdivisions: usize) -> Vec<
     result
 }
 
-/// Construye la malla base del mapa a partir de **features** (continentes/islas),
-/// NO del grid de celdas Voronoi. El perímetro de cada feature se suaviza con
-/// Catmull-Rom para costas naturales, y toda la masa terrestre se colorea con
+/// Builds the base map mesh from **features** (continents/islands), NOT from
+/// the Voronoi cell grid. Each feature's perimeter is smoothed with Catmull-Rom
+/// for natural coastlines, and the whole landmass is colored with
 /// `color_fn(feature)`.
 ///
-/// El océano no se renderiza acá — se usa el color de fondo (clear color) del
-/// render pass.
+/// The ocean is not rendered here -- the background color (clear color) of the
+/// render pass is used instead.
 pub fn build_landmass_mesh(
     vertices: &VoronoiVertices,
     features: &[Feature],

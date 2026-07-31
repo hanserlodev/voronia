@@ -1,7 +1,8 @@
-//! Religión (slot `[29]`: `pack.religions` JSON).
+//! Religion (slot `[29]`: `pack.religions` JSON).
 
-/// Tipo de religión. Variants confirmadas en el modelo de Azgaar (plan §7.7).
-// TODO Fase 1: confirmar nombre de `Organized` (Azgaar usa "Organized"也许是 "Organized Religion" —lock exacto).
+/// Religion type. Variants confirmed in Azgaar's model (plan §7.7).
+// TODO Phase 1: confirm the exact `Organized` name (Azgaar uses "Organized" or perhaps
+// "Organized Religion" — lock the exact one).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ReligionType {
@@ -12,40 +13,40 @@ pub enum ReligionType {
     Cult,
 }
 
-/// Modo/dominio de expansión de la religión (§7.7 del plan).
+/// Religion expansion mode/scope (plan §7.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ReligionExpansion {
-    /// Solo dentro de su cultura de origen.
+    /// Only within its culture of origin.
     #[default]
     Culture,
-    /// Global — cualquier cultura.
+    /// Global — any culture.
     Global,
 }
 
-/// Una religión (entrada de `pack.religions`). El slot `[0]` es placeholder.
+/// A religion (entry of `pack.religions`). Slot `[0]` is the placeholder.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Religion {
     pub id: u16,
     pub name: String,
-    /// Culturas/religiones de origen (árbol evolutivo).
+    /// Origin cultures/religions (evolutionary tree).
     #[serde(default)]
     pub origins: Vec<u16>,
-    /// Color hex.
+    /// Hex color.
     #[serde(default)]
     pub color: String,
-    /// Tipo de religión.
+    /// Religion type.
     pub kind: ReligionType,
-    /// Modo de expansión.
+    /// Expansion mode.
     #[serde(default)]
     pub expansion: ReligionExpansion,
-    /// Celda central.
+    /// Central cell.
     #[serde(default)]
     pub center_cell: u32,
-    /// Cantidad de celdas.
+    /// Number of cells.
     #[serde(default)]
     pub cells: u32,
-    /// Área total en pixels².
+    /// Total area in pixels².
     #[serde(default)]
     pub area_px: u32,
     #[serde(default)]

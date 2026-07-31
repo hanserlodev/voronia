@@ -1,31 +1,31 @@
 ---
 name: "✨ Feature request"
-about: "Proponer una funcionalidad nueva o mejora"
-title: "feat: [crate o módulo] descripción breve"
+about: "Propose a new feature or improvement"
+title: "feat: [crate or module] brief description"
 labels: ["enhancement"]
 assignees: []
 ---
 
-<!-- Antes de abrir: consultá el plan maestro (docs/plan.md §23 — roadmap) y references/status.md.
-     Quizás el ítem ya está planeado o en progreso. -->
+<!-- Before opening: check the master plan (docs/plan.md §23 — roadmap) and references/status.md.
+     Maybe the item is already planned or in progress. -->
 
-## Problema / motivación
+## Problem / motivation
 
-¿Qué necesidad cubre? ¿Qué limitación actual motiva esto?
+What need does it address? What current limitation motivates this?
 
-## Solución propuesta
+## Proposed Solution
 
-Describí cómo lo harías (o cómo te lo imaginás):
+Describe how you would do it (or how you imagine it):
 
-## Alternativas consideradas
+## Alternatives Considered
 
-## Alcance
+## Scope
 
-- [ ] ¿Afecta al World Data Model (`vor-core`)?
-- [ ] ¿Afecta al formato `.vorn` (`vor-format`)?
-- [ ] ¿Es determinista (misma semilla = mismo resultado)? <!-- obligatorio si es generativo -->
-- [ ] ¿Toca límites entre crates? (ver `docs/architecture.md`)
+- [ ] Does it affect the World Data Model (`vor-core`)?
+- [ ] Does it affect the `.vorn` format (`vor-format`)?
+- [ ] Is it deterministic (same seed = same result)? <!-- mandatory if generative -->
+- [ ] Does it touch crate boundaries? (see `docs/architecture.md`)
 
-## Información adicional
+## Additional Information
 
-<!-- Referencias a Azgaar (archivo/función del repo original), papers, links, etc. -->
+<!-- References to Azgaar (file/function in the original repo), papers, links, etc. -->

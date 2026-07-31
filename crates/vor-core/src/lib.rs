@@ -1,31 +1,31 @@
-//! `vor-core` — World Data Model de Voronia.
+//! `vor-core` — Voronia's World Data Model.
 //!
-//! Puros tipos de datos del mundo: mallas (`Grid`/`Pack`), atributos por celda en
-//! Structure-of-Arrays (`GridCells`/`PackCells`), entidades (`Culture`/`State`/`Burg`
-//! /`Religion`/`Province`/`River`/`Marker`/`Route`/`Zone`/`Ice`), catálogos
-//! (`Biome`/`NameBase`/`Note`) y la raíz `World` que los reúne.
+//! Pure world data types: meshes (`Grid`/`Pack`), per-cell attributes in
+//! Structure-of-Arrays layout (`GridCells`/`PackCells`), entities (`Culture`/`State`/`Burg`
+//! /`Religion`/`Province`/`River`/`Marker`/`Route`/`Zone`/`Ice`), catalogs
+//! (`Biome`/`NameBase`/`Note`) and the `World` root that brings them together.
 //!
-//! **No** vive lógica acá — ni de generación procedural (va a `vor-sim`), ni de
-//! parseo de `.map` (va a `vor-import`), ni de serialización `.vorn` (va a `vor-format`),
-//! ni de render (va a `vor-render`). Los límites entre crates están en
+//! **No** logic lives here — not procedural generation (that goes to `vor-sim`), not
+//! `.map` parsing (that goes to `vor-import`), not `.vorn` serialization (that goes to `vor-format`),
+//! not rendering (that goes to `vor-render`). The boundaries between crates are in
 //! `references/architecture.md` §"Workspace y límites".
 //!
-//! ## Modelo de datos
+//! ## Data model
 //!
-//! El diseño sigue el modelo de datos real de Azgaar (confirmado contra su wiki
-//! `Data-model` y contra un `.map` real de prueba — ver `docs/fase-0-investigacion.md`
-//! §10.1, §12.3). Lo que cambia respecto a Azgaar: tipado fuerte con enums en vez
-//! de strings mágicos, `Option<...>` para ids opcionales en vez de sentinelares `0`
-//! mágicos (cuando aplica), y preservación opaca (`serde_json::Value`) de los
-//! subsistemas que no se modelan a fondo todavía (economía, milicia — Fase 7).
+//! The design follows Azgaar's real data model (confirmed against its `Data-model`
+//! wiki page and a real test `.map` — see `docs/fase-0-investigacion.md`
+//! §10.1, §12.3). What changes relative to Azgaar: strong typing with enums instead
+//! of magic strings, `Option<...>` for optional ids instead of magic sentinel `0`
+//! values (where applicable), and opaque preservation (`serde_json::Value`) of the
+//! subsystems that are not modeled in depth yet (economy, military — Phase 7).
 //!
-//! ## Bit-exactitud
+//! ## Bit-exactness
 //!
-//! Las mallas `Grid` y `Pack` **no se leen de archivo** — se regeneran bit-exactas
-//! desde la semilla + parámetros en `vor-import` (hallazgo crítico, fase-0 §3 + §13.4).
-//! Solo los atributos (`GridCells`, `PackCells`, entidades) son serializables.
-//! Por eso el struct acá no tiene ni layout de celdas iterables ni `circumcenter`
-//! ni algoritmos — eso es lógica, va en `vor-import`.
+//! The `Grid` and `Pack` meshes are **not read from file** — they are regenerated
+//! bit-exact from the seed + parameters in `vor-import` (critical finding, phase-0 §3 + §13.4).
+//! Only the attributes (`GridCells`, `PackCells`, entities) are serializable.
+//! That is why the struct here has neither iterable cell layout nor `circumcenter`
+//! nor algorithms — that is logic, it goes in `vor-import`.
 
 pub mod cells;
 pub mod coordinates;
@@ -39,7 +39,7 @@ pub mod settings;
 pub mod voronoi;
 pub mod world;
 
-// Re-exports públicos en la raíz para uso idiomático: `vor_core::World`, `vor_core::Grid`, ...
+// Public re-exports at the root for idiomatic use: `vor_core::World`, `vor_core::Grid`, ...
 pub use cells::{GridCells, PackCells, RoutesFromCell};
 pub use coordinates::MapCoordinates;
 pub use entities::{

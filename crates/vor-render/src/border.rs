@@ -2,7 +2,7 @@ use vor_core::pack::Pack;
 
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 
-/// Tipo de frontera a dibujar.
+/// Type of border to draw.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BorderKind {
     State,
@@ -10,8 +10,8 @@ pub enum BorderKind {
     Culture,
 }
 
-/// Construye la malla de fronteras: segmentos entre celdas vecinas de distinto
-/// estado/provincia/cultura.
+/// Builds the border mesh: segments between neighboring cells that belong to a
+/// different state/province/culture.
 pub fn build_border_mesh(pack: &Pack, kind: BorderKind) -> HeightmapMesh {
     let (ids, color): (&[u16], [f32; 4]) = match kind {
         BorderKind::State => (&pack.cells.state, [0.9, 0.1, 0.1, 0.9]),
@@ -33,12 +33,12 @@ pub fn build_border_mesh(pack: &Pack, kind: BorderKind) -> HeightmapMesh {
         };
         for &nb in neighbors {
             if (nb as usize) < n && ids.get(nb as usize).copied().unwrap_or(0) != pid {
-                // Frontera entre p y nb: dibujar segmento
+                // Border between p and nb: draw segment
                 let a = pack.points.get(p).copied().unwrap_or([0.0, 0.0]);
                 let b = pack.points.get(nb as usize).copied().unwrap_or([0.0, 0.0]);
 
                 let base = vertices.len() as u32;
-                // Línea como quad delgado (1 px de ancho)
+                // Line as a thin quad (1 px wide)
                 let dx = b[0] - a[0];
                 let dy = b[1] - a[1];
                 let len = (dx * dx + dy * dy).sqrt();

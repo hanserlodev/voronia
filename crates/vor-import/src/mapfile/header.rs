@@ -1,11 +1,11 @@
-//! Parseo de los slots `[0]` (header), `[1]` (settings) y `[2]` (mapCoordinates)
-//! del `.map` de Azgaar, hacia `vor_core::{MapHeader, Settings, MapCoordinates}`.
+//! Parsing of the `.map` slots `[0]` (header), `[1]` (settings) and `[2]` (mapCoordinates)
+//! towards `vor_core::{MapHeader, Settings, MapCoordinates}`.
 //!
-//! Refs bit-exactas:
+//! Bit-exact references:
 //! - Header (`load.ts:252-261`): `version|license|date|seed|graphWidth|graphHeight|mapId`.
-//! - Settings (`load.ts:263-289`): 27 campos pipe-delimited; el slot `[19]` es `options`
-//!   como sub-JSON (resultado de `randomizeOptions()`).
-//! - Coordinates (`load.ts:291`): JSON opaco con `latT/latN/latS/lonL/lonR/...`.
+//! - Settings (`load.ts:263-289`): 27 pipe-delimited fields; slot `[19]` is `options`
+//!   as sub-JSON (result of `randomizeOptions()`).
+//! - Coordinates (`load.ts:291`): opaque JSON with `latT/latN/latS/lonL/lonR/...`.
 
 use thiserror::Error;
 use vor_core::coordinates::MapCoordinates;
@@ -13,30 +13,30 @@ use vor_core::settings::{MapHeader, Settings};
 
 #[derive(Debug, Error)]
 pub enum HeaderError {
-    #[error("slot [{0}] ausente o vacío")]
+    #[error("slot [{0}] absent or empty")]
     Missing(usize),
-    #[error("header inválido: esperaba 6-7 campos pipe-delimited, encontró {0}")]
+    #[error("invalid header: expected 6-7 pipe-delimited fields, found {0}")]
     HeaderShape(usize),
-    #[error("settings inválidos: esperaba ≥20 campos pipe-delimited, encontró {0}")]
+    #[error("invalid settings: expected ≥20 pipe-delimited fields, found {0}")]
     SettingsShape(usize),
-    #[error("no se pudo parsear el campo `{field}` del header como `{ty}`: {raw}")]
+    #[error("could not parse header field `{field}` as `{ty}`: {raw}")]
     HeaderParse {
         field: &'static str,
         ty: &'static str,
         raw: String,
     },
-    #[error("no se pudo parsear el campo settings[{idx}] (`{field}`) como `{ty}`: {raw}")]
+    #[error("could not parse settings[{idx}] (`{field}`) as `{ty}`: {raw}")]
     SettingsParse {
         idx: usize,
         field: &'static str,
         ty: &'static str,
         raw: String,
     },
-    #[error("JSON inválido en slot [{0}]: {1}")]
+    #[error("invalid JSON in slot [{0}]: {1}")]
     BadJson(usize, #[source] serde_json::Error),
 }
 
-/// Parsea el slot `[0]` → `MapHeader`.
+/// Parses slot `[0]` → `MapHeader`.
 pub fn parse_header(slot0: &str) -> Result<MapHeader, HeaderError> {
     let parts: Vec<&str> = slot0.split('|').collect();
     if !(6..=7).contains(&parts.len()) {
@@ -70,13 +70,13 @@ pub fn parse_header(slot0: &str) -> Result<MapHeader, HeaderError> {
     })
 }
 
-/// Parsea el slot `[1]` → `Settings`.
+/// Parses slot `[1]` → `Settings`.
 ///
-/// Replica `load.ts:263-289`. Solo mapeamos los campos que `vor-core::Settings` ya
-/// tiene como fuertes; el resto (`[6]`-`[11]` vacíos por compat, `[14]`/`[15]`/`[18]`
-/// migrados a `options`, `[16]`/`[17]` migrados a `options.temperatureEquator/
-/// temperatureNorthPole`, `[25]` migrado a `options.longitude`) — los preservamos
-/// en el objeto `options` (que llega como slot `[19]` JSON).
+/// Replicates `load.ts:263-289`. We only map the fields that `vor-core::Settings` already
+/// has as strong types; the rest (`[6]`-`[11]` empty for compat, `[14]`/`[15]`/`[18]`
+/// migrated to `options`, `[16]`/`[17]` migrated to `options.temperatureEquator/
+/// temperatureNorthPole`, `[25]` migrated to `options.longitude`) — we preserve them
+/// in the `options` object (which arrives as slot `[19]` JSON).
 pub fn parse_settings(slot1: &str) -> Result<Settings, HeaderError> {
     let parts: Vec<&str> = slot1.split('|').collect();
     if parts.len() < 20 {
@@ -149,7 +149,7 @@ pub fn parse_settings(slot1: &str) -> Result<Settings, HeaderError> {
         } else {
             Some(parts[22].to_string())
         },
-        // `[23]` rescale_labels bool, `[24]` urban_density, `[26]` growth_rate — preservamos opaco.
+        // `[23]` rescale_labels bool, `[24]` urban_density, `[26]` growth_rate — kept opaque.
         rescale_labels: parse_bool01(parts.get(23).unwrap_or(&""))
             .map(serde_json::Value::Bool)
             .unwrap_or(serde_json::Value::Null),
@@ -158,7 +158,7 @@ pub fn parse_settings(slot1: &str) -> Result<Settings, HeaderError> {
     })
 }
 
-/// Parsea el slot `[2]` → `MapCoordinates`. JSON opaco con escala lat/lon.
+/// Parses slot `[2]` → `MapCoordinates`. Opaque JSON with lat/lon scale.
 pub fn parse_coordinates(slot2: Option<&str>) -> Result<MapCoordinates, HeaderError> {
     let Some(raw) = slot2 else {
         return Ok(MapCoordinates::default());
@@ -170,7 +170,7 @@ pub fn parse_coordinates(slot2: Option<&str>) -> Result<MapCoordinates, HeaderEr
             .map(|x| x as f32)
             .unwrap_or(default)
     };
-    // Azgaar usa `lonW`/`lonE` en versiones recientes; `lonL`/`lonR` en algunas legacy.
+    // Azgaar uses `lonW`/`lonE` in recent versions; `lonL`/`lonR` in some legacy ones.
     let lon_l = g("lonL", g("lonW", 0.0));
     let lon_r = g("lonR", g("lonE", 0.0));
     Ok(MapCoordinates {

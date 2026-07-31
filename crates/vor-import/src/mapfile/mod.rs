@@ -1,23 +1,23 @@
-//! Parser del formato binario-texto `.map` de Azgaar Fantasy Map Generator.
+//! Parser for the Azgaar Fantasy Map Generator `.map` binary-text format.
 //!
-//! Formato: array de strings unidos por `\r\n`. Cada slot es un string.
-//! Slots indexados `[0]`..`[45]` aprox. (see `docs/fase-0-investigacion.md` §12
-//! para la disección del "Brample").
+//! Format: array of strings joined by `\r\n`. Each slot is a string.
+//! Slots indexed `[0]`..`[45]` approx. (see `docs/fase-0-investigacion.md` §12
+//! for the "Brample" dissection).
 //!
-//! Compresión gzip **opcional**: si el archivo no arranca con un slot `[0]`
-//! conteniendo `|` (header delimited de Azgaar), se reintenta descomprimiendo gzip.
-//! Esto replica `parseLoadedResult` (`azgaar-fmg/src/services/io/load.ts:167-197`).
+//! gzip compression **optional**: if the file does not start with a `[0]` slot
+//! containing `|` (Azgaar's delimited header), we retry after gunzipping.
+//! This replicates `parseLoadedResult` (`azgaar-fmg/src/services/io/load.ts:167-197`).
 //!
-//! SVG rescue: el bloque `<svg id="map"...</svg>` (slot `[5]` típicamente) puede
-//! tener CRLF internos, lo que rompería el split. Antes de splitear, se localiza el
-//! bloque y se reemplazan `\r\n` internos por `\n` en él (`load.ts:177-184`).
+//! SVG rescue: the `<svg id="map"...</svg>` block (typically slot `[5]`) can have
+//! internal CRLFs, which would break the split. Before splitting, the block is
+//! located and its internal `\r\n` replaced with `\n` (`load.ts:177-184`).
 //!
-//! El parser está estratificado:
-//! - `RawMap`: slots en string crudo (post-split, post-SVG-rescue, post-decompress-gzip).
-//! - `Header`: parseo del slot `[0]` delimitado por `|`.
-//! - `Settings`: parseo del slot `[1]` delimitado por `|`.
-//! - `Loader::load(raw) -> World`: pobla un `vor_core::World` con slots mapeados a
-//!   tipos fuertes + geometría regenerada desde la seed del header.
+//! The parser is layered:
+//! - `RawMap`: raw string slots (post-split, post-SVG-rescue, post-gunzip).
+//! - `Header`: parsing of the `|`-delimited slot `[0]`.
+//! - `Settings`: parsing of the `|`-delimited slot `[1]`.
+//! - `Loader::load(raw) -> World`: populates a `vor_core::World` with slots mapped
+//!   to strong types + geometry regenerated from the header seed.
 
 pub mod catalogs;
 pub mod cells;

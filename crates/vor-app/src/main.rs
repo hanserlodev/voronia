@@ -1,7 +1,7 @@
-//! `vor-app` -- aplicacion de escritorio de Voronia: ventana + wgpu + egui + visor.
+//! `vor-app` -- Voronia desktop application: window + wgpu + egui + viewer.
 //!
-//! La mayor parte de la logica vive en `App` (lib.rs). El binario initra tracing,
-//! parsea CLI minimal y la arranca.
+//! Most of the logic lives in `App` (lib.rs). The binary initializes tracing,
+//! parses a minimal CLI and starts it.
 
 fn main() -> anyhow::Result<()> {
     vor_app::run_cli()

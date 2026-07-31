@@ -1,11 +1,11 @@
-//! Cultura (slot `[13]`: `pack.cultures` JSON `[{"name":"Wildlands","i":0,...}, ...]`).
+//! Culture (slot `[13]`: `pack.cultures` JSON `[{"name":"Wildlands","i":0,...}, ...]`).
 
 use super::coat_of_arms::CoatOfArms;
 
-/// Tipo de cultura. Variants confirmadas contra wiki "Culture types" de Azgaar (Fase 0 §4.3);
-/// agregá las que falten según confirmación final sin romper migraciones viejas.
-// TODO Fase 1: confirmar variants exactas y el nombre de código que Azgaar usa en
-// el JSON (p.ej. "Generic"/"River"/"Lake"/"Naval"/"Nomadic"/"Hunting"/"Highland" — ver fase-0 §4.3).
+/// Culture type. Variants confirmed against Azgaar's "Culture types" wiki (Phase 0 §4.3);
+/// add any missing ones per the final confirmation without breaking old migrations.
+// TODO Phase 1: confirm exact variants and the code name Azgaar uses in the JSON
+// (e.g. "Generic"/"River"/"Lake"/"Naval"/"Nomadic"/"Hunting"/"Highland" — see fase-0 §4.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum CultureType {
@@ -19,53 +19,53 @@ pub enum CultureType {
     Highland,
 }
 
-/// Una cultura (entrada de `pack.cultures`).
+/// A culture (entry of `pack.cultures`).
 ///
-/// El item `[0]` de Azgaar es el placeholder "Wildlands" (cultura sin asignar).
-/// Voronia lo mantiene en `pack.cultures[0]` para mantener el mapeo 1:1 con ids.
+/// Azgaar's item `[0]` is the "Wildlands" placeholder (unassigned culture).
+/// Voronia keeps it at `pack.cultures[0]` to preserve the 1:1 mapping with ids.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Culture {
-    /// Id (su índice en `pack.cultures`; 0 = Wildlands).
+    /// Id (its index in `pack.cultures`; 0 = Wildlands).
     pub id: u16,
-    /// Nombre de la cultura ("Wildlands" en el slot 0; luego "English", "German", etc.).
+    /// Culture name ("Wildlands" in slot 0; then "English", "German", etc.).
     pub name: String,
-    /// Id del namebase asociado (índice en `namesData`, slot `[31]`).
+    /// Id of the associated namebase (index in `namesData`, slot `[31]`).
     pub namebase_id: u16,
-    /// Culturas de origen (ids), para el árbol evolutivo.
+    /// Origin cultures (ids), for the evolutionary tree.
     #[serde(default)]
     pub origins: Vec<u16>,
-    /// Escudo (compatible con Armoria de Watabou).
+    /// Shield (compatible with Watabou's Armoria).
     #[serde(default)]
     pub shield: CoatOfArms,
-    /// Celda central de la cultura.
+    /// Central cell of the culture.
     pub center_cell: u32,
-    /// Abreviación/código (p.ej. "ENG" para English).
+    /// Abbreviation/code (e.g. "ENG" for English).
     #[serde(default)]
     pub code: String,
-    /// Color hex.
+    /// Hex color.
     #[serde(default)]
     pub color: String,
-    /// Multiplicador de expansión.
+    /// Expansion multiplier.
     #[serde(default)]
     pub expansionism: f32,
-    /// Tipo de cultura.
+    /// Culture type.
     pub kind: CultureType,
-    /// Área total en pixels² (poblada durante la simulación).
+    /// Total area in pixels² (populated during simulation).
     #[serde(default)]
     pub area_px: u32,
-    /// Cantidad de celdas bajo la cultura.
+    /// Number of cells under the culture.
     #[serde(default)]
     pub cells: u32,
-    /// Población rural (en "puntos de población", `f32`).
+    /// Rural population (in "population points", `f32`).
     #[serde(default)]
     pub rural_pop: f32,
-    /// Población urbana.
+    /// Urban population.
     #[serde(default)]
     pub urban_pop: f32,
-    /// `true` si el usuario la marcó como bloqueada (no reautogenerable).
+    /// `true` if the user marked it as locked (not re-generatable).
     #[serde(default)]
     pub locked: bool,
-    /// `true` si la cultura fue removida manualmente (soft delete — Azgaar mantiene el id libre).
+    /// `true` if the culture was removed manually (soft delete — Azgaar keeps the id free).
     #[serde(default)]
     pub removed: bool,
 }

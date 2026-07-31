@@ -1,6 +1,6 @@
-//! `Alea@1.0.1` — PRNG de Johannes Baagøe (npm `alea` 1.0.1).
+//! `Alea@1.0.1` -- Johannes Baagøe's PRNG (npm `alea` 1.0.1).
 //!
-//! Port bit-exacto a Rust, verificado contra el fuente JS original en
+//! Bit-exact port to Rust, verified against the original JS source in
 //! `vor-import/tests/reference/alea-1.0.1.original.js`.
 
 #[derive(Debug, Clone)]

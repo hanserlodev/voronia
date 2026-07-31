@@ -8,12 +8,12 @@ pub enum FormatError {
     #[error("bincode error: {0}")]
     Bincode(#[from] bincode::Error),
 
-    #[error("magic bytes inválidos: esperados VORN, encontrados {found:?}")]
+    #[error("invalid magic bytes: expected VORN, found {found:?}")]
     InvalidMagic { found: [u8; 4] },
 
-    #[error("versión de formato no soportada: {0}")]
+    #[error("unsupported format version: {0}")]
     UnsupportedVersion(u16),
 
-    #[error("checksum mismatch: esperado {expected}, calculado {actual}")]
+    #[error("checksum mismatch: expected {expected}, computed {actual}")]
     ChecksumMismatch { expected: u32, actual: u32 },
 }

@@ -1,11 +1,11 @@
-//! Entidades del mundo: culturas, estados, burgos, religiones, provincias, ríos,
-//! marcadores, rutas, zonas, hielo. Listado consolidado para no llenar `lib.rs`.
+//! World entities: cultures, states, burgs, religions, provinces, rivers,
+//! markers, routes, zones, ice. Consolidated listing to avoid cluttering `lib.rs`.
 //!
-//! Cada entidad aquí sigue el modelo de datos confirmado contra Azgaar (refs en
-//! `voronia-plan-proyecto.md` §7.4–§7.7 y `docs/fase-0-investigacion.md` §10.1).
-//! Los enums del modelo de Azgaar con variants que requieren confirmación contra
-//! la wiki están marcados `// TODO Fase 0/1: confirmar variants contra wiki` — aun
-//! así los dejamos cerrados para no perder tipado fuerte.
+//! Each entity here follows the data model confirmed against Azgaar (refs in
+//! `voronia-plan-proyecto.md` §7.4–§7.7 and `docs/fase-0-investigacion.md` §10.1).
+//! The Azgaar model enums whose variants need confirmation against the wiki are
+//! marked `// TODO Phase 0/1: confirmar variants contra wiki` — even so we keep
+//! them closed to preserve strong typing.
 
 pub mod biome;
 pub mod burg;

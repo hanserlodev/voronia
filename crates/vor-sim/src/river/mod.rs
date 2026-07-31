@@ -32,8 +32,8 @@ use vor_core::pack::Pack;
 pub struct RiverGenerator;
 
 impl RiverGenerator {
-    /// Pipeline completo: modifica PackCells, retorna Vec<River>.
-    /// Acepta un `rivers` slice para mergear con ríos existentes (importados).
+    /// Full pipeline: modifies PackCells, returns Vec<River>.
+    /// Accepts an `rivers` slice to merge with existing (imported) rivers.
     pub fn generate(
         pack: &mut Pack,
         grid: &Grid,

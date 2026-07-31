@@ -1,7 +1,7 @@
-//! Exporta el frame actual del mapa como PNG (snapshot de GPU a disco).
+//! Exports the current map frame as PNG (GPU snapshot to disk).
 //!
-//! Renderiza todas las capas activas a una textura offscreen del tamaño
-//! especificado, la lee de vuelta a CPU y la encodea como PNG.
+//! Renders all active layers to an offscreen texture of the specified size,
+//! reads it back to the CPU and encodes it as PNG.
 
 use std::path::Path;
 use std::sync::mpsc;
@@ -9,11 +9,11 @@ use std::sync::mpsc;
 use anyhow::{Context, Result};
 use vor_render::{Camera, LayerFlags, Renderer};
 
-/// Renderiza el mapa a un PNG del tamaño especificado.
+/// Renders the map to a PNG of the specified size.
 ///
-/// `surface_size` es el tamaño actual de la ventana (para cámara y formato).
-/// `export_width`/`export_height` es la resolución de salida.
-/// La cámara se usa tal cual (misma vista que el viewport actual).
+/// `surface_size` is the current window size (for camera and format).
+/// `export_width`/`export_height` is the output resolution.
+/// The camera is used as-is (same view as the current viewport).
 pub fn export_png(
     renderer: &Renderer,
     camera: &Camera,
@@ -26,7 +26,7 @@ pub fn export_png(
     let device = &renderer.device;
     let queue = &renderer.queue;
 
-    // Offscreen texture resolve target: single-sample, COPY_SRC para readback
+    // Offscreen texture resolve target: single-sample, COPY_SRC for readback
     let resolve_texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("vor-export-png-resolve"),
         size: wgpu::Extent3d {
@@ -60,19 +60,19 @@ pub fn export_png(
     });
     let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    // Calcular camera uniform para el tamaño de exportación (misma vista, distinto aspect)
-    // Necesito recrear la cámara con el nuevo viewport o escalar el uniform manual.
-    // La forma más limpia: generar el uniform desde la cámara actual.
+    // Compute the camera uniform for the export size (same view, different aspect).
+    // Either recreate the camera with the new viewport or scale the uniform manually.
+    // The cleanest way: generate the uniform from the current camera.
     let uniform = camera.uniform();
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("vor-export-png-encoder"),
     });
 
-    // Escribir el uniform (la pos/viewport de cámara no cambia, solo el aspect
-    // del render target. Para mantener la misma vista, reajustamos la cámara
-    // temporalmente con el aspect nuevo.)
-    // En vez de eso, mejor crear una Camera temporal con el aspect del export.
+    // Write the uniform (the camera pos/viewport does not change, only the
+    // aspect of the render target. To keep the same view, we adjust the camera
+    // temporarily with the new aspect.)
+    // Instead, better to create a temporary Camera with the export aspect.
     let mut export_camera = *camera;
     export_camera.set_viewport(export_width, export_height);
     let export_uniform = export_camera.uniform();
@@ -82,7 +82,7 @@ pub fn export_png(
         bytemuck::cast_slice(&[export_uniform]),
     );
 
-    // Render pass a MSAA 4x offscreen, resuelve a resolve_texture
+    // Render pass to 4x MSAA offscreen, resolves to resolve_texture
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("vor-export-png-pass"),
@@ -109,7 +109,7 @@ pub fn export_png(
         }
     }
 
-    // Restaurar uniform original
+    // Restore original uniform
     queue.write_buffer(&renderer.camera_buf, 0, bytemuck::cast_slice(&[uniform]));
 
     // Readback buffer
@@ -148,7 +148,7 @@ pub fn export_png(
 
     queue.submit(std::iter::once(encoder.finish()));
 
-    // Map y leer
+    // Map and read
     let buffer_slice = readback_buf.slice(..);
     let (tx, rx) = mpsc::channel();
     buffer_slice.map_async(wgpu::MapMode::Read, move |r| {
@@ -156,8 +156,8 @@ pub fn export_png(
     });
     device.poll(wgpu::Maintain::Wait);
     rx.recv()
-        .context("canal de map_async roto")?
-        .context("map_async falló")?;
+        .context("map_async channel broken")?
+        .context("map_async failed")?;
 
     let data: Vec<u8> = {
         let mapped = buffer_slice.get_mapped_range();
@@ -167,7 +167,7 @@ pub fn export_png(
         raw
     };
 
-    // Convertir BGRA → RGBA si el formato de surface es BGRA
+    // Convert BGRA → RGBA if the surface format is BGRA
     let rgba: Vec<u8> = if format == wgpu::TextureFormat::Bgra8Unorm
         || format == wgpu::TextureFormat::Bgra8UnormSrgb
     {
@@ -179,11 +179,11 @@ pub fn export_png(
     };
 
     let img = image::RgbaImage::from_raw(export_width, export_height, rgba)
-        .context("image::from_raw falló")?;
+        .context("image::from_raw failed")?;
     img.save(path)
-        .with_context(|| format!("guardar PNG en {} falló", path.display()))?;
+        .with_context(|| format!("failed to save PNG to {}", path.display()))?;
 
-    // Re-escribir uniform original (por si acaso)
+    // Re-write the original uniform (just in case)
     queue.write_buffer(&renderer.camera_buf, 0, bytemuck::cast_slice(&[uniform]));
 
     Ok(())

@@ -1,105 +1,105 @@
-# Plan de implementación: renderizado completo de Voronia
+# Implementation plan: full rendering of Voronia
 
-> **Basado en**: Análisis de Azgaar FMG (`docs/landmass-drawing-analysis.md`)
-> **Estado actual**: 19/28 capas implementadas, 79 tests, pipeline wgpu funcional
-> **Objetivo**: Cubrir el 100% de las capas de dibujo de Azgaar en Voronia
+> **Based on**: Azgaar FMG analysis (`docs/landmass-drawing-analysis.md`)
+> **Current state**: 19/28 layers implemented, 79 tests, functional wgpu pipeline
+> **Objective**: Cover 100% of Azgaar's drawing layers in Voronia
 
 ---
 
-## Resumen de lo que ya existe (no tocar)
+## Summary of what already exists (don't touch)
 
-| Archivo | Capa | Estado |
+| File | Layer | State |
 |---------|------|--------|
-| `heightmap.rs` | Malla de elevación | ✅ Completo |
-| `relief.rs` | Triángulos de relieve | ✅ Completo |
-| `biome.rs` | Relleno de biomas | ✅ Completo |
-| `temperature.rs` | Isotermas (mesh) | ✅ Completo |
-| `precipitation.rs` | Precipitación (mesh) | ✅ Completo |
-| `ice_layer.rs` | Capas de hielo | ✅ Completo |
-| `lakes.rs` | Lagos Catmull-Rom | ✅ Completo |
-| `river.rs` | Ríos meander + ancho variable | ✅ Completo |
-| `coastline.rs` | Costa fractalizada | ✅ Completo |
-| `state_layer.rs` | Relleno de estados | ✅ Completo |
-| `province_layer.rs` | Relleno de provincias | ✅ Completo |
-| `culture_layer.rs` | Relleno de culturas | ✅ Completo |
-| `religion_layer.rs` | Relleno de religiones | ✅ Completo |
-| `population_layer.rs` | Mapa de población | ✅ Completo |
-| `zone_layer.rs` | Zonas overlays | ✅ Completo |
-| `burg.rs` | Marcadores de burgo | ✅ Completo |
-| `border.rs` | Bordes (state/prov/culture) | ✅ Completo |
-| `route_layer.rs` | Rutas (roads/trails/searoutes) | ✅ Completo |
-| `cells.rs` | Wireframe de celdas | ✅ Completo |
-| `grid.rs` | Líneas de grilla | ✅ Completo |
-| `coordinates.rs` | Graticule coordenadas | ✅ Completo |
-| `contour.rs` | Isolíneas de altura | ✅ Completo |
-| `texture.rs` | Overlay de textura | ✅ Completo |
-| `mesh.rs` | Builders compartidos | ✅ Completo |
-| `renderer.rs` | Pipeline wgpu | ✅ Completo |
-| `camera.rs` | Cámara 2D | ✅ Completo |
-| `layers.rs` | LayerFlags + orden | ✅ Completo |
+| `heightmap.rs` | Elevation mesh | ✅ Complete |
+| `relief.rs` | Relief triangles | ✅ Complete |
+| `biome.rs` | Biome fill | ✅ Complete |
+| `temperature.rs` | Isotherms (mesh) | ✅ Complete |
+| `precipitation.rs` | Precipitation (mesh) | ✅ Complete |
+| `ice_layer.rs` | Ice layers | ✅ Complete |
+| `lakes.rs` | Catmull-Rom lakes | ✅ Complete |
+| `river.rs` | Rivers meander + variable width | ✅ Complete |
+| `coastline.rs` | Fractalized coastline | ✅ Complete |
+| `state_layer.rs` | State fill | ✅ Complete |
+| `province_layer.rs` | Province fill | ✅ Complete |
+| `culture_layer.rs` | Culture fill | ✅ Complete |
+| `religion_layer.rs` | Religion fill | ✅ Complete |
+| `population_layer.rs` | Population map | ✅ Complete |
+| `zone_layer.rs` | Zone overlays | ✅ Complete |
+| `burg.rs` | Burg markers | ✅ Complete |
+| `border.rs` | Borders (state/prov/culture) | ✅ Complete |
+| `route_layer.rs` | Routes (roads/trails/searoutes) | ✅ Complete |
+| `cells.rs` | Cell wireframe | ✅ Complete |
+| `grid.rs` | Grid lines | ✅ Complete |
+| `coordinates.rs` | Graticule coordinates | ✅ Complete |
+| `contour.rs` | Height isolines | ✅ Complete |
+| `texture.rs` | Texture overlay | ✅ Complete |
+| `mesh.rs` | Shared builders | ✅ Complete |
+| `renderer.rs` | wgpu pipeline | ✅ Complete |
+| `camera.rs` | 2D camera | ✅ Complete |
+| `layers.rs` | LayerFlags + order | ✅ Complete |
 
 ---
 
-## Lo que falta implementar (ordenado por dependencias)
+## What still needs to be implemented (ordered by dependencies)
 
-### Fase A: Water gap technique + Landmask
+### Phase A: Water gap technique + Landmask
 
-**Por qué**: Azgaar dibuja un stroke del mismo color del relleno en los bordes de cada región que tocan agua (water gap). Sin esto, los colores de estados/biomas/etc. se ven como que "sangran" al océano visualmente. También falta la máscara de tierra que se usa para clipping.
+**Why**: Azgaar draws a stroke in the same color as the fill on the borders of each region that touch water (water gap). Without this, the colors of states/biomes/etc. visually "bleed" into the ocean. The landmask used for clipping is also missing.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/water_gap.rs` | **NUEVO** — Generar paths de water gap para capas temáticas |
-| `crates/vor-render/src/landmask.rs` | **NUEVO** — Generar máscara land/water como stencil o clip |
-| `crates/vor-render/src/layers.rs` | Modificar — Agregar layer index para landmask |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar nuevos módulos |
-| `crates/vor-render/src/renderer.rs` | Modificar — Nuevo pipeline con stencil test o render target de máscara |
+| `crates/vor-render/src/water_gap.rs` | **NEW** — Generate water gap paths for thematic layers |
+| `crates/vor-render/src/landmask.rs` | **NEW** — Generate land/water mask as stencil or clip |
+| `crates/vor-render/src/layers.rs` | Modify — Add layer index for landmask |
+| `crates/vor-render/src/lib.rs` | Modify — Export new modules |
+| `crates/vor-render/src/renderer.rs` | Modify — New pipeline with stencil test or mask render target |
 
-**Algoritmo**:
-1. `landmask.rs`: Renderizar todas las features de tierra como blancas, lagos como negro → textura de máscara
-2. `water_gap.rs`: Para cada capa temática (biomes, states, etc.), detectar celdas de borde contra océano/lago; dibujar un triángulo delgado (stroke) del mismo color del fill en esos bordes
-3. Alternativa más simple: usar el `build_border_mesh` existente pero con el color de la capa en vez de gris, solo en bordes contra agua
+**Algorithm**:
+1. `landmask.rs`: Render all land features as white, lakes as black → mask texture
+2. `water_gap.rs`: For each thematic layer (biomes, states, etc.), detect border cells against ocean/lake; draw a thin triangle (stroke) in the same color as the fill on those borders
+3. Simpler alternative: use the existing `build_border_mesh` but with the layer's color instead of gray, only on borders against water
 
-**Tests**: Comparar visualmente que regiones no sangren al océano.
-**Dependencias previas**: Ninguna (es independiente).
+**Tests**: Visually compare that regions don't bleed into the ocean.
+**Prior dependencies**: None (independent).
 
 ---
 
-### Fase B: Infraestructura de texto (glyphon)
+### Phase B: Text infrastructure (glyphon)
 
-**Por qué**: Todas las etiquetas (burgos, provincias, estados, scale bar) necesitan renderizado de texto. Azgaar usa SVG `<text>`, Voronia necesita texto en GPU.
+**Why**: All labels (burgs, provinces, states, scale bar) need text rendering. Azgaar uses SVG `<text>`, Voronia needs GPU text.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/text.rs` | **NUEVO** — Sistema de texto con glyphon |
-| `crates/vor-render/src/renderer.rs` | Modificar — Agregar text_pass, text_overlay(), font_system |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar text module |
-| `crates/vor-render/src/layers.rs` | Modificar — Nueva constante `NUM_LAYERS` si text es post-process |
+| `crates/vor-render/src/text.rs` | **NEW** — Text system with glyphon |
+| `crates/vor-render/src/renderer.rs` | Modify — Add text_pass, text_overlay(), font_system |
+| `crates/vor-render/src/lib.rs` | Modify — Export text module |
+| `crates/vor-render/src/layers.rs` | Modify — New `NUM_LAYERS` constant if text is post-process |
 
 **glyphon pipeline**:
-1. Inicializar `FontSystem` con fuente por defecto (cargar ttf desde assets o embebida)
-2. `TextRenderer` que maneja `glyphon::TextRenderer` con wgpu
-3. API: `render_text(&self, text: &str, x, y, size, color, align)` → dibuja en un buffer
-4. Se renderiza como overlay post-MSAA (último paso antes de presentar)
+1. Initialize `FontSystem` with a default font (load ttf from assets or embed it)
+2. `TextRenderer` that handles `glyphon::TextRenderer` with wgpu
+3. API: `render_text(&self, text: &str, x, y, size, color, align)` → draws into a buffer
+4. Rendered as a post-MSAA overlay (last step before presenting)
 
-**Prueba**: Dibujar "Hello World" en pantalla.
-**Dependencias previas**: Ninguna (paralelizable con Fase A).
+**Test**: Draw "Hello World" on screen.
+**Prior dependencies**: None (parallelizable with Phase A).
 
 ---
 
-### Fase C: Etiquetas de burgo
+### Phase C: Burg labels
 
-**Por qué**: Los burgos actualmente solo dibujan un triángulo. Azgaar dibuja el nombre del burgo al lado con offset configurable.
+**Why**: Burgs currently only draw a triangle. Azgaar draws the burg's name next to it with a configurable offset.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/burg_label.rs` | **NUEVO** — Etiquetas de burgo |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar label rendering |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/burg_label.rs` | **NEW** — Burg labels |
+| `crates/vor-render/src/layers.rs` | Modify — Connect label rendering |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Para cada burgo no eliminado:
    a. Calcular offset (dx, dy) desde center del burgo
@@ -108,23 +108,23 @@
 2. Orden Z: etiquetas sobre los marcadores de burgo
 ```
 
-**Parámetros extraíbles a estilo**: font_size, offset_x, offset_y, color por grupo.
-**Dependencias**: Fase B (texto).
+**Extractable style parameters**: font_size, offset_x, offset_y, color per group.
+**Dependencies**: Phase B (text).
 
 ---
 
-### Fase D: Etiquetas de provincia
+### Phase D: Province labels
 
-**Por qué**: Azgaar muestra el nombre de cada provincia centrado en su territorio. Voronia no lo hace.
+**Why**: Azgaar shows each province's name centered in its territory. Voronia doesn't.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/province_label.rs` | **NUEVO** — Etiquetas de provincia |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/province_label.rs` | **NEW** — Province labels |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Para cada provincia:
    a. Obtener pole (polo de inaccesibilidad) desde Province.pole o center cell
@@ -133,22 +133,22 @@
 2. Orden Z: sobre relleno de provincia, bajo bordes
 ```
 
-**Dependencias**: Fase B (texto).
+**Dependencies**: Phase B (text).
 
 ---
 
-### Fase E: Etiquetas de estado (texto curvo)
+### Phase E: State labels (curved text)
 
-**Por qué**: Azgaar usa un algoritmo complejo de raycasting para colocar nombres de estado como texto curvo. Es la feature de labeling más compleja.
+**Why**: Azgaar uses a complex raycasting algorithm to place state names as curved text. It's the most complex labeling feature.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/state_label.rs` | **NUEVO** — Raycasting + texto curvo |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/state_label.rs` | **NEW** — Raycasting + curved text |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo** (port de `draw-state-labels.ts:25-373`):
+**Algorithm** (port of `draw-state-labels.ts:25-373`):
 ```
 1. Para cada estado:
    a. Desde el pole, emitir rayos cada 9° hacia afuera
@@ -165,23 +165,23 @@
    g. Fallback a nombre corto si no cabe
 ```
 
-**Complejidad**: Alta. El raycasting requiere `findClosestCell` para saber si un punto está dentro del estado. 
-**Dependencias**: Fase B (texto), `vor-core::PackCells` (para `findClosestCell`).
+**Complexity**: High. Raycasting requires `findClosestCell` to know whether a point is inside the state.
+**Dependencies**: Phase B (text), `vor-core::PackCells` (for `findClosestCell`).
 
 ---
 
-### Fase F: Barra de escala
+### Phase F: Scale bar
 
-**Por qué**: Azgaar dibuja una scale bar. Voronia tiene el flag `scale_bar: true` por defecto pero no renderiza nada.
+**Why**: Azgaar draws a scale bar. Voronia has the flag `scale_bar: true` by default but renders nothing.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/scale_bar.rs` | **NUEVO** — Barra de escala |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/scale_bar.rs` | **NEW** — Scale bar |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Calcular distancia en km/pixel desde pack.coordinates o valor por defecto (kmPerPixel)
 2. Elegir nice number: [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000] km
@@ -190,23 +190,23 @@
 5. Posición: esquina inferior izquierda con padding
 ```
 
-**Forma**: Rectángulo horizontal con línea de base, marcas verticales en los extremos, texto centrado arriba.
-**Dependencias**: Fase B (texto para el "XXX km").
+**Shape**: Horizontal rectangle with a baseline, vertical tick marks at the ends, text centered above.
+**Dependencies**: Phase B (text for the "XXX km").
 
 ---
 
-### Fase G: Rosa de los vientos (compass rose)
+### Phase G: Compass rose (wind rose)
 
-**Por qué**: Azgaar dibuja una rosa de los vientos. Voronia tiene el flag `wind_rose: true` por defecto pero no renderiza nada.
+**Why**: Azgaar draws a compass rose. Voronia has the flag `wind_rose: true` by default but renders nothing.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/compass.rs` | **NUEVO** — Rosa de los vientos |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/compass.rs` | **NEW** — Compass rose |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Posición: esquina inferior derecha con padding
 2. Dibujar círculo exterior (stroke gris claro, radio 30px)
@@ -216,24 +216,24 @@
 6. Texto opcional "N" "S" "E" "W"
 ```
 
-**Forma**: Círculo con 8 puntas de brújula. N marcado distintivamente.
-**Dependencias**: Fase B (texto opcional para N/S/E/W).
+**Shape**: Circle with 8 compass points. N marked distinctively.
+**Dependencies**: Phase B (optional text for N/S/E/W).
 
 ---
 
-### Fase H: Viñeta (vignette)
+### Phase H: Vignette
 
-**Por qué**: Azgaar oscurece los bordes del mapa con un degradado radial (vignette). Voronia tiene el flag pero no lo implementa.
+**Why**: Azgaar darkens the map borders with a radial gradient (vignette). Voronia has the flag but doesn't implement it.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/vignette.rs` | **NUEVO** — Viñeta de borde |
-| `crates/vor-render/src/renderer.rs` | Modificar — Fullscreen quad post-process |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/vignette.rs` | **NEW** — Edge vignette |
+| `crates/vor-render/src/renderer.rs` | Modify — Fullscreen quad post-process |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 Fullscreen quad con shader de vignette:
 - Calcular distancia desde centro del viewport
@@ -242,23 +242,23 @@ Fullscreen quad con shader de vignette:
 - Aplicar como blend multiply sobre el framebuffer
 ```
 
-**Shader WGSL** (~15 líneas): calcular UV, smoothstep, output color.
-**Dependencias**: Ninguna (post-process independiente).
+**WGSL shader** (~15 lines): compute UV, smoothstep, output color.
+**Dependencies**: None (independent post-process).
 
 ---
 
-### Fase I: Emblemas (escudos)
+### Phase I: Emblems (coats of arms)
 
-**Por qué**: Azgaar renderiza escudos de armas para burgos, provincias y estados con D3 force simulation. Voronia tiene el flag.
+**Why**: Azgaar renders coats of arms for burgs, provinces and states with D3 force simulation. Voronia has the flag.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/emblem.rs` | **NUEVO** — Renderizado de escudos |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/emblem.rs` | **NEW** — Shield rendering |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo** (simplificado, sin D3 force):
+**Algorithm** (simplified, without D3 force):
 ```
 1. Para cada entidad con emblema:
    a. Obtener colores del escudo (field, charge, ordinaries)
@@ -271,44 +271,44 @@ Fullscreen quad con shader de vignette:
 3. Sin force simulation (MVP): posición fija
 ```
 
-**MVP**: Escudo como rectángulo coloreado con borde dorado.
-**Full**: Shield SVG-like shapes (triángulo invertido + base recta).
-**Dependencias**: Fase B (texto para nombre en escudo, opcional).
+**MVP**: Shield as a colored rectangle with a gold border.
+**Full**: SVG-like shield shapes (inverted triangle + straight base).
+**Dependencies**: Phase B (text for the name on the shield, optional).
 
 ---
 
-### Fase J: Capa de bienes (goods)
+### Phase J: Goods layer
 
-**Por qué**: Azgaar colorea celdas por tipo de bien producido, con íconos y placas de burgo. Voronia tiene el flag `goods: bool`.
+**Why**: Azgaar colors cells by type of produced good, with icons and burg plates. Voronia has the flag `goods: bool`.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/goods.rs` | **NUEVO** — Tres sub-capas: goodsCells, goodsIcons, goodsBurgs |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar goods layer |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/goods.rs` | **NEW** — Three sub-layers: goodsCells, goodsIcons, goodsBurgs |
+| `crates/vor-render/src/layers.rs` | Modify — Connect goods layer |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Sub-capas**:
-1. **goodsCells**: Usar `build_pack_mesh` coloreando cada celda por tipo de bien, opacidad normalizada a producción máxima
-2. **goodsIcons**: Círculos o triángulos en celdas con producción significativa
-3. **goodsBurgs**: Placas (rectángulos) en burgos con top-3 bienes
+**Sub-layers**:
+1. **goodsCells**: Use `build_pack_mesh` coloring each cell by good type, opacity normalized to maximum production
+2. **goodsIcons**: Circles or triangles in cells with significant production
+3. **goodsBurgs**: Plates (rectangles) in burgs with top-3 goods
 
-**Dependencias**: Fase B (texto para nombres en placas de burgo).
+**Dependencies**: Phase B (text for names on burg plates).
 
 ---
 
-### Fase K: Capa de mercados
+### Phase K: Markets layer
 
-**Por qué**: Azgaar dibuja zonas de influencia de mercado como isolíneas coloreadas + ícono. Voronia tiene el flag.
+**Why**: Azgaar draws market areas of influence as colored isolines + icon. Voronia has the flag.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/market.rs` | **NUEVO** — Zonas de mercado |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/market.rs` | **NEW** — Market areas |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Para cada mercado:
    a. Obtener la zona de influencia (isoline polygon)
@@ -316,22 +316,22 @@ Fullscreen quad con shader de vignette:
    c. Renderizar círculo sólido en el burgo central
 ```
 
-**Dependencias**: Ninguna (usa `build_pack_mesh` existente).
+**Dependencies**: None (uses existing `build_pack_mesh`).
 
 ---
 
-### Fase L: Capa militar
+### Phase L: Military layer
 
-**Por qué**: Azgaar dibuja regimientos como rectángulos coloreados. Voronia no lo implementa.
+**Why**: Azgaar draws regiments as colored rectangles. Voronia doesn't implement it.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/military.rs` | **NUEVO** — Regimientos |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/military.rs` | **NEW** — Regiments |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Para cada regimiento:
    a. Posición: coordenadas del burg o celda asignada
@@ -340,23 +340,23 @@ Fullscreen quad con shader de vignette:
    d. Renderizar: rectángulo con borde más oscuro + texto de conteo
 ```
 
-**MVP**: Rectángulo coloreado sin texto.
-**Dependencias**: Fase B (texto para conteo de tropas, opcional).
+**MVP**: Colored rectangle without text.
+**Dependencies**: Phase B (text for troop count, optional).
 
 ---
 
-### Fase M: Capa de comercio (trade animation)
+### Phase M: Trade layer (trade animation)
 
-**Por qué**: Azgaar anima las rutas comerciales con marcadores en movimiento. Voronia tiene el flag `trade: bool`.
+**Why**: Azgaar animates trade routes with moving markers. Voronia has the flag `trade: bool`.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/trade.rs` | **NUEVO** — Animación de comercio |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/trade.rs` | **NEW** — Trade animation |
+| `crates/vor-render/src/layers.rs` | Modify — Connect |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Para cada ruta comercial:
    a. Calcular punto actual = lerp entre origen y destino según tiempo
@@ -365,21 +365,21 @@ Fullscreen quad con shader de vignette:
 2. Timing: uniforme para todas las rutas (ej. 30s ciclo completo)
 ```
 
-**Dependencias**: Fase K (mercados). Requiere `vor-core` tenga datos de comercio.
+**Dependencies**: Phase K (markets). Requires `vor-core` to have trade data.
 
 ---
 
-### Fase N: Isotermas con etiquetas
+### Phase N: Isotherms with labels
 
-**Por qué**: Azgaar dibuja etiquetas de temperatura (ej. "10°C", "20°C") en cada banda de isoterma. Voronia renderiza el mesh de temperatura pero sin etiquetas.
+**Why**: Azgaar draws temperature labels (e.g. "10°C", "20°C") on each isotherm band. Voronia renders the temperature mesh but without labels.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/temperature.rs` | Modificar — Agregar etiquetas de temperatura |
-| (o crear `crates/vor-render/src/isotherm_label.rs`) | Opción separada |
+| `crates/vor-render/src/temperature.rs` | Modify — Add temperature labels |
+| (or create `crates/vor-render/src/isotherm_label.rs`) | Separate option |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Después de renderizar el mesh de temperatura:
    a. Para cada nivel de isoterma, encontrar un punto en el centro del mapa
@@ -387,20 +387,20 @@ Fullscreen quad con shader de vignette:
    c. Color: contraste con el fill de la banda
 ```
 
-**Dependencias**: Fase B (texto).
+**Dependencies**: Phase B (text).
 
 ---
 
-### Fase O: Círculos de precipitación animados
+### Phase O: Animated precipitation circles
 
-**Por qué**: Azgaar anima la aparición de círculos de precipitación con 800ms transition. Voronia renderiza como mesh estático.
+**Why**: Azgaar animates the appearance of precipitation circles with an 800ms transition. Voronia renders as a static mesh.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/precipitation.rs` | Modificar — Agregar animación |
+| `crates/vor-render/src/precipitation.rs` | Modify — Add animation |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 Alternativa 1: Círculos instanciados (en vez de mesh de celdas)
 - Para cada celda con prec > 0: calcular radio = sqrt(prec/4) / modifier
@@ -410,36 +410,36 @@ Alternativa 1: Círculos instanciados (en vez de mesh de celdas)
 Alternativa 2: Mantener mesh actual pero con alpha animado
 ```
 
-**Dependencias**: Ninguna (cambio local).
+**Dependencies**: None (local change).
 
 ---
 
-### Fase P: Barras de población animadas
+### Phase P: Animated population bars
 
-**Por qué**: Azgaar anima la altura de las barras de población (2000ms transition). Voronia renderiza como mesh estático.
+**Why**: Azgaar animates the height of the population bars (2000ms transition). Voronia renders as a static mesh.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/population_layer.rs` | Modificar — Agregar animación |
+| `crates/vor-render/src/population_layer.rs` | Modify — Add animation |
 
-**Análogo a Fase O**: animar altura de barras o alpha.
-**Dependencias**: Ninguna.
+**Analogous to Phase O**: animate bar height or alpha.
+**Dependencies**: None.
 
 ---
 
-### Fase Q: Fog of war (niebla de estado)
+### Phase Q: Fog of war (state fog)
 
-**Por qué**: Azgaar oscurece todo excepto el estado enfocado. Voronia tiene flag `markers` pero no `fog`.
+**Why**: Azgaar darkens everything except the focused state. Voronia has the `markers` flag but no `fog`.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/fog.rs` | **NUEVO** — Niebla de guerra |
-| `crates/vor-render/src/layers.rs` | Modificar — Conectar, agregar flag fog |
-| `crates/vor-render/src/lib.rs` | Modificar — Exportar |
+| `crates/vor-render/src/fog.rs` | **NEW** — Fog of war |
+| `crates/vor-render/src/layers.rs` | Modify — Connect, add fog flag |
+| `crates/vor-render/src/lib.rs` | Modify — Export |
 
-**Algoritmo**:
+**Algorithm**:
 ```
 1. Cuando un estado está "enfocado":
    a. Crear mesh de todas las celdas NO del estado enfocado
@@ -447,34 +447,34 @@ Alternativa 2: Mantener mesh actual pero con alpha animado
 2. Estado enfocado se mantiene a full brillo
 ```
 
-**Dependencias**: Fase A (landmask para recortar).
+**Dependencies**: Phase A (landmask for clipping).
 
 ---
 
-### Fase R: Íconos de burgo expandidos
+### Phase R: Expanded burg icons
 
-**Por qué**: Azgaar tiene 15+ formas de ícono (circle, square, triangle, cross, star, capital, city, town, etc.). Voronia solo dibuja triángulos.
+**Why**: Azgaar has 15+ icon shapes (circle, square, triangle, cross, star, capital, city, town, etc.). Voronia only draws triangles.
 
-**Archivos a crear/modificar**:
-| Archivo | Acción |
+**Files to create/modify**:
+| File | Action |
 |---------|--------|
-| `crates/vor-render/src/burg.rs` | Modificar — Agregar formas de ícono |
+| `crates/vor-render/src/burg.rs` | Modify — Add icon shapes |
 
-**Formas a implementar**:
-- Círculo (actualmente no hay, solo triángulo)
-- Cuadrado
-- Triángulo ✅ (ya existe)
-- Cruz
-- Estrella (4 puntas)
-- Capital (círculo con corona)
-- Puerto (ancla)
+**Shapes to implement**:
+- Circle (currently none, only triangle)
+- Square
+- Triangle ✅ (already exists)
+- Cross
+- Star (4 points)
+- Capital (circle with crown)
+- Port (anchor)
 
-**Implementación**: Cada forma es un conjunto de triángulos generados en CPU alrededor del punto (x,y).
-**Dependencias**: Ninguna.
+**Implementation**: Each shape is a set of triangles generated on the CPU around the point (x,y).
+**Dependencies**: None.
 
 ---
 
-## Orden de implementación recomendado
+## Recommended implementation order
 
 ```
 Fase A: Water gap + landmask    [Alta prioridad — calidad visual crítica]
@@ -499,7 +499,7 @@ Fase Q: Fog of war              [Baja — gameplay]
 
 ---
 
-## Dependencias entre fases
+## Dependencies between phases
 
 ```mermaid
 flowchart TD
@@ -522,25 +522,25 @@ flowchart TD
 
 ---
 
-## Lo que NO se implementa (por ahora)
+## What is NOT implemented (for now)
 
-| Feature | Razón |
+| Feature | Reason |
 |---------|-------|
-| **Satellite texture (3D)** | Requiere WebGL/Three.js, completamente fuera del pipeline 2D de wgpu |
-| **D3 force simulation** (emblems) | Requiere integración con D3 o port complejo; MVP usa posición fija |
-| **SVG path rendering** (curved text) | glyphon no soporta textPath nativo; alternativa simplificada |
-| **Map legend** | Depende de qué capas están activas; baja prioridad |
-| **User markers** | Requiere interacción de edición; Fase 6 |
-| **Ruler/measurement** | Requiere interacción de edición; Fase 6 |
+| **Satellite texture (3D)** | Requires WebGL/Three.js, completely outside the wgpu 2D pipeline |
+| **D3 force simulation** (emblems) | Requires D3 integration or a complex port; MVP uses fixed position |
+| **SVG path rendering** (curved text) | glyphon doesn't support native textPath; simplified alternative |
+| **Map legend** | Depends on which layers are active; low priority |
+| **User markers** | Requires editing interaction; Phase 6 |
+| **Ruler/measurement** | Requires editing interaction; Phase 6 |
 
 ---
 
-## Carga de trabajo estimada
+## Estimated workload
 
-| Fase | Archivos nuevos | Archivos modificados | Días estimados |
+| Phase | New files | Modified files | Estimated days |
 |------|----------------|---------------------|----------------|
 | A (Water gap) | 2 | 3 | 1 |
-| B (Texto) | 1 | 2 | 2 |
+| B (Text) | 1 | 2 | 2 |
 | C (Burg labels) | 1 | 2 | 0.5 |
 | D (Province labels) | 1 | 2 | 0.5 |
 | E (State labels) | 1 | 2 | 2-3 |
@@ -558,10 +558,10 @@ flowchart TD
 | Q (Fog) | 1 | 2 | 1 |
 | R (Burg icons) | 0 | 1 | 1 |
 
-**Total**: ~15 nuevos archivos, ~30 modificaciones, ~15 días estimados.
+**Total**: ~15 new files, ~30 modifications, ~15 estimated days.
 
 ---
 
-## Próximo paso
+## Next step
 
-Ejecutar Fase A (water gap + landmask) que es la que más impacto visual tiene y es prerrequisito indirecto de state labels. Es independiente de texto y se puede hacer sin glyphon.
+Execute Phase A (water gap + landmask), which has the most visual impact and is an indirect prerequisite for state labels. It's independent of text and can be done without glyphon.

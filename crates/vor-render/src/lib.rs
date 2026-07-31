@@ -1,9 +1,9 @@
-//! `vor-render` -- pipeline wgpu de Voronia.
+//! `vor-render` -- the Voronia wgpu rendering pipeline.
 //!
-//! Solo lectura sobre el World Data Model (`vor-core`): nunca lo muta (regla
-//! dura del plan sec.5 + `references/architecture.md`). Dibuja capas de mapa
-//! (heightmap primero, Fase 2; rios/biomas/burgos/... en Fase 3) cacheando
-//! geometria triangulada para no reteselar en cada frame.
+//! Read-only access to the World Data Model (`vor-core`): it never mutates it
+//! (hard rule from plan sec.5 + `references/architecture.md`). It draws map
+//! layers (heightmap first, Phase 2; rivers/biomes/burgs/... in Phase 3),
+//! caching triangulated geometry so it is not re-tessellated every frame.
 //!
 //! ## Pipeline
 //!
@@ -17,11 +17,11 @@
 //! Renderer (wgpu) --shader WGSL--> Surface
 //!       ^
 //!       |
-//! Camera ortografica 2D (pan/zoom -> uniform buffer)
+//! Orthographic 2D camera (pan/zoom -> uniform buffer)
 //! ```
 //!
-//! `vor-render` no depende de `vor-import` (la geometria ya esta poblada en
-//! `World` cuando el renderer la lee).
+//! `vor-render` does not depend on `vor-import` (the geometry is already
+//! populated in `World` when the renderer reads it).
 
 pub mod biome;
 pub mod border;

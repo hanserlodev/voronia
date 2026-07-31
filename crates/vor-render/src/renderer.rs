@@ -1,21 +1,21 @@
-//! Renderer wgpu de Voronia (Fase 2): una sola capa (heightmap).
+//! Voronia wgpu renderer (Phase 2): a single layer (heightmap).
 //!
-//! Responsabilidades:
-//! - Shader WGSL inline (vertex + fragment) que recibe `view_proj` + vertices con
-//!   posicion y color por celda.
-//! - Vertex/index buffers persistentes (subidos una sola vez en `set_mesh`).
-//! - Uniform buffer de camara, reactualizado en cada `render` con la camara actual.
-//! - Render pass simple a la surface texture.
+//! Responsibilities:
+//! - Inline WGSL shader (vertex + fragment) that receives `view_proj` + vertices
+//!   with position and per-cell color.
+//! - Persistent vertex/index buffers (uploaded once in `set_mesh`).
+//! - Camera uniform buffer, refreshed on every `render` with the current camera.
+//! - Simple render pass to the surface texture.
 //!
-//! Mas capas en Fase 3 (bió, rios, etc.): cada una tendra su propio pipeline y
-//! buffer de indices/vertices, pero el uniform de camara es compartido.
+//! More layers in Phase 3 (biomes, rivers, etc.): each one will have its own
+//! pipeline and index/vertex buffers, but the camera uniform is shared.
 
 use crate::camera::{Camera, CameraUniform};
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 use thiserror::Error;
 use wgpu::util::DeviceExt;
 
-/// Recursos de GPU para una capa de render (vertex/index buffers).
+/// GPU resources for a render layer (vertex/index buffers).
 #[derive(Debug)]
 pub struct LayerBuffer {
     pub vertex_buf: Option<wgpu::Buffer>,
@@ -25,16 +25,16 @@ pub struct LayerBuffer {
 
 #[derive(Debug, Error)]
 pub enum RenderError {
-    #[error("wgpu: sin surface texture ({0})")]
+    #[error("wgpu: no surface texture ({0})")]
     SurfaceAcquire(String),
 }
 
-/// Renderer wgpu con pipeline compartido para capas de mapa.
+/// wgpu renderer with a shared pipeline for map layers.
 ///
-/// La capa 0 es heightmap (mantenida en `vertex_buf`/`index_buf`/`index_count`).
-/// Las capas adicionales (Fase 3+) viven en `layers`.
+/// Layer 0 is the heightmap (kept in `vertex_buf`/`index_buf`/`index_count`).
+/// Additional layers (Phase 3+) live in `layers`.
 ///
-/// Usa MSAA 4x para suavizado de bordes (elimina el serrado de triángulos Voronoi).
+/// Uses 4x MSAA for edge smoothing (removes the jagged edges of Voronoi triangles).
 pub struct Renderer {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -53,20 +53,20 @@ pub struct Renderer {
     pub msaa_texture: Option<wgpu::Texture>,
     pub msaa_view: Option<wgpu::TextureView>,
 
-    // Capa 0: heightmap (backward compat)
+    // Layer 0: heightmap (backward compat)
     pub vertex_buf: Option<wgpu::Buffer>,
     pub index_buf: Option<wgpu::Buffer>,
     pub index_count: u32,
 
-    // Capas adicionales (Fase 3) — pipeline TriangleList
+    // Additional layers (Phase 3) -- TriangleList pipeline
     pub layers: Vec<LayerBuffer>,
 
-    // Capas de líneas — pipeline LineList con alpha blending
+    // Line layers -- LineList pipeline with alpha blending
     pub line_layers: Vec<LayerBuffer>,
 }
 
 impl Renderer {
-    /// Inicializa wgpu sobre una `surface` ya creada.
+    /// Initializes wgpu on an already-created `surface`.
     pub fn new(
         surface: wgpu::Surface<'static>,
         device: wgpu::Device,
@@ -103,7 +103,7 @@ impl Renderer {
         });
         let msaa_view = Some(msaa_texture.create_view(&wgpu::TextureViewDescriptor::default()));
 
-        // Uniform buffer de camara (matriz 4x4 = 64 bytes).
+        // Camera uniform buffer (4x4 matrix = 64 bytes).
         let camera_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vor-camera-uniform"),
             size: std::mem::size_of::<CameraUniform>() as wgpu::BufferAddress,
@@ -261,7 +261,7 @@ impl Renderer {
         }
     }
 
-    /// Reconfigura la surface al cambiar el tamano de ventana.
+    /// Reconfigures the surface when the window size changes.
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -287,7 +287,7 @@ impl Renderer {
         self.msaa_texture = Some(tex);
     }
 
-    /// Sube la malla triangulada del heightmap a GPU.
+    /// Uploads the tessellated heightmap mesh to the GPU.
     pub fn set_mesh(&mut self, mesh: &HeightmapMesh) {
         let vertex_buf = self
             .device
@@ -308,9 +308,9 @@ impl Renderer {
         self.index_buf = Some(index_buf);
     }
 
-    /// Agrega una capa adicional de mesh. Retorna el índice de la capa (para usar
-    /// con `draw_layer`). La capa 0 es heightmap (vertex_buf/index_buf); las capas
-    /// adicionales empiezan en 1.
+    /// Adds an additional mesh layer. Returns the layer index (for use with
+    /// `draw_layer`). Layer 0 is the heightmap (vertex_buf/index_buf); extra
+    /// layers start at 1.
     pub fn add_layer_mesh(&mut self, mesh: &HeightmapMesh) -> usize {
         let idx = self.layers.len();
         let vertex_buf = self
@@ -332,11 +332,11 @@ impl Renderer {
             index_buf: Some(index_buf),
             index_count: mesh.indices.len() as u32,
         });
-        idx + 1 // 0-indexed, +1 porque layer 0 es heightmap
+        idx + 1 // 0-indexed, +1 because layer 0 is the heightmap
     }
 
-    /// Dibuja una capa en el render pass. `layer_index=0` → heightmap;
-    /// `layer_index≥1` → capas adicionales registradas con `add_layer_mesh`.
+    /// Draws a layer in the render pass. `layer_index=0` -> heightmap;
+    /// `layer_index>=1` -> additional layers registered with `add_layer_mesh`.
     pub fn draw_layer<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, layer_index: usize) {
         let (vbo, ibo, count) = if layer_index == 0 {
             (&self.vertex_buf, &self.index_buf, self.index_count)
@@ -359,7 +359,7 @@ impl Renderer {
         }
     }
 
-    /// Agrega una capa de líneas. Retorna el índice dentro de `line_layers`.
+    /// Adds a line layer. Returns the index within `line_layers`.
     pub fn add_line_layer(&mut self, mesh: &HeightmapMesh) -> usize {
         let idx = self.line_layers.len();
         let vertex_buf = self
@@ -384,7 +384,7 @@ impl Renderer {
         idx
     }
 
-    /// Dibuja una capa de líneas en el render pass usando `line_pipeline`.
+    /// Draws a line layer in the render pass using `line_pipeline`.
     pub fn draw_line_layer<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, layer_idx: usize) {
         let Some(layer) = self.line_layers.get(layer_idx) else {
             return;
@@ -414,8 +414,8 @@ impl Renderer {
         }
     }
 
-    /// Renderiza un frame con la camara dada. Limpia con `clear_color` y dibuja
-    /// el heightmap (si hay mesh).
+    /// Renders a frame with the given camera. Clears with `clear_color` and
+    /// draws the heightmap (if there is a mesh).
     pub fn render(&mut self, camera: &Camera, clear_color: [f64; 4]) -> Result<(), RenderError> {
         let uniform = camera.uniform();
         self.queue
@@ -431,7 +431,7 @@ impl Renderer {
         let msaa_view = self
             .msaa_view
             .as_ref()
-            .expect("msaa_view presente en uso normal");
+            .expect("msaa_view present during normal use");
 
         let mut encoder = self
             .device
@@ -472,8 +472,8 @@ impl Renderer {
         Ok(())
     }
 
-    /// Retorna un `TextureView` de la surface (resolve target) para que vor-app
-    /// lo use en sus passes de overlay/egui después de dibujar capas MSAA.
+    /// Returns a `TextureView` of the surface (resolve target) so that vor-app
+    /// can use it in its overlay/egui passes after drawing MSAA layers.
     pub fn resolve_view<'a>(
         &'a self,
         surface_texture: &'a wgpu::SurfaceTexture,
@@ -483,13 +483,13 @@ impl Renderer {
             .create_view(&wgpu::TextureViewDescriptor::default())
     }
 
-    /// Retorna referencia al MSAA TextureView.
+    /// Returns a reference to the MSAA TextureView.
     pub fn msaa_view(&self) -> Option<&wgpu::TextureView> {
         self.msaa_view.as_ref()
     }
 
-    /// Bind group layout de camara (para que vor-app pueda mapear el mismo layout
-    /// si quiere compartir el uniform con otra capa propia).
+    /// Camera bind group layout (so vor-app can map the same layout if it wants
+    /// to share the uniform with one of its own layers).
     pub fn camera_bind_layout(&self) -> &wgpu::BindGroupLayout {
         &self.camera_bind_layout
     }
