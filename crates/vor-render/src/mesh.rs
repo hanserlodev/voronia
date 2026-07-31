@@ -191,7 +191,11 @@ pub(crate) fn catmull_rom_open(points: &[[f32; 2]], subdivisions: usize) -> Vec<
         let p0 = if i == 0 { points[0] } else { points[i - 1] };
         let p1 = points[i];
         let p2 = points[i + 1];
-        let p3 = if i + 2 < n { points[i + 2] } else { points[i + 1] };
+        let p3 = if i + 2 < n {
+            points[i + 2]
+        } else {
+            points[i + 1]
+        };
         for j in 0..subdivisions {
             let t = j as f32 / subdivisions as f32;
             let tt = t * t;

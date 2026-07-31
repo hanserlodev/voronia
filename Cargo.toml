@@ -48,6 +48,7 @@ pollster = "0.3"
 bytemuck = { version = "1.21", features = ["derive"] }
 raw-window-handle = "0.6"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+glyphon = "0.6"
 
 [profile.dev]
 panic = "abort"

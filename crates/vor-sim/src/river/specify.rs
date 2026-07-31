@@ -5,7 +5,11 @@ pub fn specify_common(rivers: &mut [River]) {
     for i in 0..rivers.len() {
         let id = rivers[i].id;
         let basin = rivers[i].parent_river.map_or(id, |p| {
-            rivers.iter().find(|r| r.id == p).map(|r| r.basin_id).unwrap_or(id)
+            rivers
+                .iter()
+                .find(|r| r.id == p)
+                .map(|r| r.basin_id)
+                .unwrap_or(id)
         });
         rivers[i].basin_id = basin;
         if rivers[i].name.is_empty() {

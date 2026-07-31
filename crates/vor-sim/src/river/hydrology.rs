@@ -16,17 +16,21 @@ pub fn alter_heights(pack: &Pack) -> Vec<f32> {
                 h as f32
             } else {
                 let t_i = if h > 50 { 10.0 } else { 5.0 };
-                let mean_t = cells.adjacency.get(i).map(|neighbors| {
-                    if neighbors.is_empty() {
-                        return t_i;
-                    }
-                    let sum: f32 = neighbors
-                        .iter()
-                        .filter_map(|&n| cells.height.get(n as usize))
-                        .map(|&nh| if nh >= 20 { 10.0 } else { 1.0 })
-                        .sum();
-                    sum / neighbors.len() as f32
-                }).unwrap_or(t_i);
+                let mean_t = cells
+                    .adjacency
+                    .get(i)
+                    .map(|neighbors| {
+                        if neighbors.is_empty() {
+                            return t_i;
+                        }
+                        let sum: f32 = neighbors
+                            .iter()
+                            .filter_map(|&n| cells.height.get(n as usize))
+                            .map(|&nh| if nh >= 20 { 10.0 } else { 1.0 })
+                            .sum();
+                        sum / neighbors.len() as f32
+                    })
+                    .unwrap_or(t_i);
                 h as f32 + t_i / 100.0 + mean_t / 10000.0
             }
         })
@@ -87,18 +91,28 @@ pub fn define_lake_climate(pack: &mut Pack, h: &[f32], grid: &Grid) {
         }
         feat.entering_flux = flux;
 
-        let temp: f32 = feat.shoreline.first().map(|&sc| {
-            let gid = pack.cells.grid_id.get(sc as usize).copied().unwrap_or(0) as usize;
-            grid.cells.temperature.get(gid).copied().unwrap_or(20) as f32
-        }).unwrap_or(20.0);
+        let temp: f32 = feat
+            .shoreline
+            .first()
+            .map(|&sc| {
+                let gid = pack.cells.grid_id.get(sc as usize).copied().unwrap_or(0) as usize;
+                grid.cells.temperature.get(gid).copied().unwrap_or(20) as f32
+            })
+            .unwrap_or(20.0);
 
         let h_m = ((feat.lake_height - 18.0).max(0.0)).powf(0.5);
         let evap = ((700.0 * (temp + 0.006 * h_m)) / 50.0 + 75.0) / (80.0 - temp);
         let evaporation = evap * feat.cell_count as f32;
 
-        let lowest = feat.shoreline.iter().min_by(|&&a, &&b| {
-            h[a as usize].partial_cmp(&h[b as usize]).unwrap_or(std::cmp::Ordering::Equal)
-        }).copied();
+        let lowest = feat
+            .shoreline
+            .iter()
+            .min_by(|&&a, &&b| {
+                h[a as usize]
+                    .partial_cmp(&h[b as usize])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied();
 
         feat.closed = false;
         if !feat.touches_border {
@@ -130,7 +144,9 @@ pub fn detect_close_lakes(pack: &Pack, h: &[f32]) -> Vec<bool> {
         let mut visited = vec![false; pack.cells.len()];
         let mut queue = std::collections::VecDeque::new();
         if let Some(&start) = feat.shoreline.iter().min_by(|&&a, &&b| {
-            h[a as usize].partial_cmp(&h[b as usize]).unwrap_or(std::cmp::Ordering::Equal)
+            h[a as usize]
+                .partial_cmp(&h[b as usize])
+                .unwrap_or(std::cmp::Ordering::Equal)
         }) {
             queue.push_back(start as usize);
             visited[start as usize] = true;
@@ -139,7 +155,11 @@ pub fn detect_close_lakes(pack: &Pack, h: &[f32]) -> Vec<bool> {
         while let Some(cell) = queue.pop_front() {
             let cell_feat_id = pack.cells.feature_id.get(cell).copied().unwrap_or(0) as usize;
             if let Some(cf) = pack.features.get(cell_feat_id) {
-                if cf.kind == FeatureType::Ocean || (cf.kind == FeatureType::Lake && cf.id != feat.id && cf.lake_height < feat.lake_height) {
+                if cf.kind == FeatureType::Ocean
+                    || (cf.kind == FeatureType::Lake
+                        && cf.id != feat.id
+                        && cf.lake_height < feat.lake_height)
+                {
                     is_deep = false;
                     break;
                 }
@@ -228,8 +248,10 @@ pub fn drain_water(pack: &mut Pack, h: &mut [f32], grid: &Grid) {
                     }
                 }
                 if let Some(lc) = lake_cell {
-                    let lake_flux = (lake_feat.entering_flux - 0.0/*evap omitted for now*/).max(0.0) as u16;
-                    pack.cells.flux[lc] = (pack.cells.flux[lc] as f32 + lake_flux as f32).min(u16::MAX as f32) as u16;
+                    let lake_flux =
+                        (lake_feat.entering_flux - 0.0/*evap omitted for now*/).max(0.0) as u16;
+                    pack.cells.flux[lc] =
+                        (pack.cells.flux[lc] as f32 + lake_flux as f32).min(u16::MAX as f32) as u16;
                     if pack.cells.river[lc] == 0 {
                         pack.cells.river[lc] = river_next;
                         river_next += 1;
@@ -288,16 +310,19 @@ fn flow_down(cells: &mut PackCells, h: &[f32], to_cell: usize, from_cell: usize)
 
     if to_river != 0 {
         if from_flux > to_flux {
-            cells.confluence[to_cell] = (cells.confluence[to_cell] as u16 + cells.flux[to_cell]).min(u16::MAX);
+            cells.confluence[to_cell] =
+                (cells.confluence[to_cell] as u16 + cells.flux[to_cell]).min(u16::MAX);
             cells.river[to_cell] = from_river;
         } else {
-            cells.confluence[to_cell] = (cells.confluence[to_cell] as u16 + from_flux).min(u16::MAX);
+            cells.confluence[to_cell] =
+                (cells.confluence[to_cell] as u16 + from_flux).min(u16::MAX);
         }
     } else {
         cells.river[to_cell] = from_river;
     }
 
     if to_cell < h.len() && h[to_cell] >= 20.0 {
-        cells.flux[to_cell] = (cells.flux[to_cell] as f32 + from_flux as f32).min(u16::MAX as f32) as u16;
+        cells.flux[to_cell] =
+            (cells.flux[to_cell] as f32 + from_flux as f32).min(u16::MAX as f32) as u16;
     }
 }

@@ -7,8 +7,7 @@ pub fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_wid
     }
     let flux_width = (flux / FLUX_FACTOR).powf(0.7).min(MAX_FLUX_WIDTH);
     let prog_idx = point_index.min(LENGTH_PROGRESSION.len() - 1);
-    let length_width =
-        point_index as f32 * LENGTH_STEP_WIDTH + LENGTH_PROGRESSION[prog_idx];
+    let length_width = point_index as f32 * LENGTH_STEP_WIDTH + LENGTH_PROGRESSION[prog_idx];
     width_factor * (length_width + flux_width) + starting_width
 }
 

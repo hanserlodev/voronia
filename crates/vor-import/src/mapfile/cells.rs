@@ -287,7 +287,7 @@ pub fn parse_pack_cells(
         market: parse_u16(slot44_market),
         routes: parse_routes_map(slot36_routes),
         feature_id: Vec::new(), // populated by loader after re_graph (from grid_id → grid.feature_id)
-        adjacency: Vec::new(), // populated by `re_graph`.
+        adjacency: Vec::new(),  // populated by `re_graph`.
     }
 }
 

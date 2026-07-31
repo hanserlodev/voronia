@@ -14,6 +14,7 @@ use vor_render::biome::{biome_colors_from_catalog, build_biome_mesh};
 use vor_render::border::{build_border_mesh, BorderKind};
 use vor_render::burg::build_burg_mesh;
 use vor_render::cells::build_cell_wireframe;
+use vor_render::coastline::{build_fractal_landmass_mesh, FractalSettings};
 use vor_render::contour::build_contour_lines;
 use vor_render::coordinates::build_coordinate_lines;
 use vor_render::culture_layer::build_culture_mesh;
@@ -22,7 +23,6 @@ use vor_render::heightmap::HeightmapMesh;
 use vor_render::ice_layer::build_ice_mesh;
 use vor_render::lakes::build_lake_mesh;
 use vor_render::layers::LayerFlags;
-use vor_render::coastline::{build_fractal_landmass_mesh, FractalSettings};
 use vor_render::mesh::build_pack_mesh;
 use vor_render::population_layer::build_population_mesh;
 use vor_render::precipitation::build_precipitation_mesh;
@@ -33,6 +33,7 @@ use vor_render::river::build_river_mesh;
 use vor_render::route_layer::build_route_mesh;
 use vor_render::state_layer::build_state_mesh;
 use vor_render::temperature::build_temperature_mesh;
+use vor_render::water_gap::append_water_gap;
 use vor_render::zone_layer::build_zone_mesh;
 use vor_render::{Camera, Renderer};
 use winit::application::ApplicationHandler;
@@ -148,6 +149,7 @@ struct State {
     show_new_modal: bool,
     texture_name: String,
     texture_overlay: Option<vor_render::TextureOverlay>,
+    text_system: Option<vor_render::TextSystem>,
 
     // Indices de capas de líneas en renderer.line_layers
     line_cells_idx: usize,
@@ -240,6 +242,28 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     );
     let _l_heightmap = renderer.add_layer_mesh(&heightmap_color_mesh);
 
+    // --- Precomputar máscara de agua para water gap ---
+    let is_water: Vec<bool> = {
+        let n = world.pack.points_n();
+        let mut w = Vec::with_capacity(n);
+        for p in 0..n {
+            let h = world.pack.cells.height.get(p).copied().unwrap_or(0);
+            let fid = world.pack.cells.feature_id.get(p).copied().unwrap_or(0);
+            let is_lake = world
+                .pack
+                .features
+                .iter()
+                .any(|f| f.id == fid as u32 && f.kind == vor_core::feature::FeatureType::Lake);
+            w.push(h < 20 || is_lake);
+        }
+        w
+    };
+    info!(
+        "is_water array: {} cells, {} water",
+        world.pack.points_n(),
+        is_water.iter().filter(|&&w| w).count()
+    );
+
     // --- Capas adicionales (orden de dibujo: bottom→top) ---
 
     // 1. Relief (landmass shading)
@@ -253,9 +277,16 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
 
     // 2. Biomes (landmass color)
     let biome_colors = biome_colors_from_catalog(&world.biomes);
-    let biome_mesh = build_biome_mesh(&world.pack, &biome_colors);
+    let mut biome_mesh = build_biome_mesh(&world.pack, &biome_colors);
+    append_water_gap(&mut biome_mesh, &world.pack, &is_water, |p| {
+        let bi = world.pack.cells.biome.get(p).copied().unwrap_or(0) as usize;
+        biome_colors
+            .get(bi)
+            .copied()
+            .unwrap_or([0.0, 0.0, 0.0, 1.0])
+    });
     info!(
-        "biomes mesh: {}v/{}i",
+        "biomes mesh + water gap: {}v/{}i",
         biome_mesh.vertices.len(),
         biome_mesh.indices.len()
     );
@@ -295,7 +326,11 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     );
     let _l_lakes = renderer.add_layer_mesh(&lake_mesh);
 
-    let river_mesh = build_river_mesh(&world.pack.points, &world.rivers, world.settings.distance_scale);
+    let river_mesh = build_river_mesh(
+        &world.pack.points,
+        &world.rivers,
+        world.settings.distance_scale,
+    );
     info!(
         "rivers mesh: {}v/{}i",
         river_mesh.vertices.len(),
@@ -304,33 +339,65 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     let _l_rivers = renderer.add_layer_mesh(&river_mesh);
 
     // 5. Human geography fills: states, provinces, cultures, religions, population, zones
-    let state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states);
+    // Cada una lleva su water gap para evitar que los colores sangren al océano.
+
+    let mut state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states);
+    append_water_gap(&mut state_mesh, &world.pack, &is_water, |p| {
+        let sid = world.pack.cells.state.get(p).copied().unwrap_or(0) as usize;
+        match world.states.get(sid) {
+            Some(s) if !s.color.is_empty() => vor_render::biome::hex_color_to_linear(&s.color),
+            _ => [0.0, 0.0, 0.0, 0.0],
+        }
+    });
     info!(
-        "state fill: {}v/{}i",
+        "state fill + water gap: {}v/{}i",
         state_mesh.vertices.len(),
         state_mesh.indices.len()
     );
     let _l_state = renderer.add_layer_mesh(&state_mesh);
 
-    let province_mesh = build_province_mesh(&world.pack.vertices, &world.pack, &world.provinces);
+    let mut province_mesh =
+        build_province_mesh(&world.pack.vertices, &world.pack, &world.provinces);
+    append_water_gap(&mut province_mesh, &world.pack, &is_water, |p| {
+        let pid = world.pack.cells.province.get(p).copied().unwrap_or(0) as usize;
+        match world.provinces.get(pid) {
+            Some(pr) if !pr.color.is_empty() => vor_render::biome::hex_color_to_linear(&pr.color),
+            _ => [0.0, 0.0, 0.0, 0.0],
+        }
+    });
     info!(
-        "province fill: {}v/{}i",
+        "province fill + water gap: {}v/{}i",
         province_mesh.vertices.len(),
         province_mesh.indices.len()
     );
     let _l_province = renderer.add_layer_mesh(&province_mesh);
 
-    let culture_mesh = build_culture_mesh(&world.pack.vertices, &world.pack, &world.cultures);
+    let mut culture_mesh = build_culture_mesh(&world.pack.vertices, &world.pack, &world.cultures);
+    append_water_gap(&mut culture_mesh, &world.pack, &is_water, |p| {
+        let cid = world.pack.cells.culture.get(p).copied().unwrap_or(0) as usize;
+        match world.cultures.get(cid) {
+            Some(c) if !c.color.is_empty() => vor_render::biome::hex_color_to_linear(&c.color),
+            _ => [0.0, 0.0, 0.0, 0.0],
+        }
+    });
     info!(
-        "culture fill: {}v/{}i",
+        "culture fill + water gap: {}v/{}i",
         culture_mesh.vertices.len(),
         culture_mesh.indices.len()
     );
     let _l_culture = renderer.add_layer_mesh(&culture_mesh);
 
-    let religion_mesh = build_religion_mesh(&world.pack.vertices, &world.pack, &world.religions);
+    let mut religion_mesh =
+        build_religion_mesh(&world.pack.vertices, &world.pack, &world.religions);
+    append_water_gap(&mut religion_mesh, &world.pack, &is_water, |p| {
+        let rid = world.pack.cells.religion.get(p).copied().unwrap_or(0) as usize;
+        match world.religions.get(rid) {
+            Some(r) if !r.color.is_empty() => vor_render::biome::hex_color_to_linear(&r.color),
+            _ => [0.0, 0.0, 0.0, 0.0],
+        }
+    });
     info!(
-        "religion fill: {}v/{}i",
+        "religion fill + water gap: {}v/{}i",
         religion_mesh.vertices.len(),
         religion_mesh.indices.len()
     );
@@ -445,6 +512,18 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         &texture_name,
     );
 
+    let text_system = {
+        let ts = vor_render::TextSystem::new(
+            &renderer.device,
+            &renderer.queue,
+            surface_format,
+            (size.width, size.height),
+            renderer.msaa_count,
+        );
+        info!("glyphon TextSystem initialized");
+        Some(ts)
+    };
+
     State {
         window,
         renderer,
@@ -469,6 +548,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         dirty: false,
         texture_name,
         texture_overlay,
+        text_system,
         line_cells_idx,
         line_grid_idx,
         line_contours_idx,
@@ -498,6 +578,9 @@ impl State {
                 if size.width > 0 && size.height > 0 {
                     self.renderer.resize(size.width, size.height);
                     self.camera.set_viewport(size.width, size.height);
+                    if let Some(ts) = &mut self.text_system {
+                        ts.resize(&self.renderer.queue, size.width, size.height);
+                    }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -765,6 +848,15 @@ impl State {
             .as_ref()
             .expect("msaa_view presente si renderer se creó con MSAA");
 
+        // Update viewport (glyphon)
+        if let Some(ref mut ts) = self.text_system {
+            ts.resize(
+                &self.renderer.queue,
+                screen_size_px.width,
+                screen_size_px.height,
+            );
+        }
+
         let mut encoder =
             self.renderer
                 .device
@@ -817,6 +909,11 @@ impl State {
             if self.layer_flags.routes {
                 self.renderer
                     .draw_line_layer(&mut pass, self.line_routes_idx);
+            }
+
+            // Text overlay (glyphon, dentro del MSAA pass)
+            if let Some(ref ts) = self.text_system {
+                ts.render(&mut pass);
             }
         }
 
@@ -876,6 +973,11 @@ impl State {
             .queue
             .submit(std::iter::once(encoder.finish()));
         surface_texture.present();
+
+        // Trim glyphon atlas (libera caché de glifos no usados)
+        if let Some(ref mut ts) = self.text_system {
+            ts.trim();
+        }
 
         // ---- Texture reload (if name changed) ----
         if self.texture_name != last_texture {
@@ -1068,7 +1170,7 @@ pub fn run_cli() -> anyhow::Result<()> {
         loaded.world.grid.height,
         |_feat| [1.0, 1.0, 1.0, 1.0],
         &FractalSettings {
-            seed: loaded.world.header.map_id.wrapping_add(2654435761),
+            seed: loaded.world.header.seed.parse::<u64>().unwrap_or(0),
             ..Default::default()
         },
     );

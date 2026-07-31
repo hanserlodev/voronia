@@ -2,9 +2,9 @@ pub mod river;
 
 #[cfg(test)]
 mod tests {
-    use crate::river::width::{get_offset, get_source_width, get_width, rn};
     use crate::river::meander::meander_anchors;
     use crate::river::specify::{get_approximate_length, get_next_id};
+    use crate::river::width::{get_offset, get_source_width, get_width, rn};
     use vor_core::entities::river::River;
 
     #[test]
@@ -88,8 +88,14 @@ mod tests {
     #[test]
     fn test_get_next_id_with_existing() {
         let rivers = vec![
-            River { id: 1, ..Default::default() },
-            River { id: 5, ..Default::default() },
+            River {
+                id: 1,
+                ..Default::default()
+            },
+            River {
+                id: 5,
+                ..Default::default()
+            },
         ];
         assert_eq!(get_next_id(&rivers), 6);
     }

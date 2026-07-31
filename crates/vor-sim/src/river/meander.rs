@@ -112,7 +112,9 @@ pub fn add_meandering(
         if anchor_idx < flux.len() {
             let cell_id = cell_ids[i];
             let f = if cell_id == u32::MAX {
-                cell_ids.get(i.wrapping_sub(1)).and_then(|&p| cell_flux.get(p as usize))
+                cell_ids
+                    .get(i.wrapping_sub(1))
+                    .and_then(|&p| cell_flux.get(p as usize))
             } else {
                 cell_flux.get(cell_id as usize)
             };
@@ -178,17 +180,9 @@ pub fn relax_acute_angles(points: &mut Vec<[f32; 2]>, anchor_indices: &[usize]) 
                 reflect_across_line(snapshot[i], snapshot[p as usize], snapshot[q as usize]);
             let before = corner_cos(snapshot[i - 1], snapshot[i], snapshot[i + 1]).max(0.0);
             let after = corner_cos(
-                if i - 1 == i {
-                    flipped
-                } else {
-                    snapshot[i - 1]
-                },
+                if i - 1 == i { flipped } else { snapshot[i - 1] },
                 flipped,
-                if i + 1 == i {
-                    flipped
-                } else {
-                    snapshot[i + 1]
-                },
+                if i + 1 == i { flipped } else { snapshot[i + 1] },
             )
             .max(0.0);
             if after < before - 1e-6 {

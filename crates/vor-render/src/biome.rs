@@ -23,7 +23,7 @@ pub fn biome_colors_from_catalog(biomes: &[vor_core::entities::biome::Biome]) ->
         .collect()
 }
 
-pub(crate) fn hex_color_to_linear(hex: &str) -> [f32; 4] {
+pub fn hex_color_to_linear(hex: &str) -> [f32; 4] {
     let hex = hex.trim_start_matches('#');
     let r = u8::from_str_radix(hex.get(0..2).unwrap_or("00"), 16).unwrap_or(0);
     let g = u8::from_str_radix(hex.get(2..4).unwrap_or("00"), 16).unwrap_or(0);

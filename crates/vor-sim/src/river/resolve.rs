@@ -44,11 +44,7 @@ pub fn resolve_lake_drain_feature(
 }
 
 /// Port de Azgaar `resolveDrainFeature()`. river-generator.ts:560-582
-pub fn resolve_drain_feature(
-    pack: &Pack,
-    rivers: &[River],
-    cell_id: u32,
-) -> Option<u32> {
+pub fn resolve_drain_feature(pack: &Pack, rivers: &[River], cell_id: u32) -> Option<u32> {
     let start_river = pack.cells.river.get(cell_id as usize).copied()?;
     if start_river == 0 {
         return None;

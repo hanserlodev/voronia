@@ -18,6 +18,7 @@ glam.workspace = true
 bytemuck.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+glyphon.workspace = true
 
 [dev-dependencies]
 pollster.workspace = true

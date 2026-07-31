@@ -35,7 +35,7 @@ use vor_core::entities::{
     state::State,
     zone::Zone,
 };
-use vor_core::feature::{Feature, FeatureType, LandGroup, LakeGroup};
+use vor_core::feature::{Feature, FeatureType, LakeGroup, LandGroup};
 
 #[derive(Debug, Error)]
 pub enum CatalogError {
@@ -718,7 +718,11 @@ pub fn parse_rivers(slot32: Option<&str>) -> Result<Vec<River>, CatalogError> {
             width_factor: r.widthFactor,
             source_width_km: r.sourceWidth,
             type_name: r.r#type.clone(),
-            cell_path: r.cells.iter().map(|&c| if c < 0 { u32::MAX } else { c as u32 }).collect(),
+            cell_path: r
+                .cells
+                .iter()
+                .map(|&c| if c < 0 { u32::MAX } else { c as u32 })
+                .collect(),
             meandered_points: r.points.clone(),
         })
         .collect())

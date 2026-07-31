@@ -207,7 +207,8 @@ impl Loader {
         pack.cells.routes = std::mem::take(&mut pack_cells.routes);
 
         // Populate feature_id for pack cells from grid cells via grid_id mapping
-        pack.cells.feature_id = pack.cells
+        pack.cells.feature_id = pack
+            .cells
             .grid_id
             .iter()
             .map(|&gid| {

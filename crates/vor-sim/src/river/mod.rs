@@ -14,8 +14,15 @@ pub const LENGTH_FACTOR: f32 = 200.0;
 pub const MAX_DOWNCUT: u16 = 5;
 pub const LENGTH_STEP_WIDTH: f32 = 1.0 / 200.0;
 pub const LENGTH_PROGRESSION: [f32; 9] = [
-    1.0 / 200.0, 1.0 / 200.0, 2.0 / 200.0, 3.0 / 200.0,
-    5.0 / 200.0, 8.0 / 200.0, 13.0 / 200.0, 21.0 / 200.0, 34.0 / 200.0,
+    1.0 / 200.0,
+    1.0 / 200.0,
+    2.0 / 200.0,
+    3.0 / 200.0,
+    5.0 / 200.0,
+    8.0 / 200.0,
+    13.0 / 200.0,
+    21.0 / 200.0,
+    34.0 / 200.0,
 ];
 
 use vor_core::entities::river::River;

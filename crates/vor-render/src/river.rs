@@ -122,7 +122,11 @@ fn relax_acute_angles(points: &mut [[f32; 2]], anchor_indices: &[usize]) {
             return 0.0;
         }
         let cos = corner_cos(pos[i - 1], pos[i], pos[i + 1]);
-        if cos > 0.0 { cos } else { 0.0 }
+        if cos > 0.0 {
+            cos
+        } else {
+            0.0
+        }
     };
 
     for _ in 0..4 {
@@ -138,9 +142,12 @@ fn relax_acute_angles(points: &mut [[f32; 2]], anchor_indices: &[usize]) {
             if p < 0 || q < 0 {
                 continue;
             }
-            let flipped = reflect_across_line(snapshot[i], snapshot[p as usize], snapshot[q as usize]);
+            let flipped =
+                reflect_across_line(snapshot[i], snapshot[p as usize], snapshot[q as usize]);
 
-            let before = acute_cost(&snapshot, i - 1) + acute_cost(&snapshot, i) + acute_cost(&snapshot, i + 1);
+            let before = acute_cost(&snapshot, i - 1)
+                + acute_cost(&snapshot, i)
+                + acute_cost(&snapshot, i + 1);
 
             let after = acute_cost_vec(&snapshot, i - 1, flipped, i)
                 + acute_cost_vec(&snapshot, i, flipped, i)
@@ -164,8 +171,15 @@ const FLUX_FACTOR: f32 = 500.0;
 const MAX_FLUX_WIDTH: f32 = 1.0;
 const LENGTH_STEP_WIDTH: f32 = 1.0 / 200.0;
 const LENGTH_PROGRESSION: [f32; 9] = [
-    1.0 / 200.0, 1.0 / 200.0, 2.0 / 200.0, 3.0 / 200.0,
-    5.0 / 200.0, 8.0 / 200.0, 13.0 / 200.0, 21.0 / 200.0, 34.0 / 200.0,
+    1.0 / 200.0,
+    1.0 / 200.0,
+    2.0 / 200.0,
+    3.0 / 200.0,
+    5.0 / 200.0,
+    8.0 / 200.0,
+    13.0 / 200.0,
+    21.0 / 200.0,
+    34.0 / 200.0,
 ];
 
 fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_width: f32) -> f32 {
@@ -174,8 +188,7 @@ fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_width: 
     }
     let flux_width = (flux / FLUX_FACTOR).powf(0.7).min(MAX_FLUX_WIDTH);
     let prog_idx = point_index.min(LENGTH_PROGRESSION.len() - 1);
-    let length_width =
-        point_index as f32 * LENGTH_STEP_WIDTH + LENGTH_PROGRESSION[prog_idx];
+    let length_width = point_index as f32 * LENGTH_STEP_WIDTH + LENGTH_PROGRESSION[prog_idx];
     width_factor * (length_width + flux_width) + starting_width
 }
 
@@ -187,11 +200,23 @@ fn acute_cost_vec(pos: &[[f32; 2]], i: usize, flipped: [f32; 2], flip_idx: usize
     if i == 0 || i >= pos.len() - 1 {
         return 0.0;
     }
-    let a = if i - 1 == flip_idx { flipped } else { pos[i - 1] };
+    let a = if i - 1 == flip_idx {
+        flipped
+    } else {
+        pos[i - 1]
+    };
     let b = if i == flip_idx { flipped } else { pos[i] };
-    let c = if i + 1 == flip_idx { flipped } else { pos[i + 1] };
+    let c = if i + 1 == flip_idx {
+        flipped
+    } else {
+        pos[i + 1]
+    };
     let cos = corner_cos(a, b, c);
-    if cos > 0.0 { cos } else { 0.0 }
+    if cos > 0.0 {
+        cos
+    } else {
+        0.0
+    }
 }
 
 pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -> HeightmapMesh {
@@ -281,7 +306,10 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
         let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
         let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));
         let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
-        if tess.tessellate_path(&path, &opts, &mut buffer_builder).is_err() {
+        if tess
+            .tessellate_path(&path, &opts, &mut buffer_builder)
+            .is_err()
+        {
             continue;
         }
 
