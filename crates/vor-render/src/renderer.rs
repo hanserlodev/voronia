@@ -53,6 +53,13 @@ pub struct Renderer {
     pub msaa_texture: Option<wgpu::Texture>,
     pub msaa_view: Option<wgpu::TextureView>,
 
+    // Ocean background: a full-world rectangle filled with the sea color so
+    // the ocean never bleeds past the world edge (Azgaar has no sea beyond the
+    // world — outside it is empty canvas).
+    pub ocean_buf: Option<wgpu::Buffer>,
+    pub ocean_index_buf: Option<wgpu::Buffer>,
+    pub ocean_index_count: u32,
+
     // Layer 0: heightmap (backward compat)
     pub vertex_buf: Option<wgpu::Buffer>,
     pub index_buf: Option<wgpu::Buffer>,
@@ -253,6 +260,9 @@ impl Renderer {
             msaa_count,
             msaa_texture: Some(msaa_texture),
             msaa_view,
+            ocean_buf: None,
+            ocean_index_buf: None,
+            ocean_index_count: 0,
             vertex_buf: None,
             index_buf: None,
             index_count: 0,
@@ -308,6 +318,47 @@ impl Renderer {
         self.index_buf = Some(index_buf);
     }
 
+    /// Uploads the ocean background: a world-sized rectangle filled with `color`.
+    /// Drawn before every other map layer so sea covers the world bounds only.
+    pub fn set_ocean(&mut self, min: [f32; 2], max: [f32; 2], color: [f32; 4]) {
+        let (minx, miny, maxx, maxy) = (min[0], min[1], max[0], max[1]);
+        let verts: [HeightmapVertex; 4] = [
+            HeightmapVertex {
+                pos: [minx, miny],
+                color,
+            },
+            HeightmapVertex {
+                pos: [maxx, miny],
+                color,
+            },
+            HeightmapVertex {
+                pos: [maxx, maxy],
+                color,
+            },
+            HeightmapVertex {
+                pos: [minx, maxy],
+                color,
+            },
+        ];
+        let idx: [u32; 6] = [0, 1, 2, 0, 2, 3];
+        self.ocean_buf = Some(
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("vor-ocean-vbo"),
+                    contents: bytemuck::cast_slice(&verts),
+                    usage: wgpu::BufferUsages::VERTEX,
+                }),
+        );
+        self.ocean_index_buf = Some(self.device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("vor-ocean-ibo"),
+                contents: bytemuck::cast_slice(&idx),
+                usage: wgpu::BufferUsages::INDEX,
+            },
+        ));
+        self.ocean_index_count = 6;
+    }
+
     /// Adds an additional mesh layer. Returns the layer index (for use with
     /// `draw_layer`). Layer 0 is the heightmap (vertex_buf/index_buf); extra
     /// layers start at 1.
@@ -333,6 +384,20 @@ impl Renderer {
             index_count: mesh.indices.len() as u32,
         });
         idx + 1 // 0-indexed, +1 because layer 0 is the heightmap
+    }
+
+    /// Draws the ocean background quad (world bounds) if set.
+    pub fn draw_ocean<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
+        if let (Some(vbo), Some(ibo)) = (&self.ocean_buf, &self.ocean_index_buf) {
+            if self.ocean_index_count == 0 {
+                return;
+            }
+            pass.set_pipeline(&self.heightmap_pipeline);
+            pass.set_bind_group(0, &self.camera_bind, &[]);
+            pass.set_vertex_buffer(0, vbo.slice(..));
+            pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..self.ocean_index_count, 0, 0..1);
+        }
     }
 
     /// Draws a layer in the render pass. `layer_index=0` -> heightmap;

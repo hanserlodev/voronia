@@ -225,6 +225,13 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
 
     let world = cfg.world;
 
+    // World bounds: the full world rectangle (Azgaar draws the sea filling the
+    // world up to its edge; outside the world there is empty canvas, not more
+    // ocean). The initial frame and the ocean quad both use these.
+    let world_bounds_min = [0.0f32, 0.0f32];
+    let world_bounds_max = [world.grid.width as f32, world.grid.height as f32];
+    renderer.set_ocean(world_bounds_min, world_bounds_max, [0.16, 0.35, 0.66, 1.0]);
+
     // --- Heightmap color overlay (layer 1: elevation-colored, on top of white landmass) ---
     let heightmap_color_mesh = build_pack_mesh(&world.pack.vertices, world.pack.points_n(), |p| {
         let h = world.pack.cells.height.get(p).copied().unwrap_or(0);
@@ -486,7 +493,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     let line_routes_idx = renderer.add_line_layer(&route_mesh);
 
     let mut camera = Camera::new([0.0, 0.0], 1000.0, size.width, size.height);
-    camera.frame_bounds(mesh_bounds_min, mesh_bounds_max);
+    camera.frame_bounds(world_bounds_min, world_bounds_max);
 
     let egui_ctx = egui::Context::default();
     let pixels_per_point = window.scale_factor() as f32;
@@ -872,10 +879,12 @@ impl State {
                     view: msaa_view,
                     resolve_target: Some(&resolve_view),
                     ops: wgpu::Operations {
+                        // Neutral canvas outside the world (Azgaar shows no sea
+                        // beyond the world edge — only inside it).
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.20,
-                            g: 0.45,
-                            b: 0.80,
+                            r: 0.13,
+                            g: 0.14,
+                            b: 0.17,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -885,6 +894,9 @@ impl State {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+
+            // Ocean background: covers the world rectangle first.
+            self.renderer.draw_ocean(&mut pass);
 
             for layer_idx in self.layer_flags.active_indices() {
                 self.renderer.draw_layer(&mut pass, layer_idx);

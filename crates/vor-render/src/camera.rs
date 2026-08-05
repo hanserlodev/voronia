@@ -155,7 +155,10 @@ impl Camera {
         let cy = (self.bounds_min[1] + self.bounds_max[1]) * 0.5;
         let w = (self.bounds_max[0] - self.bounds_min[0]).max(1.0);
         let h = (self.bounds_max[1] - self.bounds_min[1]).max(1.0);
-        let pad = 1.10;
+        // Small padding so coastline fractal smearing is not clipped at the
+        // window edge, but keep it tight so the map fills the screen (cols of
+        // ocean beyond the world edge are not part of the map).
+        let pad = 1.03;
         let w_needed = w * pad;
         let h_needed = h * pad;
         let h_for_w = w_needed / self.aspect.max(1e-6);
@@ -192,7 +195,10 @@ impl Camera {
         }
 
         let min_ext = (map_w.min(map_h) * 0.005).max(4.0);
-        let max_ext = map_w.max(map_h).max(min_ext) * 3.0;
+        // The map should never shrink beyond roughly fitting the window. More
+        // zoom-out only lets the user see endless blue void outside the world,
+        // which is meaningless (Azgaar has no ocean beyond the world edge).
+        let max_ext = map_w.max(map_h).max(min_ext) * 1.2;
         self.extent_y = self.extent_y.clamp(min_ext, max_ext);
     }
 
@@ -245,7 +251,7 @@ mod tests {
         cam.frame_bounds([0.0, 0.0], [2000.0, 1000.0]);
         assert!((cam.center[0] - 1000.0).abs() < 1e-3);
         assert!((cam.center[1] - 500.0).abs() < 1e-3);
-        // aspect 2: bbox 2000x1000 padded -> h_needed=1100, w_needed=2200 -> h_for_w=1100. extent_y=1100
-        assert!((cam.extent_y - 1100.0).abs() < 1e-3);
+        // aspect 2: bbox 2000x1000 padded (1.03) -> h_needed=1030, w_needed=2060 -> h_for_w=1030. extent_y=1030
+        assert!((cam.extent_y - 1030.0).abs() < 1e-3);
     }
 }
