@@ -1,15 +1,19 @@
+/// Clip a polygon to the map rectangle (Sutherland-Hodgman) with optional "secure".
+/// Arithmetic runs in `f64` to match Azgaar's JS exactly (see coast parity Bug 6).
 pub fn clip_polygon(points: &[[f32; 2]], width: f32, height: f32, secure: bool) -> Vec<[f32; 2]> {
-    let bbox = [0.0, 0.0, width, height];
-    let clipped = sutherland_hodgman(points, &bbox);
+    let bbox = [0.0f64, 0.0, width as f64, height as f64];
+    let pts: Vec<[f64; 2]> = points.iter().map(|p| [p[0] as f64, p[1] as f64]).collect();
+    let clipped = sutherland_hodgman(&pts, &bbox);
 
-    if secure {
-        secure_points(&clipped, width, height)
+    let out = if secure {
+        secure_points(&clipped, width as f64, height as f64)
     } else {
         clipped
-    }
+    };
+    out.iter().map(|p| [p[0] as f32, p[1] as f32]).collect()
 }
 
-fn sutherland_hodgman(points: &[[f32; 2]], bbox: &[f32; 4]) -> Vec<[f32; 2]> {
+fn sutherland_hodgman(points: &[[f64; 2]], bbox: &[f64; 4]) -> Vec<[f64; 2]> {
     let [xmin, ymin, xmax, ymax] = *bbox;
     let mut output = points.to_vec();
 
@@ -40,7 +44,7 @@ fn sutherland_hodgman(points: &[[f32; 2]], bbox: &[f32; 4]) -> Vec<[f32; 2]> {
     output
 }
 
-fn is_inside(p: &[f32; 2], edge: usize, xmin: f32, ymin: f32, xmax: f32, ymax: f32) -> bool {
+fn is_inside(p: &[f64; 2], edge: usize, xmin: f64, ymin: f64, xmax: f64, ymax: f64) -> bool {
     match edge {
         0 => p[0] >= xmin,
         1 => p[0] <= xmax,
@@ -50,14 +54,14 @@ fn is_inside(p: &[f32; 2], edge: usize, xmin: f32, ymin: f32, xmax: f32, ymax: f
 }
 
 fn intersect(
-    a: &[f32; 2],
-    b: &[f32; 2],
+    a: &[f64; 2],
+    b: &[f64; 2],
     edge: usize,
-    xmin: f32,
-    ymin: f32,
-    xmax: f32,
-    ymax: f32,
-) -> [f32; 2] {
+    xmin: f64,
+    ymin: f64,
+    xmax: f64,
+    ymax: f64,
+) -> [f64; 2] {
     match edge {
         0 => {
             let t = (xmin - a[0]) / (b[0] - a[0]);
@@ -78,13 +82,13 @@ fn intersect(
     }
 }
 
-fn secure_points(points: &[[f32; 2]], width: f32, height: f32) -> Vec<[f32; 2]> {
-    let mut secured = Vec::with_capacity(points.len() * 2);
-    for pt in points {
-        secured.push(*pt);
+fn secure_points(points: &[[f64; 2]], width: f64, height: f64) -> Vec<[f64; 2]> {
+    let mut secured = Vec::with_capacity(points.len() * 3);
+    for &pt in points {
+        secured.push(pt);
         if pt[0] <= 0.0 || pt[0] >= width || pt[1] <= 0.0 || pt[1] >= height {
-            secured.push(*pt);
-            secured.push(*pt);
+            secured.push(pt);
+            secured.push(pt);
         }
     }
     secured

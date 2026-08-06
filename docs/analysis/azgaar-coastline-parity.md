@@ -115,6 +115,21 @@ let ni = spans[i].end_idx;
 
 The roughness profile and edge subdivision share the **same** `Alea`. In the initial port two separate instances were created; that also broke parity (the displacements depend on the full sequence from the start). Now there is a single instance and a single `rand` closure.
 
+### Bug 6 — `f32` arithmetic instead of `f64` (scale-dependent coastline divergence)
+
+**Symptom**: small islands render **bit-identical** to Azgaar, but large landmasses show **considerable** coastline differences on the same seed/map.
+
+**Cause**: JavaScript numbers are IEEE-754 `f64`. Azgaar's entire coastline pipeline — `simplify` (simplify-js), `clipPoly`, `fractalize`, `subdivideEdge` — is computed in `f64`. The initial Voronia port of those three modules (`vor-render/src/simplify.rs`, `clip_poly.rs`, `coastline.rs`) used `f32` throughout.
+
+The failure only appears on large landmasses because of how the error accumulates:
+
+- **Small islands** → short edges. The `subdivideEdge` stop criterion `len < min_edge` (1.0) cuts recursion almost immediately, so very few arithmetic steps run and the `f32` rounding error stays below the visible threshold.
+- **Large landmasses** → long edges, recursion runs to `max_depth = 4`, and — the dominant effect — the **RDP decision in `simplify` is binary**: a midpoint is kept iff `max_sq_dist > sq_tolerance` (tolerance `0.3`). Squared distances on the order of `1e6` lose ~1e-3 of precision in `f32`. A point sitting *exactly* on the tolerance boundary in `f64` gets rounded to the *wrong side* of the decision in `f32`, flipping a point from **keep → discard**. Because simplification runs *before* fractalization, one kept/dropped point changes the polygon topology, cascading into a **considerably different** coastline for the entire feature.
+
+The Voronoi vertex `positions` are **integers** (Azgaar `Math.floor`s each circumcenter — see `phase-0-research.md` §6.3), so casting them `f32 → f64` is **exact**; doing all internal arithmetic in `f64` then reproduces JS byte-for-byte, with `f32` only at the input/output boundary toward lyon.
+
+**Fix**: internal arithmetic of `simplify`, `clip_poly` and `coastline` (fractalize/subdivide/profile) promoted to `f64`; public signatures keep taking/returning `f32` points, cast at the edge.
+
 ---
 
 ## Default parameters aligned with Azgaar

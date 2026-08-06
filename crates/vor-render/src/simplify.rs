@@ -1,16 +1,26 @@
+/// Simplify a polyline with the simplify-js algorithm (radial distance + RDP),
+/// matching Azgaar's JS which computes everything in `f64`.
+///
+/// Points are cast to `f64` before the distance math so the binary RDP decision
+/// (`max_sq_dist > sq_tolerance`) reproduces JavaScript exactly — in `f32` a
+/// point near the tolerance boundary can flip the decision and change the
+/// resulting polygon (see `docs/analysis/azgaar-coastline-parity.md` Bug 6).
 pub fn simplify(points: &[[f32; 2]], tolerance: f32) -> Vec<[f32; 2]> {
     if points.len() <= 2 || tolerance <= 0.0 {
         return points.to_vec();
     }
-    let sq_tolerance = tolerance * tolerance;
-    let points = radial_distance(points, sq_tolerance);
+    let tol = tolerance as f64;
+    let sq_tolerance = tol * tol;
+    let points_f64: Vec<[f64; 2]> = points.iter().map(|p| [p[0] as f64, p[1] as f64]).collect();
+    let points = radial_distance(&points_f64, sq_tolerance);
     if points.len() <= 2 {
-        return points;
+        return points.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
     }
-    rdp(&points, 0, points.len() - 1, sq_tolerance)
+    let out = rdp(&points, 0, points.len() - 1, sq_tolerance);
+    out.iter().map(|p| [p[0] as f32, p[1] as f32]).collect()
 }
 
-fn get_square_segment_distance(p: &[f32; 2], p1: &[f32; 2], p2: &[f32; 2]) -> f32 {
+fn get_square_segment_distance(p: &[f64; 2], p1: &[f64; 2], p2: &[f64; 2]) -> f64 {
     let dx = p2[0] - p1[0];
     let dy = p2[1] - p1[1];
     let len2 = dx * dx + dy * dy;
@@ -24,7 +34,7 @@ fn get_square_segment_distance(p: &[f32; 2], p1: &[f32; 2], p2: &[f32; 2]) -> f3
     (p[0] - proj_x) * (p[0] - proj_x) + (p[1] - proj_y) * (p[1] - proj_y)
 }
 
-fn radial_distance(points: &[[f32; 2]], sq_tolerance: f32) -> Vec<[f32; 2]> {
+fn radial_distance(points: &[[f64; 2]], sq_tolerance: f64) -> Vec<[f64; 2]> {
     if points.is_empty() {
         return points.to_vec();
     }
@@ -45,8 +55,8 @@ fn radial_distance(points: &[[f32; 2]], sq_tolerance: f32) -> Vec<[f32; 2]> {
     result
 }
 
-fn rdp(points: &[[f32; 2]], first: usize, last: usize, sq_tolerance: f32) -> Vec<[f32; 2]> {
-    let mut max_sq_dist = 0.0f32;
+fn rdp(points: &[[f64; 2]], first: usize, last: usize, sq_tolerance: f64) -> Vec<[f64; 2]> {
+    let mut max_sq_dist = 0.0f64;
     let mut max_idx = first;
     let p1 = &points[first];
     let p2 = &points[last];

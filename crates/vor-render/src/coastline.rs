@@ -47,27 +47,28 @@ impl Default for FractalSettings {
     }
 }
 
-/// Build a smooth closed roughness envelope via sum-of-cosine harmonics, exactly
-/// like Azgaar's `makeRoughnessProfile()`.  Consumes `rand` to advance the shared
+/// Build a smooth, closed roughness envelope via fractal-frequency harmonics, exactly
+/// like Azgaar's `makeRoughnessProfile()`. Consumes `rand` to advance the shared
 /// PRNG stream (Alea) so that displacement values later in the pipeline depend on
-/// this sequence — same stream sharing as the JS source.
+/// this sequence — same stream sharing as the JS source. All arithmetic is `f64`
+/// (Azgaar's JS computes in `f64`; see coast parity Bug 6).
 fn make_roughness_profile(
-    rand: &mut dyn FnMut() -> f32,
+    rand: &mut dyn FnMut() -> f64,
     contrast: f32,
     num_harmonics: u32,
-) -> Vec<f32> {
+) -> Vec<f64> {
     let size = 256usize;
-    let mut profile = vec![0.0f32; size];
-    let pi2 = std::f32::consts::TAU;
+    let mut profile = vec![0.0f64; size];
+    let pi2 = std::f64::consts::TAU;
     for k in 1..=num_harmonics {
         let amp = rand();
         let phase = rand() * pi2;
         for (i, p) in profile.iter_mut().enumerate() {
-            *p += amp * (pi2 * k as f32 * i as f32 / size as f32 + phase).cos();
+            *p += amp * (pi2 * k as f64 * i as f64 / size as f64 + phase).cos();
         }
     }
-    let mut min = f32::INFINITY;
-    let mut max = f32::NEG_INFINITY;
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
     for &v in &profile {
         if v < min {
             min = v;
@@ -77,22 +78,23 @@ fn make_roughness_profile(
         }
     }
     let range = (max - min).max(1e-9);
+    let contrast = contrast as f64;
     for v in &mut profile {
         *v = ((*v - min) / range).powf(contrast);
     }
     profile
 }
 
-fn sample_profile(profile: &[f32], t: f32) -> f32 {
-    let size = profile.len();
-    let pos = t.rem_euclid(1.0) * size as f32;
-    let i = (pos.floor() as usize).min(size - 1);
+fn sample_profile(profile: &[f64], t: f64) -> f64 {
+    let size = profile.len() as f64;
+    let pos = t.rem_euclid(1.0) * size;
+    let i = (pos.floor() as usize).min(profile.len() - 1);
     let f = pos - pos.floor();
-    let j = (i + 1) % size;
+    let j = (i + 1) % profile.len();
     profile[i] * (1.0 - f) + profile[j] * f
 }
 
-fn mid_t(t0: f32, t1: f32) -> f32 {
+fn mid_t(t0: f64, t1: f64) -> f64 {
     let diff = t1 - t0;
     if diff.abs() <= 0.5 {
         return t0 + diff * 0.5;
@@ -103,37 +105,39 @@ fn mid_t(t0: f32, t1: f32) -> f32 {
 
 #[allow(clippy::too_many_arguments)]
 fn subdivide_edge(
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    t0: f32,
-    t1: f32,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    t0: f64,
+    t1: f64,
     depth: u32,
-    amplitude: f32,
-    profile: &[f32],
-    rand: &mut dyn FnMut() -> f32,
+    amplitude: f64,
+    profile: &[f64],
+    rand: &mut dyn FnMut() -> f64,
     settings: &FractalSettings,
-    result: &mut Vec<[f32; 2]>,
+    result: &mut Vec<[f64; 2]>,
 ) {
     let dx = x1 - x0;
     let dy = y1 - y0;
     let len = (dx * dx + dy * dy).sqrt();
-    if depth == 0 || len < settings.min_edge {
+    if depth == 0 || len < settings.min_edge as f64 {
         return;
     }
     let tm = mid_t(t0, t1);
     let roughness = sample_profile(profile, tm);
-    if roughness < settings.smooth_threshold {
+    let smooth_threshold = settings.smooth_threshold as f64;
+    if roughness < smooth_threshold {
         return;
     }
+    // Azgaar: px = -dy / len; py = dx / len.
     let px = -dy / len;
     let py = dx / len;
-    // Azgaar: (rand() - 0.5) * Math.sqrt(len) * amplitude * roughness;
+    // Azgaar: (rand() - 0.5) * Math.sqrt(len) * amplitude * roughness.
     let disp = (rand() - 0.5) * len.sqrt() * amplitude * roughness;
     let mx = (x0 + x1) * 0.5 + px * disp;
     let my = (y0 + y1) * 0.5 + py * disp;
-    let next_amp = amplitude * settings.amplitude_decay;
+    let next_amp = amplitude * settings.amplitude_decay as f64;
     subdivide_edge(
         x0,
         y0,
@@ -199,12 +203,12 @@ pub fn fractalize_polygon(
         ..*settings
     };
 
-    // Azgaar: const rand = Alea(`${seed}_c${featureIndex}`);
+    // Azgaar: `const rand = Alea('${seed}_c${featureIndex}')`.
     let seed_str = format!("{}_c{}", settings.seed, feature_index);
     let mut rng = Alea::new(&seed_str);
-    // Shared PRNG closure — advances through profile generation first, then
-    // through edge subdivision, exactly like Azgaar's single `rand` reference.
-    let mut rand = || rng.next_f64() as f32;
+    // Shared PRNG — advance through profile generation first, then through edge
+    // subdivision, exactly like Azgaar's single `rand` reference.
+    let mut rand = || rng.next_f64();
 
     let profile = make_roughness_profile(
         &mut rand,
@@ -212,9 +216,12 @@ pub fn fractalize_polygon(
         settings.profile_harmonics,
     );
 
-    let total_len: f32 = points
+    // All geometric math in f64 to reproduce Azgaar's JS bit-for-bit (Bug 6).
+    let pts_f64: Vec<[f64; 2]> = points.iter().map(|p| [p[0] as f64, p[1] as f64]).collect();
+
+    let total_len: f64 = pts_f64
         .iter()
-        .zip(points.iter().cycle().skip(1))
+        .zip(pts_f64.iter().cycle().skip(1))
         .take(n)
         .map(|(a, b)| {
             let dx = b[0] - a[0];
@@ -233,33 +240,27 @@ pub fn fractalize_polygon(
         return (points.to_vec(), spans);
     }
 
-    let seg_lens: Vec<f32> = points
+    let mut cum = 0.0f64;
+    let t_params: Vec<f64> = pts_f64
         .iter()
-        .zip(points.iter().cycle().skip(1))
+        .zip(pts_f64.iter().cycle().skip(1))
         .take(n)
         .map(|(a, b)| {
             let dx = b[0] - a[0];
             let dy = b[1] - a[1];
-            (dx * dx + dy * dy).sqrt()
-        })
-        .collect();
-
-    let mut cum = 0.0f32;
-    let t_params: Vec<f32> = seg_lens
-        .iter()
-        .map(|l| {
+            let l = (dx * dx + dy * dy).sqrt();
             let t = cum / total_len;
             cum += l;
             t
         })
         .collect();
 
-    let mut result_pts: Vec<[f32; 2]> = Vec::new();
+    let mut result_pts: Vec<[f64; 2]> = Vec::new();
     let mut original_indices: Vec<usize> = Vec::with_capacity(n);
 
     for i in 0..n {
         original_indices.push(result_pts.len());
-        result_pts.push(points[i]);
+        result_pts.push(pts_f64[i]);
 
         let j = (i + 1) % n;
         if is_on_border(points[i][0], points[i][1], map_width, map_height)
@@ -269,14 +270,14 @@ pub fn fractalize_polygon(
         }
 
         subdivide_edge(
-            points[i][0],
-            points[i][1],
-            points[j][0],
-            points[j][1],
+            pts_f64[i][0],
+            pts_f64[i][1],
+            pts_f64[j][0],
+            pts_f64[j][1],
             t_params[i],
             t_params[j],
             local_settings.max_depth,
-            local_settings.base_amplitude,
+            local_settings.base_amplitude as f64,
             &profile,
             &mut rand,
             &local_settings,
@@ -284,7 +285,12 @@ pub fn fractalize_polygon(
         );
     }
 
-    let total_pts = result_pts.len();
+    // Downcast the accumulated f64 points to f32 for lyon consumption.
+    let result_pts_f32: Vec<[f32; 2]> = result_pts
+        .iter()
+        .map(|p| [p[0] as f32, p[1] as f32])
+        .collect();
+    let total_pts = result_pts_f32.len();
     let mut spans = Vec::with_capacity(n);
     for i in 0..n {
         let j = (i + 1) % n;
@@ -303,7 +309,7 @@ pub fn fractalize_polygon(
         });
     }
 
-    (result_pts, spans)
+    (result_pts_f32, spans)
 }
 
 #[allow(dead_code)]

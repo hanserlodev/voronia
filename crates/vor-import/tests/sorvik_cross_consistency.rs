@@ -49,8 +49,7 @@ fn pack_grid_id_is_valid_and_height_replicates() {
         let gid = w.world.pack.cells.grid_id[p] as usize;
         assert!(gid < n_grid, "pack {p} → grid_id {gid} out of range");
         assert_eq!(
-            w.world.pack.cells.height[p],
-            w.world.grid.cells.height[gid],
+            w.world.pack.cells.height[p], w.world.grid.cells.height[gid],
             "pack {p} height must replicate grid cell {gid} height"
         );
     }
@@ -67,9 +66,11 @@ fn pack_feature_ids_resolve_to_grid_feature_catalog() {
     let grid = &w.world.grid;
     let pack = &w.world.pack;
 
-    let known_ids: std::collections::HashSet<u32> =
-        grid.features.iter().map(|f| f.id).collect();
-    assert!(!known_ids.is_empty(), "grid.features catalog must be populated");
+    let known_ids: std::collections::HashSet<u32> = grid.features.iter().map(|f| f.id).collect();
+    assert!(
+        !known_ids.is_empty(),
+        "grid.features catalog must be populated"
+    );
 
     for p in 0..pack.cells.feature_id.len() {
         let fid = pack.cells.feature_id[p] as u32;
@@ -87,9 +88,9 @@ fn pack_cell_catalog_references_resolve() {
     let w = load_sorvik();
     let pack = &w.world.pack;
 
-    let state_ids: std::collections::HashSet<u16> =
-        w.world.states.iter().map(|s| s.id).collect();
-    let culture_ids: std::collections::HashSet<u16> = w.world.cultures.iter().map(|c| c.id).collect();
+    let state_ids: std::collections::HashSet<u16> = w.world.states.iter().map(|s| s.id).collect();
+    let culture_ids: std::collections::HashSet<u16> =
+        w.world.cultures.iter().map(|c| c.id).collect();
     let religion_ids: std::collections::HashSet<u16> =
         w.world.religions.iter().map(|r| r.id).collect();
     let province_ids: std::collections::HashSet<u16> =
@@ -106,11 +107,17 @@ fn pack_cell_catalog_references_resolve() {
         }
         let r = pack.cells.religion[p];
         if r != 0 {
-            assert!(religion_ids.contains(&r), "pack {p}: unknown religion id {r}");
+            assert!(
+                religion_ids.contains(&r),
+                "pack {p}: unknown religion id {r}"
+            );
         }
         let pr = pack.cells.province[p];
         if pr != 0 {
-            assert!(province_ids.contains(&pr), "pack {p}: unknown province id {pr}");
+            assert!(
+                province_ids.contains(&pr),
+                "pack {p}: unknown province id {pr}"
+            );
         }
     }
 }
@@ -125,7 +132,12 @@ fn burg_cell_references_resolve_to_assigned_burg() {
 
     for b in &w.world.burgs {
         let cell = b.cell as usize;
-        assert!(cell < n_pack, "burg {} (id {}) references cell {cell} out of range", b.name, b.id);
+        assert!(
+            cell < n_pack,
+            "burg {} (id {}) references cell {cell} out of range",
+            b.name,
+            b.id
+        );
         assert_eq!(
             pack.cells.burg[cell], b.id,
             "burg {} (id {}) expects cell {cell} assigned to itself",
