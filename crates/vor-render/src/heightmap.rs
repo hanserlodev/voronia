@@ -141,48 +141,110 @@ pub fn build_mesh(grid: &Grid) -> HeightmapMesh {
     }
 }
 
-/// Height color ramp (Azgaar "Heightmap show" style).
-pub fn height_color(h: u8) -> [f32; 4] {
-    let h = h.min(100) as f32;
-    let rgb = if h < 20.0 {
-        let t = h / 20.0;
-        [
-            lerp(0.04, 0.39, t),
-            lerp(0.13, 0.55, t),
-            lerp(0.27, 0.73, t),
-        ]
-    } else {
-        // Land: stops in h -> RGB.
-        let stops: [(f32, [f32; 3]); 5] = [
-            (20.0, [0.42, 0.61, 0.34]),
-            (40.0, [0.29, 0.45, 0.21]),
-            (60.0, [0.46, 0.39, 0.18]),
-            (80.0, [0.51, 0.43, 0.31]),
-            (100.0, [0.91, 0.91, 0.91]),
+/// The "Spectral" color scheme, exactly as Azgaar's default heightmap scheme
+/// `"bright"` (d3 `scaleSequential(interpolateSpectral)`). Stops are the 11
+/// sRGB colors of d3's Spectral ramp, in sRGB bytes; interpolation follows
+/// d3 `interpolateRgbBasis` (Catmull-Rom/B-spline over each channel).
+static SPECTRAL_STOPS: [[u8; 3]; 11] = [
+    [0x9e, 0x01, 0x42], // #9e0142
+    [0xd3, 0x3e, 0x4f], // #d53e4f
+    [0xf4, 0x6d, 0x43], // #f46d43
+    [0xfd, 0xae, 0x61], // #fdae61
+    [0xfe, 0xe0, 0x8b], // #fee08b
+    [0xff, 0xff, 0xbf], // #ffffbf
+    [0xe6, 0xf5, 0x98], // #e6f598
+    [0xab, 0xdd, 0xa4], // #abdda4
+    [0x66, 0xc2, 0xa5], // #66c2a5
+    [0x32, 0x88, 0xbd], // #3288bd
+    [0x5e, 0x4f, 0xa2], // #5e4fa2
+];
+
+/// A single channel `[u8;3]` stop parsed to the channel value.
+#[inline]
+fn chan(c: u8) -> f32 {
+    c as f32 / 255.0
+}
+
+/// d3 `interpolateRgbBasis(values)` — Catmull-Rom/B-spline interpolation over
+/// each channel independently, matching `getColorScheme("bright")`.
+fn spectral(t: f32) -> [f32; 3] {
+    let n = SPECTRAL_STOPS.len();
+    if t >= 1.0 {
+        return [
+            chan(SPECTRAL_STOPS[n - 1][0]),
+            chan(SPECTRAL_STOPS[n - 1][1]),
+            chan(SPECTRAL_STOPS[n - 1][2]),
         ];
-        let mut prev = stops[0];
-        for s in &stops[1..] {
-            if h <= s.0 {
-                let span = (s.0 - prev.0).max(1e-6);
-                let t = (h - prev.0) / span;
-                return [
-                    lerp(prev.1[0], s.1[0], t),
-                    lerp(prev.1[1], s.1[1], t),
-                    lerp(prev.1[2], s.1[2], t),
-                    1.0,
-                ];
-            }
-            prev = *s;
-        }
-        let last = stops[stops.len() - 1].1;
-        [last[0], last[1], last[2]]
+    }
+    if t <= 0.0 {
+        return [
+            chan(SPECTRAL_STOPS[0][0]),
+            chan(SPECTRAL_STOPS[0][1]),
+            chan(SPECTRAL_STOPS[0][2]),
+        ];
+    }
+    let full: f32 = (n - 1) as f32;
+    let tt = t * full;
+    let i = tt.floor().min((n - 2) as f32) as usize;
+    let t = (tt - i as f32).clamp(0.0, 1.0).min(1.0 - 1e-6);
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let (w0, w1, w2, w3) = (
+        (1.0 - 3.0 * t + 3.0 * t2 - t3) / 6.0,
+        (4.0 - 6.0 * t2 + 3.0 * t3) / 6.0,
+        (1.0 + 3.0 * t + 3.0 * t2 - 3.0 * t3) / 6.0,
+        t3 / 6.0,
+    );
+    // Neighbours clamped to the first/last stop at the boundaries.
+    let v0 = if i == 0 {
+        SPECTRAL_STOPS[0]
+    } else {
+        SPECTRAL_STOPS[i - 1]
     };
-    [rgb[0], rgb[1], rgb[2], 1.0]
+    let v1 = SPECTRAL_STOPS[i];
+    let v2 = SPECTRAL_STOPS[n.min(i + 2) - 1];
+    let v3 = SPECTRAL_STOPS[n.min(i + 3) - 1];
+    let mix = |a: [u8; 3], b: [u8; 3]| {
+        let f = |c0: u8, c1: u8, c2: u8, c3: u8| {
+            w0 * chan(c0) + w1 * chan(c1) + w2 * chan(c2) + w3 * chan(c3)
+        };
+        [
+            f(a[0], b[0], v2[0], v3[0]),
+            f(a[1], b[1], v2[1], v3[1]),
+            f(a[2], b[2], v2[2], v3[2]),
+        ]
+    };
+    mix(v0, v1)
+}
+
+/// Azgaar heightmap color for a height value.
+///
+/// Mirrors FMG `getColor(value, scheme)`:
+/// ```js
+/// scheme(1 - (value < 20 ? value - 5 : value) / 100)
+/// ```
+/// The resulting sRGB ramp is converted to **linear** RGBA (the wgpu shader
+/// does not apply gamma) via the standard sRGB OETF.
+pub fn height_color(h: u8) -> [f32; 4] {
+    let value = h.min(100) as f32;
+    let offset = if value < 20.0 { value - 5.0 } else { value };
+    let t = 1.0 - offset / 100.0;
+    let srgb = spectral(t.clamp(0.0, 1.0));
+    [
+        srgb_to_linear(srgb[0]),
+        srgb_to_linear(srgb[1]),
+        srgb_to_linear(srgb[2]),
+        1.0,
+    ]
 }
 
 #[inline]
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-    a + (b - a) * t
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 #[cfg(test)]
@@ -190,7 +252,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn height_color_sea_is_blue() {
+    fn height_color_sea_is_dark_purple() {
+        // h=0 -> offset -5 -> t=1.05 -> clamped to 1.0 -> last Spectral stop #5e4fa2 (deep blue-violet).
         let c = height_color(0);
         assert!(
             c[2] > c[0] && c[2] > c[1],
@@ -200,11 +263,23 @@ mod tests {
     }
 
     #[test]
-    fn height_color_summit_is_bright() {
+    fn height_color_summit_is_dark_red() {
+        // h=100 -> t=0 -> first Spectral stop #9e0142 (deep red).
         let c = height_color(100);
         assert!(
-            c[0] > 0.85 && c[1] > 0.85 && c[2] > 0.85,
-            "summit got {c:?}"
+            c[0] > c[1] && c[0] > c[2],
+            "summit should be reddish, got {c:?}"
+        );
+    }
+
+    #[test]
+    fn height_color_midland_is_light() {
+        // h≈40 -> t≈0.6 -> near the pale central stop of Spectral (#ffffbf/#e6f598):
+        // bright red + green, low blue.
+        let c = height_color(40);
+        assert!(
+            c[0] > 0.6 && c[1] > 0.6 && c[2] < c[1],
+            "midland should be light (bright R/G, low B), got {c:?}"
         );
     }
 

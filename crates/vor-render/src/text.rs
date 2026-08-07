@@ -125,7 +125,7 @@ impl TextSystem {
         self.buffer.shape_until_scroll(&mut self.font_system, true);
 
         let runs: Vec<_> = self.buffer.layout_runs().collect();
-        info!(
+        trace!(
             "text layout: '{}' -> {} layout runs, {} glyphs total",
             text,
             runs.len(),
@@ -133,9 +133,10 @@ impl TextSystem {
         );
         if let Some(run) = runs.first() {
             if let Some(glyph) = run.glyphs.first() {
-                info!(
+                trace!(
                     "  first glyph: font_size={}, font_id={:?}",
-                    glyph.font_size, glyph.font_id
+                    glyph.font_size,
+                    glyph.font_id
                 );
             }
         }
@@ -172,7 +173,6 @@ impl TextSystem {
             }
         }
         if ok {
-            info!("glyphon prepare OK");
             self.pending_draw = true;
         } else {
             self.pending_draw = false;
@@ -221,7 +221,7 @@ impl TextSystem {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        info!("glyphon render (debug no-msaa)...");
+        trace!("glyphon render (debug no-msaa)...");
         if let Err(e) = self
             .renderer_no_msaa
             .render(&self.atlas, &self.viewport, &mut pass)

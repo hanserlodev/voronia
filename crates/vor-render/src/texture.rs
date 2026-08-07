@@ -1,6 +1,15 @@
 use wgpu::util::DeviceExt;
 
-/// Fullscreen textured quad rendered with multiply blending over the existing frame.
+/// World-anchored textured quad rendered as the background canvas (paper/texture)
+/// at the very start of the map pass, before the ocean and the land layers.
+///
+/// The quad is expressed in *world* coordinates (the full world rect) and its
+/// vertex shader transforms it with the shared camera matrix, so the paper pans
+/// and zooms *with* the map — exactly like Azgaar's `#texture` SVG image, which
+/// lives inside the world `#viewbox`. This avoids the "overlay filter" look where
+/// a screen-fixed texture slides over the map while the camera moves.
+///
+/// It uses an opaque REPLACE blend so it never darkens the layers on top of it.
 pub struct TextureOverlay {
     pub texture: wgpu::Texture,
     pub sampler: wgpu::Sampler,
@@ -11,12 +20,6 @@ pub struct TextureOverlay {
 }
 
 impl TextureOverlay {
-    const VERTICES: &'static [f32; 24] = &[
-        // position (x2) + uv (x2) = 6 vertices * 4 floats
-        -1.0, -1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0, 1.0,
-        -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
-    ];
-
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -24,14 +27,18 @@ impl TextureOverlay {
         width: u32,
         height: u32,
         rgba: &[u8],
+        msaa_count: u32,
+        world_min: [f32; 2],
+        world_max: [f32; 2],
+        camera_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let texture = Self::upload_texture(device, queue, width, height, rgba);
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("vor-texture-sampler"),
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::FilterMode::Linear,
@@ -76,16 +83,23 @@ impl TextureOverlay {
             ],
         });
 
+        // World-space quad covering the whole world rect. UVs map 0..1 across it
+        // so the texture is looked up over the full world (the paper canvas).
+        // Positions are in Azgaar world pixels (+Y down), transformed by camera.
+        let (minx, miny, maxx, maxy) = (world_min[0], world_min[1], world_max[0], world_max[1]);
+        let verts: [f32; 24] = [
+            // position (x2) + uv (x2)
+            minx, miny, 0.0, 1.0, //
+            maxx, miny, 1.0, 1.0, //
+            maxx, maxy, 1.0, 0.0, //
+            minx, miny, 0.0, 1.0, //
+            maxx, maxy, 1.0, 0.0, //
+            minx, maxy, 0.0, 0.0, //
+        ];
         let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vor-texture-vbo"),
-            contents: bytemuck::cast_slice(Self::VERTICES),
+            contents: bytemuck::cast_slice(&verts),
             usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("vor-texture-pipeline-layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
         });
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -111,19 +125,13 @@ impl TextureOverlay {
             attributes: &vertex_attrs,
         };
 
-        // Multiply blend: result = src * dst
-        let blend = wgpu::BlendState {
-            color: wgpu::BlendComponent {
-                src_factor: wgpu::BlendFactor::Dst,
-                dst_factor: wgpu::BlendFactor::Zero,
-                operation: wgpu::BlendOperation::Add,
-            },
-            alpha: wgpu::BlendComponent {
-                src_factor: wgpu::BlendFactor::One,
-                dst_factor: wgpu::BlendFactor::Zero,
-                operation: wgpu::BlendOperation::Add,
-            },
-        };
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("vor-texture-pipeline-layout"),
+            // group 0: camera (shared uniform, bound by the caller); group 1:
+            // this overlay's texture.
+            bind_group_layouts: &[camera_layout, &bind_group_layout],
+            push_constant_ranges: &[],
+        });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("vor-texture-pipeline"),
@@ -139,7 +147,7 @@ impl TextureOverlay {
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    blend: Some(blend),
+                    blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -151,7 +159,11 @@ impl TextureOverlay {
                 ..Default::default()
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: msaa_count,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
             multiview: None,
             cache: None,
         });
@@ -209,9 +221,13 @@ impl TextureOverlay {
         texture
     }
 
-    pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
+    /// Draws the world-anchored paper quad. The caller must pass the renderer's
+    /// shared [camera bind group](wgpu::BindGroup) (group 0); the texture bind
+    /// group is bound at group 1.
+    pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, camera: &'a wgpu::BindGroup) {
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.set_bind_group(0, camera, &[]);
+        pass.set_bind_group(1, &self.bind_group, &[]);
         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
         pass.draw(0..6, 0..1);
     }
@@ -224,30 +240,32 @@ impl std::fmt::Debug for TextureOverlay {
 }
 
 const SHADER_SRC: &str = r#"
+@group(0) @binding(0) var<uniform> camera : mat4x4<f32>;
+
 struct VertexIn {
-    @location(0) position: vec2<f32>,
-    @location(1) uv: vec2<f32>,
+    @location(0) position : vec2<f32>,
+    @location(1) uv : vec2<f32>,
 };
 
 struct VertexOut {
-    @builtin(position) clip_pos: vec4<f32>,
-    @location(0) frag_uv: vec2<f32>,
+    @builtin(position) clip_position : vec4<f32>,
+    @location(0) frag_uv : vec2<f32>,
 };
 
-@group(0) @binding(0) var tex: texture_2d<f32>;
-@group(0) @binding(1) var tex_sampler: sampler;
+@group(1) @binding(0) var tex : texture_2d<f32>;
+@group(1) @binding(1) var tex_sampler : sampler;
 
 @vertex
-fn vs_main(in: VertexIn) -> VertexOut {
-    var out: VertexOut;
-    out.clip_pos = vec4<f32>(in.position, 0.0, 1.0);
+fn vs_main(in : VertexIn) -> VertexOut {
+    var out : VertexOut;
+    let world = vec4<f32>(in.position, 0.0, 1.0);
+    out.clip_position = camera * world;
     out.frag_uv = in.uv;
     return out;
 }
 
 @fragment
-fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let t = textureSample(tex, tex_sampler, in.frag_uv);
-    return t;
+fn fs_main(in : VertexOut) -> @location(0) vec4<f32> {
+    return textureSample(tex, tex_sampler, in.frag_uv);
 }
 "#;

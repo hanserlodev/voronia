@@ -21,6 +21,11 @@ pub struct LayerBuffer {
     pub vertex_buf: Option<wgpu::Buffer>,
     pub index_buf: Option<wgpu::Buffer>,
     pub index_count: u32,
+    /// Draw with the alpha-blended `ocean_pipeline` instead of the opaque
+    /// `heightmap_pipeline`. Used by the heightmap overlay so cells with
+    /// `alpha == 0` (the ocean) stay transparent and let the sea pass through,
+    /// matching Azgaar's `oceanHeights.data-render = 0` (ocean has no heightmap).
+    pub blend: bool,
 }
 
 #[derive(Debug, Error)]
@@ -47,6 +52,9 @@ pub struct Renderer {
     pub camera_bind: wgpu::BindGroup,
     pub heightmap_pipeline: wgpu::RenderPipeline,
     pub line_pipeline: wgpu::RenderPipeline,
+    /// Transparent (alpha-blended) pipeline for the ocean so the texture
+    /// canvas/paper background shows through the sea (Azgaar parity).
+    pub ocean_pipeline: wgpu::RenderPipeline,
 
     // MSAA 4x
     pub msaa_count: u32,
@@ -246,6 +254,35 @@ impl Renderer {
             cache: None,
         });
 
+        // Ocean pipeline: alpha-blended so the paper texture canvas shows
+        // through the sea. Uses the same camera uniform and shader.
+        let ocean_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("vor-ocean-pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[vertex_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &line_color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample,
+            multiview: None,
+            cache: None,
+        });
+
         Self {
             device,
             queue,
@@ -257,6 +294,7 @@ impl Renderer {
             camera_bind,
             heightmap_pipeline,
             line_pipeline,
+            ocean_pipeline,
             msaa_count,
             msaa_texture: Some(msaa_texture),
             msaa_view,
@@ -382,8 +420,19 @@ impl Renderer {
             vertex_buf: Some(vertex_buf),
             index_buf: Some(index_buf),
             index_count: mesh.indices.len() as u32,
+            blend: false,
         });
         idx + 1 // 0-indexed, +1 because layer 0 is the heightmap
+    }
+
+    /// Same as `add_layer_mesh` but the layer is drawn with the alpha-blended
+    /// pipeline, so fragments with `alpha == 0` reveal the background instead
+    /// of overwriting it (used by the heightmap color overlay to keep the ocean
+    /// free of elevation colors, matching Azgaar).
+    pub fn add_layer_mesh_blended(&mut self, mesh: &HeightmapMesh) -> usize {
+        let idx = self.add_layer_mesh(mesh);
+        self.layers[idx - 1].blend = true;
+        idx
     }
 
     /// Draws the ocean background quad (world bounds) if set.
@@ -392,7 +441,7 @@ impl Renderer {
             if self.ocean_index_count == 0 {
                 return;
             }
-            pass.set_pipeline(&self.heightmap_pipeline);
+            pass.set_pipeline(&self.ocean_pipeline);
             pass.set_bind_group(0, &self.camera_bind, &[]);
             pass.set_vertex_buffer(0, vbo.slice(..));
             pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -403,12 +452,12 @@ impl Renderer {
     /// Draws a layer in the render pass. `layer_index=0` -> heightmap;
     /// `layer_index>=1` -> additional layers registered with `add_layer_mesh`.
     pub fn draw_layer<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, layer_index: usize) {
-        let (vbo, ibo, count) = if layer_index == 0 {
-            (&self.vertex_buf, &self.index_buf, self.index_count)
+        let (vbo, ibo, count, blend) = if layer_index == 0 {
+            (&self.vertex_buf, &self.index_buf, self.index_count, false)
         } else {
             let idx = layer_index - 1;
             match self.layers.get(idx) {
-                Some(l) => (&l.vertex_buf, &l.index_buf, l.index_count),
+                Some(l) => (&l.vertex_buf, &l.index_buf, l.index_count, l.blend),
                 None => return,
             }
         };
@@ -416,7 +465,12 @@ impl Renderer {
             if count == 0 {
                 return;
             }
-            pass.set_pipeline(&self.heightmap_pipeline);
+            let pipeline = if blend {
+                &self.ocean_pipeline
+            } else {
+                &self.heightmap_pipeline
+            };
+            pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &self.camera_bind, &[]);
             pass.set_vertex_buffer(0, vbo.slice(..));
             pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -445,6 +499,7 @@ impl Renderer {
             vertex_buf: Some(vertex_buf),
             index_buf: Some(index_buf),
             index_count: mesh.indices.len() as u32,
+            blend: false,
         });
         idx
     }

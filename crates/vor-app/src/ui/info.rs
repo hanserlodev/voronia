@@ -13,7 +13,11 @@ pub fn show(
     if let Some(cid) = picked_cell {
         ui.heading(format!("Cell #{cid}"));
         let h = world.pack.cells.height.get(cid).copied().unwrap_or(0);
-        ui.label(format!("Height: {h}"));
+        let height_m = world.settings.height_m(h);
+        ui.label(format!(
+            "Height: {height_m:.0}{}",
+            world.settings.height_unit
+        ));
         let bi = world.pack.cells.biome.get(cid).copied().unwrap_or(0);
         let name = world
             .biomes

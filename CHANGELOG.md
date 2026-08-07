@@ -2,6 +2,29 @@
 
 Todas las versiones notables de Voronia se documentan en este archivo. El formato sigue [Keep a Changelog](https://keepachangelog.com/es/1.1.0/) y el proyecto respeta [Semantic Versioning](https://semver.org/lang/es/).
 
+## [Unreleased]
+
+### Added
+
+- Conversión de altura a unidades reales (`Settings::height_m`, port de `getHeight` de Azgaar) aplicada
+  al tooltip de hover y al tab Info — las alturas de tierra usan `(h - 18)^exponent` y el mar sale
+  negativo, igual que FMG. (Doc: `docs/analysis/height-units-and-cell-tooltip.md`).
+- Tooltip de celda al pasar el cursor (estilo Azgaar, centrado abajo).
+
+### Changed
+
+- Heightmap renderizado como **bandas de isoline rellenas** (`build_heightmap_band_mesh`, `isoline.rs`)
+  con rampa Spectral/"bright" (`heightmap.rs`), paridad con el facetado de Azgaar; el océano queda
+  excluido (`height < 20`).
+- La capa de textura (canvas/paper) se dibuja **al inicio de Pass 1** como fondo (REPLACE) en vez de
+  post-filtro; el océano usa pipeline alpha-blend (`ocean_pipeline`) y baja `alpha 0.55` para que el
+  papel se vea tras el mar. (Doc: `docs/analysis/texture-background-render-fix.md`).
+- Logs de `TextSystem` (`text.rs`) rebajados de `info!` a `trace!` (ruido).
+
+### Fixed
+
+- El océano ya no tapa la textura de papel (mezcla alfa en `renderer.rs`).
+
 ## [0.2.0] - 2026-07-30
 
 Primer lanzamiento comunitario.

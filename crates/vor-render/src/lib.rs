@@ -81,8 +81,8 @@ pub use grid::build_grid_lines;
 pub use heightmap::{build_mesh, height_color, HeightmapMesh};
 pub use ice_layer::build_ice_mesh;
 pub use isoline::{
-    connect_vertices, get_border_path, get_fill_path, get_halo_path, get_isolines,
-    get_water_gap_path, IsolineOptions, IsolineOutput,
+    build_heightmap_band_mesh, connect_vertices, get_border_path, get_fill_path, get_halo_path,
+    get_isolines, get_water_gap_path, IsolineOptions, IsolineOutput,
 };
 pub use lakes::build_lake_mesh;
 pub use layers::LayerFlags;

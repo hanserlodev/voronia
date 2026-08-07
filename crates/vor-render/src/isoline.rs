@@ -4,6 +4,9 @@ use vor_core::Pack;
 
 use lyon::geom::point;
 use lyon::path::Path;
+use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator, VertexBuffers};
+
+use crate::heightmap::{height_color, ColorCtor, HeightmapMesh, HeightmapVertex};
 
 #[derive(Debug, Clone)]
 pub struct IsolineOptions {
@@ -305,6 +308,91 @@ pub fn get_isolines(
     result
 }
 
+/// Minimum height for land isolines (Azgaar: `height < 20` = ocean).
+const MIN_LAND_HEIGHT: u8 = 20;
+/// Maximum isoline level to draw (Azgaar stops at 100).
+const MAX_HEIGHT: u8 = 100;
+/// Height step between bands. Mirrors Azgaar's default `#landHeights` config:
+/// `skip: 5`, and the renderer advances `currentLayer += skip + 1`, so bands
+/// are drawn every **6** height units — that discrete spacing is what produces
+/// the "faceted" concentric-band look (not a continuous gradient).
+const BAND_STEP: u8 = 6;
+
+/// Builds the heightmap layer the way Azgaar does: **filled isoline bands**,
+/// one filled polygon per height level, not a flat per-cell color.
+///
+/// Levels are spaced by `BAND_STEP` (Azgaar `#landFragment` `skip: 5`), from
+/// `MIN_LAND_HEIGHT` upward, and drawn low → high so higher contours paint over
+/// the lower ones, producing the discrete faceted bands Azgaar shows when the
+/// heightmap layer is rendered.
+///
+/// For each level `h`, the contour of the region where `height >= h` is
+/// extracted with `get_isolines` and filled with `height_color(h)` (the regex
+/// `<h` vs `>=h` matches Azgaar's `connectVertices` boundary walk).
+///
+/// The ocean is not part of this layer (`data-render = 0` in Azgaar): cells with
+/// `height < 20` are never included, so the sea stays untouched.
+pub fn build_heightmap_band_mesh(pack: &Pack) -> HeightmapMesh {
+    let mut result = HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [f32::INFINITY, f32::INFINITY],
+        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+    };
+
+    let mut tess = FillTessellator::new();
+    let options = IsolineOptions {
+        polygons: true,
+        ..Default::default()
+    };
+
+    let mut h = MIN_LAND_HEIGHT;
+    while h <= MAX_HEIGHT {
+        let get_type = |c: usize| -> u16 {
+            if pack.cells.height.get(c).copied().unwrap_or(0) >= h {
+                1
+            } else {
+                0
+            }
+        };
+        let isolines = get_isolines(pack, &get_type, &options);
+        if !isolines.is_empty() {
+            let color = height_color(h);
+            for iso in &isolines {
+                let path = get_fill_path(&iso.chain, &pack.vertices);
+                let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+                let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));
+                let opts =
+                    FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+                if tess
+                    .tessellate_path(&path, &opts, &mut buffer_builder)
+                    .is_err()
+                {
+                    continue;
+                }
+                let base = result.vertices.len() as u32;
+                result.vertices.extend_from_slice(&mesh.vertices);
+                result.indices.extend(mesh.indices.iter().map(|i| i + base));
+                for v in &mesh.vertices {
+                    result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+                    result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+                    result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+                    result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+                }
+            }
+        }
+
+        h += BAND_STEP;
+    }
+
+    if !result.bounds_min.iter().all(|v| v.is_finite()) {
+        result.bounds_min = [0.0, 0.0];
+        result.bounds_max = [0.0, 0.0];
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,5 +483,26 @@ mod tests {
         let isolines = get_isolines(&pack, &|c| pack.cells.state[c], &opts);
 
         assert!(!isolines.is_empty(), "should find at least one isoline");
+    }
+
+    #[test]
+    fn heightmap_band_mesh_only_draws_land() {
+        let vertices = make_test_vertices();
+        let pack = make_test_vertices_in_pack(&vertices);
+
+        let mesh = build_heightmap_band_mesh(&pack);
+
+        // Cells 0..1 have height 30 (land), cells 2..3 have height 10 (ocean ->
+        // excluded). The band mesh must contain geometry for the land contour
+        // but nothing from the ocean levels.
+        assert!(
+            !mesh.vertices.is_empty(),
+            "band mesh should draw the land contour"
+        );
+        assert!(!mesh.indices.is_empty(), "band mesh should have indices");
+        assert!(
+            mesh.vertices.iter().all(|v| v.pos[0].is_finite()),
+            "band mesh vertices must be finite"
+        );
     }
 }

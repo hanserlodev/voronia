@@ -71,10 +71,31 @@ pub struct Settings {
     /// confirm with real parsing; keep opaque for now).
     #[serde(default, with = "crate::serde_json_string")]
     pub rescale_labels: serde_json::Value,
-    /// Urban density (`[24]`).
+    /// Height density (`[24]`).
     #[serde(default, with = "crate::serde_json_string")]
     pub urban_density: serde_json::Value,
     /// Growth rate (`[26]`).
     #[serde(default, with = "crate::serde_json_string")]
     pub growth_rate: serde_json::Value,
+}
+
+impl Settings {
+    /// Converts a raw cell height (`0..=100`, Azgaar scale) to a displayed height
+    /// in the configured height unit, mirroring FMG's `getHeight()` (unitUtils.ts)
+    /// and `unitRatio` for the current `height_unit`. Plain meters (`"m"`) use a
+    /// ratio of `1.0`; sea cells (`h < 20`) come out negative.
+    pub fn height_m(&self, h: u8) -> f32 {
+        let unit_ratio = match self.height_unit.as_str() {
+            "ft" | "foot" | "feet" => 3.28084,
+            _ => 1.0,
+        };
+        let height = if h >= 20 {
+            (f32::from(h) - 18.0).powf(self.height_exponent as f32)
+        } else if h > 0 && h < 20 {
+            ((f32::from(h) - 20.0) / f32::from(h)) * 50.0
+        } else {
+            -990.0
+        };
+        height * unit_ratio
+    }
 }

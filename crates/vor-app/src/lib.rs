@@ -23,7 +23,6 @@ use vor_render::heightmap::HeightmapMesh;
 use vor_render::ice_layer::build_ice_mesh;
 use vor_render::lakes::build_lake_mesh;
 use vor_render::layers::LayerFlags;
-use vor_render::mesh::build_pack_mesh;
 use vor_render::population_layer::build_population_mesh;
 use vor_render::precipitation::build_precipitation_mesh;
 use vor_render::province_layer::build_province_mesh;
@@ -137,6 +136,7 @@ struct State {
     world: World,
     layer_flags: LayerFlags,
     picked_cell: Option<usize>,
+    hover_cell: Option<usize>,
     autosave_enabled: bool,
     autosave_interval: f32,
     last_autosave: Instant,
@@ -230,18 +230,14 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     // ocean). The initial frame and the ocean quad both use these.
     let world_bounds_min = [0.0f32, 0.0f32];
     let world_bounds_max = [world.grid.width as f32, world.grid.height as f32];
-    renderer.set_ocean(world_bounds_min, world_bounds_max, [0.16, 0.35, 0.66, 1.0]);
+    renderer.set_ocean(world_bounds_min, world_bounds_max, [0.16, 0.35, 0.66, 0.55]);
 
-    // --- Heightmap color overlay (layer 1: elevation-colored, on top of white landmass) ---
-    let heightmap_color_mesh = build_pack_mesh(&world.pack.vertices, world.pack.points_n(), |p| {
-        let h = world.pack.cells.height.get(p).copied().unwrap_or(0);
-        let c = vor_render::height_color(h);
-        if h < 20 {
-            [c[0], c[1], c[2], 0.0]
-        } else {
-            c
-        }
-    });
+    // --- Heightmap color overlay (layer 1) ---
+    // Azgaar parity: filled isoline bands per height level (not flat per-cell
+    // colors). The ocean is excluded (`height < 20`), matching `data-render: 0`.
+    // Each band is fully opaque, so it uses the opaque layer path and no longer
+    // relies on per-cell alpha to hide the sea.
+    let heightmap_color_mesh = vor_render::build_heightmap_band_mesh(&world.pack);
     info!(
         "heightmap color overlay: {}v/{}i",
         heightmap_color_mesh.vertices.len(),
@@ -520,6 +516,10 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         &renderer.device,
         &renderer.queue,
         surface_format,
+        renderer.msaa_count,
+        world_bounds_min,
+        world_bounds_max,
+        renderer.camera_bind_layout(),
         &texture_name,
     );
 
@@ -552,6 +552,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         world,
         layer_flags: LayerFlags::default(),
         picked_cell: None,
+        hover_cell: None,
         autosave_enabled: true,
         autosave_interval: 60.0,
         last_autosave: Instant::now(),
@@ -607,6 +608,13 @@ impl State {
                             .pan_by_screen_delta(delta, [size.width as f32, size.height as f32]);
                     }
                     self.pan_last = Some(self.cursor_screen);
+                } else {
+                    let size = [
+                        self.window.inner_size().width as f32,
+                        self.window.inner_size().height as f32,
+                    ];
+                    let world = self.camera.screen_to_world(self.cursor_screen, size);
+                    self.hover_cell = pick_cell(world, &self.world.pack.points);
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -703,6 +711,23 @@ impl State {
 
         let vorn_save_path = self.map_path.with_extension("vorn");
 
+        // Cell tooltip (Azgaar-style): show info about the cell under the cursor.
+        // Built here (outside the egui closure) and rendered with the debug painter.
+        let hover_text: Option<String> = self.hover_cell.and_then(|cid| {
+            let h = world.pack.cells.height.get(cid).copied().unwrap_or(0);
+            let height_m = world.settings.height_m(h);
+            let bi = world.pack.cells.biome.get(cid).copied().unwrap_or(0);
+            let biome = world
+                .biomes
+                .get(bi as usize)
+                .map(|b| b.name.as_str())
+                .unwrap_or("?");
+            Some(format!(
+                "Cell #{cid}  ·  Height: {height_m:.*}{}  ·  Biome: {biome}",
+                0, world.settings.height_unit
+            ))
+        });
+
         // Destructure mutable refs to pass into the FnOnce closure
         let last_texture = self.texture_name.clone();
         let texture_name = &mut self.texture_name;
@@ -722,6 +747,28 @@ impl State {
         let mesh_bounds_max = self.mesh_bounds_max;
 
         let output = self.egui_ctx.run(raw_input, |ctx| {
+            // Cell tooltip (Azgaar-style): small box under the cursor.
+            if let Some(text) = &hover_text {
+                let painter = ctx.debug_painter();
+                let w = 280.0;
+                let h = 24.0;
+                let x = (surface_size[0] - w) * 0.5;
+                let y = surface_size[1] - 44.0;
+                let rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, h));
+                painter.rect_filled(
+                    rect,
+                    4.0,
+                    egui::Color32::from_rgba_unmultiplied(20, 22, 26, 220),
+                );
+                painter.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    text,
+                    egui::FontId::proportional(13.0),
+                    egui::Color32::from_rgb(240, 240, 240),
+                );
+            }
+
             // Labels overlay (clip below sidebar)
             let painter = ctx.debug_painter();
             for (sx, sy, name) in &label_data {
@@ -899,6 +946,15 @@ impl State {
                 occlusion_query_set: None,
             });
 
+            // Texture canvas/paper background: drawn first so the ocean and the
+            // land layers sit on top of it (Azgaar parity — #texture is inserted
+            // before #landmass in the SVG z-order).
+            if self.layer_flags.texture {
+                if let Some(ref tex) = self.texture_overlay {
+                    tex.draw(&mut pass, &self.renderer.camera_bind);
+                }
+            }
+
             // Ocean background: covers the world rectangle first.
             self.renderer.draw_ocean(&mut pass);
 
@@ -930,27 +986,6 @@ impl State {
             // Text overlay (glyphon, inside the MSAA pass)
             if let Some(ref ts) = self.text_system {
                 ts.render(&mut pass);
-            }
-        }
-
-        // Pass 1.5: texture overlay (multiply blend over resolved surface)
-        if self.layer_flags.texture {
-            if let Some(ref tex) = self.texture_overlay {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("vor-texture"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &resolve_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                tex.draw(&mut pass);
             }
         }
 
@@ -1001,6 +1036,10 @@ impl State {
                 &self.renderer.device,
                 &self.renderer.queue,
                 self.renderer.format,
+                self.renderer.msaa_count,
+                [0.0, 0.0],
+                [self.world.grid.width as f32, self.world.grid.height as f32],
+                self.renderer.camera_bind_layout(),
                 &self.texture_name,
             );
         }
@@ -1086,6 +1125,10 @@ fn load_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     format: wgpu::TextureFormat,
+    msaa_count: u32,
+    world_min: [f32; 2],
+    world_max: [f32; 2],
+    camera_layout: &wgpu::BindGroupLayout,
     name: &str,
 ) -> Option<vor_render::TextureOverlay> {
     if name == "none" {
@@ -1129,7 +1172,16 @@ fn load_texture(
                 let (w, h) = rgba.dimensions();
                 tracing::info!("loaded texture: {name} ({w}x{h})");
                 Some(vor_render::TextureOverlay::new(
-                    device, queue, format, w, h, &rgba,
+                    device,
+                    queue,
+                    format,
+                    w,
+                    h,
+                    &rgba,
+                    msaa_count,
+                    world_min,
+                    world_max,
+                    camera_layout,
                 ))
             }
             Err(e) => {

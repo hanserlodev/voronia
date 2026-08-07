@@ -11,6 +11,13 @@
 ### What it does in Azgaar
 Overlays a raster texture image on top of the entire map (paper, parchment, cloth, etc.). It is an SVG `<image>` scaled to the size of the chart. It does not interact with cells or world data — it is purely decorative.
 
+> **Z-order note**: The `#texture` group is inserted *before* `#landmass` in the SVG
+> (`load.ts` `.insert("g", "#landmass")`), so it acts as the **canvas/paper
+> background** underneath the ocean and land, not an overlay drawn on top of them.
+> The ocean pages are drawn **translucent** (`ocean-layers.ts` uses a low
+> `fill-opacity`) so the paper shows through the sea; the opaque continents stay
+> above it.
+
 ### Source code
 | File | Lines | Role |
 |---|---|---|
@@ -43,13 +50,17 @@ function drawTexture() {
 - `graphWidth`, `graphHeight`: SVG dimensions
 
 ### Portability to Voronia
-**Approach**: Post-process effect in wgpu (texture applied as a blend over the final framebuffer, or as a translucent layer on a fullscreen quad).
+**Approach**: Texture is drawn as the first thing of the map render pass (Pass 1),
+on a fullscreen quad with an opaque `REPLACE` blend, *before* the ocean and the
+land layers — so it is the paper the map is drawn on. The ocean quad uses a
+dedicated alpha-blended pipeline (`ocean_pipeline`, see `renderer.rs`) with
+`alpha < 1.0` so the paper shows through the sea, matching Azgaar.
 
 | Stage | Description |
 |---|---|
-| **Current phase** | Not implemented. `LayerFlags.texture` exists but does not render. |
-| **Implementation** | Load PNG/JPG texture as `wgpu::Texture`, draw a fullscreen quad with `multiply` or `overlay` blending over the map output. |
-| **UI** | Texture selector in the Style tab (dropdown with 9 options, same as Azgaar). X/Y shift controls. |
+| **Current phase** | Implemented. `TextureOverlay` (`texture.rs`) draws the texture at the start of Pass 1, MSAA-aware, `ClampToEdge` sampler (slice-fit). Ocean is translucent (`[0.16, 0.35, 0.66, 0.55]` in `lib.rs`). |
+| **Implementation** | Loads PNG/JPG texture as `wgpu::Texture`, fullscreen quad with `REPLACE` blend, placed before `draw_ocean`. |
+| **UI** | Texture selector in the Style tab (dropdown with 9 options, same as Azgaar). X/Y shift controls (not yet ported). |
 
 ---
 
@@ -98,13 +109,19 @@ Output: chain (lista de vértices formando contorno cerrado)
 Azgaar has multiple schemes: elevation, wiki, grayscale, wiki2, elevation2, fancy, wiki3, palettes. Each scheme is a function `(t: number) => string` that maps normalized altitude (0-1) to a CSS color.
 
 ### Portability to Voronia
-**Approach**: Voronia's heightmap is ALREADY implemented as a wgpu pipeline (layer 0, mesh of triangles colored by altitude). The contours (isolines) would be an additional optional layer.
+**Approach**: Voronia renders the heightmap as **filled isoline bands** (one tessellated polygon per height level, drawn low → high), matching Azgaar's discrete faceted look — not a continuous per-cell gradient.
 
 | Stage | Description |
 |---|---|
-| **Current phase** | ✅ Heightmap as a triangle mesh with `height_color()` on CPU (linear blue→green→brown→white gradient). |
-| **Pending** | Contour isolines (optional). Configurable color schemes (currently fixed). Terracing. |
-| **Implementation** | For isolines: generate paths on CPU similar to Azgaar, render as lines in a wgpu shader. Color schemes: uniform lookup table on GPU. |
+| **Current phase** | ✅ `build_heightmap_band_mesh()` (`isoline.rs`) fills one polygon per height level. |
+| **Color scheme** | ✅ Spectral/"bright" ramp (`SPECTRAL_STOPS` in `heightmap.rs`), interpolating to linear RGBA for the shader. |
+| **Ocean** | ✅ Ocean excluded (`height < 20`), matching Azgaar `#oceanHeights data-render = 0`. |
+| **Implementation** | `build_heightmap_band_mesh` iterates `h = 20, 26, ..., 100` (`BAND_STEP = 6`, mirroring `#landHeights` `skip: 5` → `currentLayer += skip + 1`), extracts each contour with `get_isolines` (option `polygons: true`) and fills it with `height_color(h)`. |
+| **Pending** | Configurable color schemes (currently fixed to "bright"). Terracing. Contour simplification/curving options. Band step currently hardcoded to the Azgaar default. |
+
+> Algoritmo del facetado: cada banda `h` pinta la región donde `height >= h`, así que
+> los niveles superiores cubren a los inferiores y producen los anillos concéntricos
+> discretos de Azgaar (el mar queda fuera).
 
 ---
 
