@@ -335,8 +335,12 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
 
     let river_mesh = build_river_mesh(
         &world.pack.points,
+        &world.pack.vertices,
+        &is_water,
         &world.rivers,
         world.settings.distance_scale,
+        world.grid.width,
+        world.grid.height,
     );
     info!(
         "rivers mesh: {}v/{}i",

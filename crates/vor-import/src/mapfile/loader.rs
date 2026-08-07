@@ -266,6 +266,10 @@ impl Loader {
         let custom_good_icons = parse_string_opaque(raw.get(45));
 
         // --- Trace each river's path (cell_path from source to mouth) ---
+        // Only rivers with an empty `cell_path` are reconstructed. Azgaa serializes its
+        // `cells` in slot [32] verbatim, INCLUDING the final water cell where the river
+        // pours out (its `river_id` is 0, so it cannot be rediscovered by tracing);
+        // tracing would drop that cell and the river would stop short of the sea.
         trace_river_paths(
             &mut rivers,
             &pack.cells.river,
@@ -322,6 +326,11 @@ fn trace_river_paths(
 ) {
     for river in rivers.iter_mut() {
         if river.id == 0 {
+            continue;
+        }
+        // A `.map` serializes each river's full `cells` path in slot [32], including the
+        // water cell at the mouth. Trust that ground truth when present.
+        if !river.cell_path.is_empty() {
             continue;
         }
         let rid = river.id;

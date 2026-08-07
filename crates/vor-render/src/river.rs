@@ -2,6 +2,7 @@ use lyon::geom::point;
 use lyon::path::Path;
 use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator, VertexBuffers};
 use vor_core::entities::river::River;
+use vor_core::voronoi::VoronoiVertices;
 
 use crate::heightmap::{ColorCtor, HeightmapMesh, HeightmapVertex};
 use crate::mesh::catmull_rom_open;
@@ -219,7 +220,135 @@ fn acute_cost_vec(pos: &[[f32; 2]], i: usize, flipped: [f32; 2], flip_idx: usize
     }
 }
 
-pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -> HeightmapMesh {
+/// Azgaar's `getBorderPoint` (river-generator.ts): a river cell of `-1`
+/// means the mouth reaches the map edge. Project the previous real cell onto
+/// the nearest edge (top/bottom/left/right) instead of guessing a direction.
+fn edge_point(prev: [f32; 2], map_w: f32, map_h: f32) -> [f32; 2] {
+    let [x, y] = prev;
+    let min = y.min(map_h - y).min(x.min(map_w - x));
+    if min == y {
+        [x, 0.0]
+    } else if min == map_h - y {
+        [x, map_h]
+    } else if min == x {
+        [0.0, y]
+    } else {
+        [map_w, y]
+    }
+}
+
+/// Intersects segment [s0, s1] with segment [e0, e1]; returns the point of
+/// intersection, or `None` if they don't cross within both segments.
+fn segment_intersection(
+    s0: [f32; 2],
+    s1: [f32; 2],
+    e0: [f32; 2],
+    e1: [f32; 2],
+) -> Option<[f32; 2]> {
+    let r = [s1[0] - s0[0], s1[1] - s0[1]];
+    let e = [e1[0] - e0[0], e1[1] - e0[1]];
+    let denom = r[0] * e[1] - r[1] * e[0];
+    if denom.abs() < 1e-9 {
+        return None;
+    }
+    let t = (s0[1] - e0[1]) * e[0] - (s0[0] - e0[0]) * e[1];
+    let u = (s0[1] - e0[1]) * r[0] - (s0[0] - e0[0]) * r[1];
+    let t = t / denom;
+    let u = u / denom;
+    if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+        Some([s0[0] + t * r[0], s0[1] + t * r[1]])
+    } else {
+        None
+    }
+}
+
+/// Clips the river path at the coast. The mouth cell is water; the river should
+/// stop at the point where it enters that water cell (the coastline), not reach its
+/// center (which may be far into the ocean). We cast the river's final segment
+/// (from the last land cell outward toward the water cell) against every edge of
+/// the mouth cell's Voronoi ring and keep the closest hit, so the mouth lands on
+/// the coast regardless of which edge the flow actually crosses.
+fn clip_to_coast(
+    raw: &mut Vec<[f32; 2]>,
+    path: &[u32],
+    vertices: &VoronoiVertices,
+    is_water: &[bool],
+) {
+    // Find the last land cell followed by a water cell in the path.
+    let mut last_land: Option<(usize, usize)> = None;
+    for i in 0..path.len().saturating_sub(1) {
+        let a = path[i] as usize;
+        let b = path[i + 1] as usize;
+        let wa = is_water.get(a).copied().unwrap_or(false);
+        let wb = is_water.get(b).copied().unwrap_or(false);
+        if !wa && wb {
+            last_land = Some((i, i + 1));
+        }
+    }
+    let Some((li, wi)) = last_land else {
+        return;
+    };
+    // `raw` has one point per path cell (with edge_point substitutions); the
+    // indices li/wi map directly when both cells resolved to a point.
+    let lpt = match raw.get(li) {
+        Some(p) => *p,
+        None => return,
+    };
+    let wpt = match raw.get(wi).copied() {
+        Some(p) => p,
+        None => return,
+    };
+    let water_cell = path[wi] as usize;
+
+    // Cast the continuity beyond lpt (toward the water cell) against the water
+    // cell's Voronoi ring polygon; keep the closest intersection to the land point.
+    let ring = match vertices.cell_rings.get(water_cell) {
+        Some(r) if r.len() >= 2 => r,
+        _ => return,
+    };
+    let mut best_hit: Option<[f32; 2]> = None;
+    let mut best_dist = f32::INFINITY;
+    for k in 0..ring.len() {
+        let a = match ring.get(k).copied() {
+            Some(t) => t as usize,
+            None => return,
+        };
+        let b = match ring.get((k + 1) % ring.len()) {
+            Some(&t) => t as usize,
+            None => return,
+        };
+        let Some(pa) = vertices.positions.get(a).copied() else {
+            continue;
+        };
+        let Some(pb) = vertices.positions.get(b).copied() else {
+            continue;
+        };
+        let Some(hit) = segment_intersection(lpt, wpt, pa, pb) else {
+            continue;
+        };
+        let d = (hit[0] - lpt[0]).abs() + (hit[1] - lpt[1]).abs();
+        if d < best_dist {
+            best_dist = d;
+            best_hit = Some(hit);
+        }
+    }
+    let hit = match best_hit {
+        Some(p) => p,
+        None => return,
+    };
+    raw.truncate(wi);
+    raw.push(hit);
+}
+
+pub fn build_river_mesh(
+    points: &[[f32; 2]],
+    vertices: &VoronoiVertices,
+    is_water: &[bool],
+    rivers: &[River],
+    km_per_px: f32,
+    map_w: f32,
+    map_h: f32,
+) -> HeightmapMesh {
     let mut result = HeightmapMesh {
         vertices: Vec::new(),
         indices: Vec::new(),
@@ -233,29 +362,26 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
         if path.len() < 2 {
             continue;
         }
-        let mut raw: Vec<[f32; 2]> = path
-            .iter()
-            .filter_map(|&ci| points.get(ci as usize).copied())
-            .collect();
+        let mut raw: Vec<[f32; 2]> = Vec::with_capacity(path.len());
+        for (i, &ci) in path.iter().enumerate() {
+            if ci == u32::MAX {
+                let prev_cell = path[..i].iter().rev().find(|&&c| c != u32::MAX);
+                if let Some(&pc) = prev_cell {
+                    if let Some(&p) = points.get(pc as usize) {
+                        raw.push(edge_point(p, map_w, map_h));
+                    }
+                }
+            } else if let Some(&p) = points.get(ci as usize) {
+                raw.push(p);
+            }
+        }
         if raw.len() < 2 {
             continue;
         }
-        // Extend river past the last land cell into the sea
-        // Direction = last segment, length = 40% of that segment
-        let ext = {
-            let last = raw.last().copied().unwrap();
-            let prev = raw[raw.len() - 2];
-            let dx = last[0] - prev[0];
-            let dy = last[1] - prev[1];
-            let d = (dx * dx + dy * dy).sqrt();
-            if d > 0.0 {
-                let scale = (d * 0.4).max(10.0);
-                [last[0] + dx / d * scale, last[1] + dy / d * scale]
-            } else {
-                last
-            }
-        };
-        raw.push(ext);
+        clip_to_coast(&mut raw, path, vertices, is_water);
+        if raw.len() < 2 {
+            continue;
+        }
         let meandered = meander_anchors(&raw);
         let smooth = catmull_rom_open(&meandered, 4);
         let n = smooth.len();
@@ -330,4 +456,41 @@ pub fn build_river_mesh(points: &[[f32; 2]], rivers: &[River], km_per_px: f32) -
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::edge_point;
+
+    #[test]
+    fn edge_point_top() {
+        // y = 5 is nearer the top edge than the left (x=10) in a 100x100 map
+        let p = edge_point([10.0, 5.0], 100.0, 100.0);
+        assert_eq!(p, [10.0, 0.0]);
+    }
+
+    #[test]
+    fn edge_point_bottom() {
+        let p = edge_point([10.0, 95.0], 100.0, 100.0);
+        assert_eq!(p, [10.0, 100.0]);
+    }
+
+    #[test]
+    fn edge_point_left() {
+        let p = edge_point([4.0, 50.0], 100.0, 100.0);
+        assert_eq!(p, [0.0, 50.0]);
+    }
+
+    #[test]
+    fn edge_point_right() {
+        let p = edge_point([96.0, 50.0], 100.0, 100.0);
+        assert_eq!(p, [100.0, 50.0]);
+    }
+
+    #[test]
+    fn edge_point_corner_prefers_top() {
+        // Tie between top and left → Azgaar's `if` order picks top first
+        let p = edge_point([10.0, 10.0], 100.0, 100.0);
+        assert_eq!(p, [10.0, 0.0]);
+    }
 }

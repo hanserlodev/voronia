@@ -2,7 +2,7 @@ use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
     TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 use wgpu::{Device, MultisampleState, Queue, TextureFormat};
 
 /// GPU text system using glyphon.
@@ -184,10 +184,10 @@ impl TextSystem {
     /// Must be called INSIDE the render pass.
     pub fn render<'pass>(&'pass self, pass: &mut wgpu::RenderPass<'pass>) {
         if !self.pending_draw {
-            info!("glyphon render skipped (no pending draw)");
+            trace!("glyphon render skipped (no pending draw)");
             return;
         }
-        info!("glyphon rendering...");
+        trace!("glyphon rendering...");
         if let Err(e) = self
             .renderer
             .render(&self.atlas, &self.viewport, &mut *pass)
