@@ -33,6 +33,15 @@ pub struct VoronoiVertices {
     /// `vor-import` repopulates it at runtime so the renderer does not recompute meshes.
     #[serde(skip)]
     pub cell_rings: Vec<Vec<u32>>,
+    /// Azgaar's `cells.c[p]`: adjacent cell IDs (interiors only — boundary points with
+    /// id >= `points_n` are filtered out). Same CCW order/alignment as `cell_rings[p]`.
+    /// Not persisted (derivable from the Delaunay); repopulated by `vor-import`.
+    #[serde(skip)]
+    pub cell_neighbors: Vec<Vec<u32>>,
+    /// Azgaar's `cells.b[p]`: 1 if the cell touches the border (i.e. some of its ring
+    /// neighbors were filtered out as boundary points), 0 otherwise. Not persisted.
+    #[serde(skip)]
+    pub cell_border: Vec<u8>,
 }
 
 impl VoronoiVertices {

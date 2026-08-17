@@ -58,9 +58,9 @@ dedicated alpha-blended pipeline (`ocean_pipeline`, see `renderer.rs`) with
 
 | Stage | Description |
 |---|---|
-| **Current phase** | Implemented. `TextureOverlay` (`texture.rs`) draws the texture at the start of Pass 1, MSAA-aware, `ClampToEdge` sampler (slice-fit). Ocean is translucent (`[0.16, 0.35, 0.66, 0.55]` in `lib.rs`). |
-| **Implementation** | Loads PNG/JPG texture as `wgpu::Texture`, fullscreen quad with `REPLACE` blend, placed before `draw_ocean`. |
-| **UI** | Texture selector in the Style tab (dropdown with 9 options, same as Azgaar). X/Y shift controls (not yet ported). |
+| **Current phase** | 🟡 **A medias / Implemented (partial)**. `TextureOverlay` (`texture.rs`) draws the texture at the start of Pass 1, MSAA-aware, `ClampToEdge` edge (slice-to-fit). Ocean is translucent (`[0.16, 0.35, 0.66, 0.55]` in `lib.rs`). |
+| **Implementation** | World-anchored textured quad (full world rect, transformed by the camera matrix) so the paper pans/zooms *with* the map, like Azgaar's `#texture` image inside the `#viewbox`. Loads PNG/JPG as `wgpu::Texture`, opaque `REPLACE` blend, placed before `draw_ocean`. |
+| **Pending** | X/Y shift controls (`data-x`/`data-y` → texture offset, Azgaar `texture.attr("data-x")`). The quad currently always covers the whole world rect with no offset. |
 
 ---
 
@@ -123,6 +123,9 @@ Azgaar has multiple schemes: elevation, wiki, grayscale, wiki2, elevation2, fanc
 > los niveles superiores cubren a los inferiores y producen los anillos concéntricos
 > discretos de Azgaar (el mar queda fuera).
 
+### Estado en Voronia (documentado 7 ago 2026)
+✅ **Completo**. `build_heightmap_band_mesh()` (`isoline.rs`) rellena un polígono por nivel de altura con `BAND_STEP = 6` sobre el esquema Spectral/"bright" (`SPECTRAL_STOPS` en `heightmap.rs`), océano excluido (`height < 20`). El tooltip de celda reporta la altura en metros reales (`Settings::height_m`, port de `getHeight` de Azgaar). Opcional: schemes configurables y terracing — mejorable, no bloqueante.
+
 ---
 
 ## 3. Relief
@@ -177,9 +180,8 @@ function placeBiomeIcons(cellIndex, density, size) {
 
 | Stage | Description |
 |---|---|
-| **Current phase** | Not implemented. `LayerFlags.relief` exists but does not render. |
-| **MVP implementation** | Compute positions on CPU (Poisson-disc or cell center), render as instanced triangles/circles. |
-| **Full implementation** | Glyph sprites from an atlas, z-ordering, 3 icon sets. |
+| **Current phase** | 🟡 **A medias / Implemented (partial)**. `build_relief_mesh()` (`relief.rs`) genera triángulos por celda con `height >= 40`; 3 niveles de tamaño/color según `h >= 80 / 60 / 40` (montaña, colina, tierras altas). Se sube como capa mesh en `lib.rs` (renderer.add_layer_mesh). |
+| **Pending (MVW → Full)** | Va del placeholder geométrico a los relief icons de Azgaar: Poisson-disc sampling dentro de cada celda (no un solo triángulo en el centro), `placeBiomeIcons()` para `height < 50` (coníferas, deciduos, palmeras… según bioma), tipo `mount/hill/cliff` según altura+temperature, z-order (y + size), y los 3 sets de iconos (simple/detailed/3d). |
 
 ---
 
@@ -208,12 +210,12 @@ function drawCells() {
 `getGridPolygon` / `getPackPolygon` return the SVG coordinates of each cell's polygon (e.g. `"10,20 L 30,40 L 50,60 Z"`). All cells are combined into a single `<path>` for performance.
 
 ### Portability to Voronia
-**Current phase**: Not implemented as a toggle layer. Cell borders underlie the border layers (state/province/culture). It can be implemented as lines between neighboring cell centers (Delaunay edges) rendered as wgpu lines.
+**Current phase**: ✅ **Completo**. `build_cell_wireframe()` (`cells.rs`) dibuja el wireframe por celda (Voronoi) usando `VoronoiVertices.cell_rings` + `positions`, como línea cap en la line layer. Toggle `cells` en `ui/layers.rs`.
 
 | Phase | Description |
 |---|---|
-| **MVP** | Draw Delaunay lines between cell centers with a wgpu line pipeline. |
-| **Full** | Same logic as Azgaar: per-cell Voronoi wireframe. |
+| **Done** | Per-cell Voronoi wireframe (line layer). |
+| **Full (futuro)** | `customization === 1` grid (pre-pack) wireframe instead of pack; auto-toggle in editors (river/burg/route). |
 
 ---
 
@@ -267,10 +269,12 @@ Defined in `index.html` as SVG `<pattern>`s:
 - `#pattern_triangle`: Triangles
 
 ### Portability to Voronia
+**Current phase**: ✅ **Completo**. `build_grid_lines()` (`grid.rs`) replicó el `#pattern_pointyHex` de Azgaar: segmentos del tile pointy-hex (25×43.4) repetidos en mosaico con culls por rango, como line layer. Toggle `grid` en `ui/layers.rs`.
+
 | Phase | Description |
 |---|---|
-| **MVP** | Implement a simple rectangular grid pattern (horizontal/vertical lines) as a fullscreen shader. |
-| **Full** | 5 grid patterns rendered as instanced line geometry. Style controls in the Style tab. |
+| **Done** | Pointy-hex tiling (paridad `pattern_pointyHex`), 3 tests. |
+| **Full** | Los otros 4 patterns (flatHex, square, square45deg, triangle) + controles de estilo (scale, stroke, dash, shift) en el Style tab. |
 
 ---
 
@@ -313,27 +317,32 @@ function drawCoordinates() {
 ### Portability to Voronia
 | Phase | Description |
 |---|---|
-| **Implementation** | Voronia does not have a geographic coordinate system (lat/lon) yet. Depends on Phase 0/geography to define the world projection. |
-| **MVP** | Hardcoded graticule (fixed step, no real projection). |
-| **Full** | Graticule with configurable projection, zoom-adaptive step, N/S/E/W labels. |
+| **Implementation** | Voronia importa `mapCoordinates` del header del `.map` (rango geográfico) y proyecta lat/lon → mundo con la inversa de `lon_at_x`/`lat_at_y`. |
+| **Done** | `build_coordinate_graticule()` (`coordinates.rs`) genera las líneas + labels con `pick_step()` adaptativo al zoom (`steps = [0.5,1,2,5,10,15,30]`, `goal = lonT/zoom/10`, como FMG). `TextSystem` multi-label pegada los labels al borde superior (longitud) e izquierdo (latitud) de la vista, reposicionados en cada pan/zoom. |
+| **Pending / a medias** | Config de proyección/step manual en la UI; redibujado completo del graticule al cambiar zoom (el step aún se fija al cargar); N/S/E/W completa cuando el `zoom` cruza thresholds. |
 
 ---
 
 ## Portability status summary
 
+> Actualizado: 7 ago 2026. Leyenda: ✅ completo · 🟡 a medias (básico funcionando, faltan opciones/refinamientos de Azgaar) · ❌ sin implementar.
+
 | Layer | Current Voronia state | Dependencies | Priority |
 |---|---|---|---|
-| texture | ❌ Not implemented | Load PNG texture, fullscreen quad | Low |
-| heightmap | ✅ Base mesh OK. Contours: ❌ | Color schemes, isolines | Medium |
-| relief | ❌ Not implemented | Biomes, Poisson-disc, sprite rendering | Low |
-| cells | ❌ No toggle. Borders OK | Voronoi/Delaunay geometry | Medium |
-| grid | ❌ Not implemented | Grid patterns, line shader | Low |
-| coordinates | ❌ Not implemented | World coordinate system | High (dependency) |
+| texture | 🟡 A medias — `TextureOverlay` world-anchored (papel que pan/zoom con el mapa), REPLACE, antes del ocean. Falta: X/Y shift | PNG/JPG loader | Low |
+| heightmap | ✅ Completo — bandas de isoline rellenas (`BAND_STEP` 6), scheme bright/Spectral, océano excluido, conversión `height_m` real | isolines | Medium |
+| relief | 🟡 A medias — `build_relief_mesh()` triángulos por celda con `h ≥ 40`, 3 tamaños/colores. Falta: Poisson-disc, iconos por bioma, z-order, sets | biomes, Poisson-disc, sprites | Low |
+| cells | ✅ Completo — wireframe Voronoi por celda (line layer) + toggle UI | Voronoi/Delaunay geometry | Medium |
+| grid | ✅ Completo — pattern pointy-hex replicado (`pattern_pointyHex`), 3 tests | line shader | Low |
+| coordinates | 🟡 A medias — graticule con step zoom-adaptive, labels en bordes de vista (Texto multi). Falta: redibujado completo de step al zoomear, proyección/config UI | World coordinate system | High |
 
 ### Cross dependencies
-- **coordinates** requires the World Data Model to have geographic coordinates (`mapCoordinates` in Azgaar). This comes from the `.map` header (pack → `cells.coordinates`?).
-- **relief** needs implemented biomes (✅) + Poisson-disc sampling (new).
+- **coordinates** requiere que el World Data Model tenga coordinates geográficas (`mapCoordinates` en Azgaar). Ya llega del header del `.map` (import). La proyección equirect fue extraída a `vor-render::coordinates` (`lon_at_x`/`lat_at_y`/`pick_step`).
+- **relief** necesita biomes (✅) + Poisson-disc sampling (nuevo).
+- **texture** es independiente — solo necesita el loader PNG/JPG ya integrado.
 - **texture** is independent, it only needs image loading.
 
 ### Suggested next step
-Implement **cells** as a toggle layer — it is the simplest (wireframe of the already-existing Voronoi mesh) and it is needed for the Phase 6 editors (rivers, routes). Use the existing wgpu line pipeline.
+· cells: done (toggle + wireframe).
+· coordinates: re-draw completo del graticule al cambiar el step (zoom) y controles de proyección en la UI.
+· relief: primero el acercamiento facilitado (biome icons con Poisson-disc), luego los sets.

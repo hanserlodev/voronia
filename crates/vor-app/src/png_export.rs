@@ -60,6 +60,26 @@ pub fn export_png(
     });
     let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+    // Masked layers use the same stencil contract as the interactive renderer:
+    // layer 0 writes stencil=1 and masked layers test it. Without an offscreen
+    // stencil attachment the PNG path either fails validation or silently
+    // diverges from the on-screen composition.
+    let stencil_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("vor-export-png-stencil"),
+        size: wgpu::Extent3d {
+            width: export_width,
+            height: export_height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: renderer.msaa_count,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Depth24PlusStencil8,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
     // Compute the camera uniform for the export size (same view, different aspect).
     // Either recreate the camera with the new viewport or scale the uniform manually.
     // The cleanest way: generate the uniform from the current camera.
@@ -99,13 +119,34 @@ pub fn export_png(
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &stencil_view,
+                depth_ops: None,
+                stencil_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0),
+                    store: wgpu::StoreOp::Store,
+                }),
+            }),
             timestamp_writes: None,
             occlusion_query_set: None,
         });
 
         for layer_idx in layer_flags.active_indices() {
             renderer.draw_layer(&mut pass, layer_idx);
+        }
+        // Economy layers are registered after the fixed 0..18 layer block.
+        // Keep export parity with the interactive render path.
+        if layer_flags.goods {
+            renderer.draw_layer(&mut pass, 19);
+            renderer.draw_layer(&mut pass, 20);
+        }
+        if layer_flags.markets {
+            renderer.draw_layer(&mut pass, 21);
+            renderer.draw_layer(&mut pass, 22);
+            renderer.draw_layer(&mut pass, 23);
+        }
+        if layer_flags.trade {
+            renderer.draw_layer(&mut pass, 24);
         }
     }
 

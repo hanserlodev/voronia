@@ -6,7 +6,6 @@ pub struct LayerFlags {
     pub relief: bool,
     pub cells: bool,
     pub grid: bool,
-    pub contours: bool,
     pub coordinates: bool,
     // Water & climate
     pub lakes: bool,
@@ -50,7 +49,6 @@ impl Default for LayerFlags {
             relief: false,
             cells: false,
             grid: false,
-            contours: false,
             coordinates: false,
             lakes: true,
             rivers: true,
@@ -181,5 +179,48 @@ impl LayerFlags {
             indices.push(Self::LAYER_BURGS);
         }
         indices
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The fixed layer constants must be exactly 1..=NUM_LAYERS-1 in order:
+    /// `draw_layer(layer_index)` looks up `self.layers[layer_index - 1]`, so a
+    /// gap or a wrong constant silently draws the WRONG mesh (the toggles would
+    /// activate the wrong layer). This test guards that mapping.
+    #[test]
+    fn layer_constants_are_contiguous_and_match_num_layers() {
+        let expected = [
+            LayerFlags::LAYER_HEIGHTMAP,
+            LayerFlags::LAYER_RELIEF,
+            LayerFlags::LAYER_BIOMES,
+            LayerFlags::LAYER_TEMPERATURE,
+            LayerFlags::LAYER_PRECIPITATION,
+            LayerFlags::LAYER_ICE,
+            LayerFlags::LAYER_LAKES,
+            LayerFlags::LAYER_RIVERS,
+            LayerFlags::LAYER_STATE_FILL,
+            LayerFlags::LAYER_PROVINCE_FILL,
+            LayerFlags::LAYER_CULTURE_FILL,
+            LayerFlags::LAYER_RELIGION_FILL,
+            LayerFlags::LAYER_POPULATION,
+            LayerFlags::LAYER_ZONES,
+            LayerFlags::LAYER_BORDER_STATE,
+            LayerFlags::LAYER_BORDER_PROVINCE,
+            LayerFlags::LAYER_BORDER_CULTURE,
+            LayerFlags::LAYER_BURGS,
+        ];
+        for (i, &constant) in expected.iter().enumerate() {
+            assert_eq!(
+                constant,
+                i + 1,
+                "LAYER_* constants must be contiguous starting at 1 (got {} at position {})",
+                constant,
+                i
+            );
+        }
+        assert_eq!(expected.len(), LayerFlags::NUM_LAYERS - 1);
     }
 }

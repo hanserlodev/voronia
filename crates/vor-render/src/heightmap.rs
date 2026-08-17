@@ -247,6 +247,19 @@ fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
+/// Spectral color in **linear** RGBA for a normalized value `t ∈ [0,1]`
+/// (`0` → first stop, `1` → last stop). Same ramp as `height_color` but exposed
+/// for other layers (temperature, precipitation) that use `scheme(...)`.
+pub fn spectral_linear(t: f32) -> [f32; 4] {
+    let srgb = spectral(t.clamp(0.0, 1.0));
+    [
+        srgb_to_linear(srgb[0]),
+        srgb_to_linear(srgb[1]),
+        srgb_to_linear(srgb[2]),
+        1.0,
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

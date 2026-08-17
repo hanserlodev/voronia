@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Status** | Active development — v0.2.0 released |
+| **Status** | Active development — v0.3.0 released |
 | **Document version** | 2.0 |
 | **Date** | 30 July 2026 |
 | **Project name** | `Voronia` (see §1.3 for rationale and verification) |

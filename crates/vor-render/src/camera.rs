@@ -162,7 +162,11 @@ impl Camera {
         let w_needed = w * pad;
         let h_needed = h * pad;
         let h_for_w = w_needed / self.aspect.max(1e-6);
-        let extent_y = h_needed.max(h_for_w);
+        // Fit to cover the whole viewport (like Azgaar's `fitMapToScreen`):
+        // pick the smaller visible height so the map fills the window entirely,
+        // cropping the axis that does not match, instead of leaving letterbox
+        // (empty, gray) bands outside the world.
+        let extent_y = h_needed.min(h_for_w);
         self.center = [cx, cy];
         self.extent_y = extent_y.clamp(Self::MIN_EXTENT, Self::MAX_EXTENT);
         self.constrain();

@@ -39,6 +39,11 @@ Renders filled lake polygons with a color per group (freshwater, salt, sinkhole,
 - **Grid vs Pack**: Pack (features post-repack)
 - **File**: `vor-render/src/lakes.rs`
 
+### Estado actual (7 ago 2026)
+✅ **Rellenos implementados** — `build_lake_mesh(pack, map_width, map_height, &FractalSettings)` (`lakes.rs`) tessella cada feature `Lake` como polígono cerrado con lyon (`FillTessellator`), coloreado por `lake_group` (Freshwater/Salt/Dry/Sinkhole/Lava) con su alfa.
+
+🟡 **Fractalización de bordes — recién portada**. Ahora usa el **mismo pipeline fractal de las costas** que Azgaar aplica en `featurePathRenderer()` (`src/renderers/draw-features.ts`): `simplify(0.3)` → `clipPoly(1)` → `fractalizeCoastline(feature.id, feature.type)` → `buildCoastlinePath` → `Z` → fill lyon. La semilla por feature es `"{seed}_c{featureId}"` con `is_lake=true` (activa `lake_smooth_thresh_mult`). Pendiente: verificación visual de paridad de bordes.
+
 ---
 
 ## 2. Rivers
@@ -66,9 +71,8 @@ riverWidth = (offset / 1.5)^1.8  // mouth width in km
 
 ### Portability to Voronia
 - **Pipeline**: TriangleList (triangle ribbon, already implemented)
-- **Current state**: `vor-render/src/river.rs` — simple quads, fixed width per river, no meandering
-- **Required improvement**: Implement Catmull-Rom, progressive width per segment
-- Deferred to Phase 3 — the current implementation is functional
+- **Current state**: ✅ **~90%**. `vor-sim::river` es el port completo de `hydrology`/`width`/`meander`/`river_def`/`specify`/`river_def` (ver `references/status.md` «Port de ríos», 12 tests). El render en `vor-render/src/river.rs` genera un ribbon de triángulos con meandros (`vor-render::mesh`).
+- **Required improvement** (10% restante): pulido del ribbon y paridad visual final contra Azgaar.
 
 ---
 
@@ -99,11 +103,10 @@ const fill = scheme(1 - (t - tMin) / delta);  // tMin=-50, tMax=50
 ```
 
 ### Portability to Voronia
-- **Option A (fast)**: Voronoi cell color by temperature via `build_pack_mesh()` with mapping `pack.cells.grid_id → grid.cells.temperature`. Spectral gradient: blue (−50) → red (+50).
-- **Option B (isolines)**: Implement `connectVertices()` and marching-squares-like path walking on the Voronoi graph. Much more work.
-- **MVP**: Option A — color pack cells according to the source grid's temperature.
 - **Pipeline**: TriangleList
+- **Method**: ✅ **Portada** — `build_temperature_mesh(&grid)` (`temperature.rs`) replica exactamente `draw-temperature.ts`: banda base = rect del mapa entero con el color de `minTemp`, `step = max(round(|maxTemp-minTemp|/5), 1)`, y por cada nivel `t ∊ [min+step, max)` camina el grafo de la grilla con `connect_vertices(&grid.vertices, start, |c| temp[c] >= t, ... , close_ring)`, relax 1-de-cada-4 + vértices de borde, y rellena con `scheme(1 - (t-tMin)/delta)`. El color usa la misma rampa espectral de heightmap (tMin=-50, delta=100).
 - **File**: `vor-render/src/temperature.rs`
+- **Pendiente**: verificación visual de paridad de los isolines vs FMG. Paridad a nivel fuente **verificada el 10 ago 2026** contra `draw-temperature.ts`, `pathUtils.ts`, d3 `basisClosed.js` y el CSS `#temperature` real (`fill-opacity:0.3`, `stroke-width:1.8`) — ver `docs/analysis/fmg-temperature-precipitation.md` §4 (divergencias corregidas: loop de `build_curve_basis_closed`, alpha del fill, stroke-width, `d3_range`, `fill-rule`, pipeline blended).
 
 ---
 
@@ -129,11 +132,10 @@ cells.i.filter(i => cells.h[i] >= 20 && cells.prec[i]).forEach(i => {
 Filtered to land cells (`height >= 20`) with non-zero precipitation.
 
 ### Portability to Voronia
-- **Option A (cells)**: Color pack Voronoi cells according to the source grid's precipitation. More intense blue where it rains more.
-- **Option B (circles)**: Render instanced circles. Requires an instancing shader or sprites — more work.
-- **MVP**: Option A — `build_pack_mesh()` with blue intensity proportional to precipitation.
 - **Pipeline**: TriangleList
+- **Method**: ✅ **Portada** — `build_precipitation_mesh(&grid)` (`precipitation.rs`) replica `drawPrecipitation`: por cada celda con `height >= 20 && prec > 0`, dibuja un círculo (polígono 24 segmentos) centrado en `grid.points[i]` con radio `rn(sqrt(prec/4)/cellsNumberModifier, 2)`, color `#003dff`. El `cellsNumberModifier = (cells/10000)⁰·²⁵` usa `grid.cells_desired`.
 - **File**: `vor-render/src/precipitation.rs`
+- **Pendiente**: verificación visual de paridad de tamaños de círculo vs FMG. CSS `#prec` verificado contra `public/styles/default.json` (10 ago 2026): `fill:#003dff`, `stroke-width:0` → el port (fill sin stroke) ya coincide.
 
 ---
 
@@ -152,22 +154,27 @@ Renders two types of ice as polygons:
 | — | `ice.kind` | `IceKind::{Glacier,Iceberg}` |
 
 ### Rendering in Azgaar
-Each ice element is rendered as `<polygon points="..." />`. No stroke on glaciers, thin stroke on icebergs.
+Each ice element is rendered as `<polygon points="..." />`. The `#ice` layer CSS (default.json): `fill:#f1f8fe`, `stroke:#e8f0f6`, `stroke-width:0.5`, `opacity:0.9`, `filter:url(#dropShadow01)`. Icebergs can carry a runtime `offset` (translate transform) for the drift animation; saved maps may omit it.
 
 ### Portability to Voronia
 - **Pipeline**: TriangleList
 - **Method**: Tessellate `ice.vertices` as a closed polygon with lyon
-- **Color**: `[0.93, 0.95, 0.99, 0.9]` — ice white
+- **Color**: `[0.93, 0.95, 0.99, 0.9]` — ice white (aproximación del `#f1f8fe` con opacity 0.9; sin stroke aún)
 - **File**: `vor-render/src/ice_layer.rs`
+
+### Estado actual (10 ago 2026)
+✅ **Implementado** — `build_ice_mesh(&world.ice)` (`ice_layer.rs`) tessella cada `Ice` como polígono cerrado con lyon y cableado en `vor-app` (`add_layer_mesh`). Está implementado aunque la doc anterior lo marcaba como "no implementado". **Pendiente de paridad CSS**: fill lineal real de `#f1f8fe`, stroke `#e8f0f6` 0.5, opacity 0.9 (exige pipeline blended) y el `dropShadow01` filter.
 
 ---
 
 ## Portability summary
 
-| Layer | Priority | Pipeline | Method | Data source |
+> Actualizado: 10 ago 2026. Leyenda: ✅ completo/avanzado · 🟡 a medias · ❌ sin implementar.
+
+| Layer | Priority | State | Method | Data source |
 |------|-----------|----------|--------|-----------------|
-| Lakes | MVP | TriangleList | Tessellate feature perimeters | `pack.features[].lake_group` + `.perimeter_vertices` |
-| Rivers | Improvement | TriangleList | Already implemented (quads) | `world.rivers[].cell_path` |
-| Temperature | MVP | TriangleList | `build_pack_mesh()` color by temperature via grid_id | `grid.cells.temperature` |
-| Precipitation | MVP | TriangleList | `build_pack_mesh()` color by precipitation via grid_id | `grid.cells.precipitation` |
-| Ice | MVP | TriangleList | Tessellate `ice.vertices` as a polygon | `world.ice[].vertices` |
+| Lakes | MVP | ✅ Rellenos + bordes fractálizados (pipeline costas) implementados; pendiente verificación visual | Tessellate feature perimeters | `pack.features[].lake_group` + `.perimeter_vertices` |
+| Rivers | Improvement | ✅ 90% — port completo de hidrología/meander/witdh | Ribbon de triángulos (`vor-render/src/river.rs`) | `world.rivers[].cell_path` |
+| Temperature | MVP | ✅ Portada (`build_temperature_mesh`) + **paridad verificada contra fuentes reales (10 ago 2026)**: CSS `fill-opacity:0.3`/`stroke-width:1.8`, `curveBasisClosed` exacto, `d3.range`, pipeline blended | Bandas de isolines rellenas sobre la grilla | `grid.cells.temperature` |
+| Precipitation | MVP | ✅ Portada (`build_precipitation_mesh`), CSS `#prec` verificado (`fill:#003dff`, stroke-width 0); pendiente verificación visual de tamaños | Círculos `#003dff` en celdas tierra 20+ prec 0, radio por densidad | `grid.cells.precipitation` |
+| Ice | MVP | ✅ Implementado (`build_ice_mesh`); **pendiente paridad CSS** (fill `#f1f8fe`, stroke `#e8f0f6` 0.5, opacity 0.9, blended) | Tessellate `ice.vertices` as a polygon | `world.ice[].vertices` |

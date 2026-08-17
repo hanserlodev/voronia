@@ -92,6 +92,11 @@ pub struct PackCells {
     /// Id of the feature (island/lake/ocean) the cell belongs to.
     /// Populated by `vor-import` from `re_graph` + grid feature mapping.
     pub feature_id: Vec<u16>,
+    /// Cell type with respect to water/coast, propagated from the source grid
+    /// (`grid.cells.t` → pack). Azgaar's encoding: `-2` lake, `-1` coastal water,
+    /// `1` coastal land, other inland land / deep ocean. Used by state/culture
+    /// expansion cost functions (`getTypeCost`). Populated by `vor-import`.
+    pub water_type: Vec<i8>,
     /// Adjacent pack cell IDs (inner neighbors, without boundary).
     /// Populated by `vor-import` during `re_graph` (from the second `calculate_voronoi`).
     /// Not persisted — derivable from the Delaunay.

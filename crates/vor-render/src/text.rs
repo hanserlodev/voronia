@@ -2,7 +2,7 @@ use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
     TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
-use tracing::{info, trace, warn};
+use tracing::{trace, warn};
 use wgpu::{Device, MultisampleState, Queue, TextureFormat};
 
 /// GPU text system using glyphon.
@@ -10,6 +10,39 @@ use wgpu::{Device, MultisampleState, Queue, TextureFormat};
 /// Owns the font system, texture atlas, glyph cache, and viewport. Follows the
 /// glyphon example pattern: `prepare` BEFORE the render pass, `render` inside
 /// the render pass.
+/// A screen-space text label: text + position + size + color.
+#[derive(Debug, Clone)]
+pub struct Label {
+    pub text: String,
+    /// Screen X (left edge), surface pixels.
+    pub x: f32,
+    /// Screen Y (top edge), surface pixels.
+    pub y: f32,
+    /// Font size in surface pixels (scaled by caller when the camera zooms).
+    pub font_size: f32,
+    /// Linear RGBA color.
+    pub color_rgba: [f32; 4],
+}
+
+impl Label {
+    /// Creates a label with the given screen position/size/color.
+    pub fn new(
+        text: impl Into<String>,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color_rgba: [f32; 4],
+    ) -> Self {
+        Self {
+            text: text.into(),
+            x,
+            y,
+            font_size,
+            color_rgba,
+        }
+    }
+}
+
 pub struct TextSystem {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
@@ -17,7 +50,7 @@ pub struct TextSystem {
     pub viewport: Viewport,
     pub renderer: TextRenderer,
     renderer_no_msaa: TextRenderer,
-    buffer: Buffer,
+    buffers: Vec<Buffer>,
     pending_draw: bool,
 }
 
@@ -32,10 +65,7 @@ impl TextSystem {
         let cache = Cache::new(device);
         let mut font_system = FontSystem::new();
         let font_count = font_system.db().len();
-        info!("glyphon FontSystem loaded with {font_count} font faces");
-        for face in font_system.db().faces() {
-            info!("  font: {:?}", face.families);
-        }
+        trace!("glyphon FontSystem loaded with {font_count} font faces");
         let swash_cache = SwashCache::new();
         let mut atlas = TextAtlas::new(device, queue, &cache, format);
         let mut viewport = Viewport::new(device, &cache);
@@ -48,7 +78,10 @@ impl TextSystem {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            None,
+            // The MSAA renderer draws inside the map pass, which now carries a
+            // depth-stencil attachment (the landmask buffer). Its pipeline must
+            // declare a matching depth-stencil state or wgpu rejects the draw.
+            Some(crate::renderer::stencil_passthrough()),
         );
         let renderer_no_msaa =
             TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
@@ -71,7 +104,7 @@ impl TextSystem {
             viewport,
             renderer,
             renderer_no_msaa,
-            buffer,
+            buffers: vec![buffer],
             pending_draw: false,
         }
     }
@@ -86,83 +119,90 @@ impl TextSystem {
         );
     }
 
-    /// Prepares a text line for rendering.
+    /// Prepares one or more text labels for rendering.
     ///
-    /// Must be called OUTSIDE the render pass (before `begin_render_pass`),
-    /// because it uploads glyphs to the GPU via `queue.write_texture` and
-    /// `queue.write_buffer`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn prepare(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        text: &str,
-        x: f32,
-        y: f32,
-        font_size: f32,
-        color_rgba: [f32; 4],
-    ) {
-        let [r, g, b, a] = color_rgba;
-        let color = Color::rgba(
-            (r * 255.0) as u8,
-            (g * 255.0) as u8,
-            (b * 255.0) as u8,
-            (a * 255.0) as u8,
-        );
+    /// Each label is a separate line with its own buffer, so many independent
+    /// snippets (grid labels, burgs, rivers...) can be batched in a single
+    /// GPU prepare. Must be called OUTSIDE the render pass (before
+    /// `begin_render_pass`) because it uploads glyphs via `queue.write_texture`
+    /// and `queue.write_buffer`.
+    pub fn prepare(&mut self, device: &Device, queue: &Queue, labels: &[Label]) {
+        self.buffers.clear();
 
-        self.buffer = Buffer::new(
-            &mut self.font_system,
-            Metrics::new(font_size, font_size * 1.3),
-        );
-        self.buffer
-            .set_size(&mut self.font_system, Some(8192.0), Some(font_size * 1.3));
-        self.buffer.set_text(
-            &mut self.font_system,
-            text,
-            Attrs::new().family(Family::SansSerif),
-            Shaping::Basic,
-        );
-        self.buffer.shape_until_scroll(&mut self.font_system, true);
-
-        let runs: Vec<_> = self.buffer.layout_runs().collect();
-        trace!(
-            "text layout: '{}' -> {} layout runs, {} glyphs total",
-            text,
-            runs.len(),
-            runs.iter().map(|r| r.glyphs.len()).sum::<usize>(),
-        );
-        if let Some(run) = runs.first() {
-            if let Some(glyph) = run.glyphs.first() {
-                trace!(
-                    "  first glyph: font_size={}, font_id={:?}",
-                    glyph.font_size,
-                    glyph.font_id
-                );
-            }
+        for label in labels {
+            let buffer = Buffer::new(
+                &mut self.font_system,
+                Metrics::new(label.font_size, label.font_size * 1.3),
+            );
+            self.buffers.push(buffer);
         }
 
-        // Prepare both renderers (MSAA and non-MSAA) so both have populated glyph_vertices
+        // Populate each buffer's text (layout/shape happen at prepare time).
+        for (i, label) in labels.iter().enumerate() {
+            let buffer = &mut self.buffers[i];
+            buffer.set_size(
+                &mut self.font_system,
+                Some(8192.0),
+                Some(label.font_size * 1.3),
+            );
+            buffer.set_text(
+                &mut self.font_system,
+                &label.text,
+                Attrs::new().family(Family::SansSerif),
+                Shaping::Basic,
+            );
+            buffer.shape_until_scroll(&mut self.font_system, true);
+        }
+
+        let glyphs: usize = self
+            .buffers
+            .iter()
+            .flat_map(|b| b.layout_runs())
+            .map(|r| r.glyphs.len())
+            .sum();
+        trace!(
+            "glyphon prepare: {} labels, {} glyphs total",
+            labels.len(),
+            glyphs
+        );
+
+        // Prepare both renderers (MSAA and non-MSAA) so both have populated
+        // glyph_vertices. `prepare` consumes the `TextArea` slice by value, so
+        // build it fresh for each renderer.
         let mut ok = true;
-        for (label, r) in [
+        for (label, renderer) in [
             ("msaa", &mut self.renderer),
             ("no-msaa", &mut self.renderer_no_msaa),
         ] {
-            let ta = TextArea {
-                buffer: &self.buffer,
-                left: x,
-                top: y,
-                scale: 1.0,
-                bounds: TextBounds::default(),
-                default_color: color,
-                custom_glyphs: &[],
-            };
-            match r.prepare(
+            let areas: Vec<TextArea<'_>> = labels
+                .iter()
+                .enumerate()
+                .map(|(i, l)| {
+                    let [r, g, b, a] = l.color_rgba;
+                    let color = Color::rgba(
+                        (r * 255.0) as u8,
+                        (g * 255.0) as u8,
+                        (b * 255.0) as u8,
+                        (a * 255.0) as u8,
+                    );
+                    TextArea {
+                        buffer: &self.buffers[i],
+                        left: l.x,
+                        top: l.y,
+                        scale: 1.0,
+                        bounds: TextBounds::default(),
+                        default_color: color,
+                        custom_glyphs: &[],
+                    }
+                })
+                .collect();
+            match renderer.prepare(
                 device,
                 queue,
                 &mut self.font_system,
                 &mut self.atlas,
                 &self.viewport,
-                [ta],
+                areas,
                 &mut self.swash_cache,
             ) {
                 Ok(()) => {}
@@ -172,11 +212,7 @@ impl TextSystem {
                 }
             }
         }
-        if ok {
-            self.pending_draw = true;
-        } else {
-            self.pending_draw = false;
-        }
+        self.pending_draw = ok;
     }
 
     /// Renders to the active render pass (MSAA, the same one as the map).

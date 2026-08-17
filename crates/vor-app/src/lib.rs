@@ -10,20 +10,20 @@ use thiserror::Error;
 use tracing::info;
 use vor_core::World;
 use vor_edit::EditBuffer;
-use vor_render::biome::{biome_colors_from_catalog, build_biome_mesh};
+use vor_render::biome::{biome_colors_from_catalog, build_biome_coast_fill, build_biome_mesh};
 use vor_render::border::{build_border_mesh, BorderKind};
-use vor_render::burg::build_burg_mesh;
+use vor_render::burg::build_burg_icons_mesh;
 use vor_render::cells::build_cell_wireframe;
 use vor_render::coastline::{build_fractal_landmass_mesh, FractalSettings};
-use vor_render::contour::build_contour_lines;
-use vor_render::coordinates::build_coordinate_lines;
+use vor_render::coordinates::{build_coordinate_graticule, GraticuleLabel};
 use vor_render::culture_layer::build_culture_mesh;
 use vor_render::grid::build_grid_lines;
 use vor_render::heightmap::HeightmapMesh;
 use vor_render::ice_layer::build_ice_mesh;
 use vor_render::lakes::build_lake_mesh;
 use vor_render::layers::LayerFlags;
-use vor_render::population_layer::build_population_mesh;
+use vor_render::mesh::build_land_cells_mask_mesh;
+use vor_render::population_layer::build_population_bars_mesh;
 use vor_render::precipitation::build_precipitation_mesh;
 use vor_render::province_layer::build_province_mesh;
 use vor_render::relief::build_relief_mesh;
@@ -61,7 +61,7 @@ pub struct ViewerConfig {
 
 const PANEL_WIDTH: f32 = 240.0;
 
-pub fn run(cfg: ViewerConfig) -> Result<(), AppError> {
+pub fn run(mut cfg: ViewerConfig) -> Result<(), AppError> {
     let event_loop = EventLoop::new().map_err(|e| AppError::Winit(e.to_string()))?;
     let mut app = App {
         cfg: Some(cfg),
@@ -154,12 +154,26 @@ struct State {
     // Indices of line layers in renderer.line_layers
     line_cells_idx: usize,
     line_grid_idx: usize,
-    line_contours_idx: usize,
     line_coordinates_idx: usize,
     line_routes_idx: usize,
+    /// Indices of the goods sub-layers (cells + icons) in renderer.layers.
+    layer_goods_cells_idx: usize,
+    layer_goods_icons_idx: usize,
+    /// Indices of the market sub-layers (fill + border + center).
+    layer_market_fill_idx: usize,
+    layer_market_border_idx: usize,
+    layer_market_center_idx: usize,
+    /// Index of the trade routes layer.
+    layer_trade_idx: usize,
+    /// Graticule labels (lat/long) drawn in world space when the coordinates
+    /// layer is enabled.
+    graticule_labels: Vec<GraticuleLabel>,
+    /// Camera `extent_y` right after initial framing — reference for zoom
+    /// scaling of text/graticule labels.
+    fit_extent_y: f32,
 }
 
-async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
+async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     let size = window.inner_size();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
 
@@ -218,7 +232,6 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         cfg.mesh.bounds_min,
         cfg.mesh.bounds_max
     );
-    renderer.set_mesh(&cfg.mesh);
 
     let mesh_bounds_min = cfg.mesh.bounds_min;
     let mesh_bounds_max = cfg.mesh.bounds_max;
@@ -267,6 +280,47 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         is_water.iter().filter(|&&w| w).count()
     );
 
+    // --- Mask source (layer 0, stencil) = union of the fractal landmass and
+    // the land cells ---
+    // The fractal landmass can shrink below the land cells on small islands,
+    // leaving those cells outside the mask and therefore unpainted (holes that
+    // "fight the sea"). Merging a white mesh of every land cell into the mask
+    // guarantees a paint-bucket fill of the landmass shape.
+    let land_cells_mask =
+        build_land_cells_mask_mesh(&world.pack.vertices, world.pack.points_n(), |p| {
+            !is_water[p]
+        });
+    info!(
+        "land cells mask: {}v/{}i",
+        land_cells_mask.vertices.len(),
+        land_cells_mask.indices.len()
+    );
+    if !land_cells_mask.indices.is_empty() {
+        let shift = land_cells_mask.vertices.len() as u32;
+        cfg.mesh
+            .vertices
+            .splice(0..0, land_cells_mask.vertices.clone());
+        cfg.mesh
+            .indices
+            .splice(0..0, land_cells_mask.indices.clone());
+        for idx in cfg
+            .mesh
+            .indices
+            .iter_mut()
+            .skip(land_cells_mask.indices.len())
+        {
+            *idx += shift;
+        }
+        cfg.mesh.bounds_min = land_cells_mask.bounds_min;
+        cfg.mesh.bounds_max = land_cells_mask.bounds_max;
+    }
+    info!(
+        "mask mesh (fractal ∪ cells): {}v/{}i",
+        cfg.mesh.vertices.len(),
+        cfg.mesh.indices.len()
+    );
+    renderer.set_mesh(&cfg.mesh);
+
     // --- Additional layers (draw order: bottom→top) ---
 
     // 1. Relief (landmass shading)
@@ -281,6 +335,29 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     // 2. Biomes (landmass color)
     let biome_colors = biome_colors_from_catalog(&world.biomes);
     let mut biome_mesh = build_biome_mesh(&world.pack, &biome_colors);
+    // Coast fill: the fractal coastline protrudes beyond the outermost land
+    // cells (fractal displacement), leaving a white halo where the mask covers
+    // but the cell fill does not. Recolor the fractal landmass with the nearest
+    // land cell's biome and prepend it, so the cell fill paints on top and the
+    // biome color reaches exactly up to the fractal coast.
+    let coast_fill = build_biome_coast_fill(&cfg.mesh, &world.pack, &is_water, &biome_colors);
+    if !coast_fill.indices.is_empty() {
+        let shift = coast_fill.vertices.len() as u32;
+        biome_mesh
+            .vertices
+            .splice(0..0, coast_fill.vertices.clone());
+        biome_mesh.indices.splice(0..0, coast_fill.indices.clone());
+        for idx in biome_mesh.indices.iter_mut().skip(coast_fill.indices.len()) {
+            *idx += shift;
+        }
+        biome_mesh.bounds_min = coast_fill.bounds_min;
+        biome_mesh.bounds_max = coast_fill.bounds_max;
+        info!(
+            "coast fill: {}v/{}i prepended to biomes mesh",
+            coast_fill.vertices.len(),
+            coast_fill.indices.len()
+        );
+    }
     append_water_gap(&mut biome_mesh, &world.pack, &is_water, |p| {
         let bi = world.pack.cells.biome.get(p).copied().unwrap_or(0) as usize;
         biome_colors
@@ -293,24 +370,28 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         biome_mesh.vertices.len(),
         biome_mesh.indices.len()
     );
-    let _l_biomes = renderer.add_layer_mesh(&biome_mesh);
+    let _l_biomes = renderer.add_layer_mesh_masked(&biome_mesh, false);
 
     // 3. Climate: temperature, precipitation, ice
-    let temp_mesh = build_temperature_mesh(&world.pack.vertices, &world.pack, &world.grid);
+    let temp_mesh = build_temperature_mesh(&world.grid);
     info!(
         "temperature mesh: {}v/{}i",
         temp_mesh.vertices.len(),
         temp_mesh.indices.len()
     );
-    let _l_temp = renderer.add_layer_mesh(&temp_mesh);
+    // Temperature fills are semi-transparent (CSS `fill-opacity: 0.3`), so the
+    // layer must be drawn with the alpha-blended pipeline to blend over biomes
+    // instead of overwriting them. FMG masks it to land too (`mask: #land`),
+    // so it registers masked + blended.
+    let _l_temp = renderer.add_layer_mesh_masked(&temp_mesh, true);
 
-    let prec_mesh = build_precipitation_mesh(&world.pack.vertices, &world.pack, &world.grid);
+    let prec_mesh = build_precipitation_mesh(&world.grid);
     info!(
         "precipitation mesh: {}v/{}i",
         prec_mesh.vertices.len(),
         prec_mesh.indices.len()
     );
-    let _l_prec = renderer.add_layer_mesh(&prec_mesh);
+    let _l_prec = renderer.add_layer_mesh_masked(&prec_mesh, false);
 
     let ice_mesh = build_ice_mesh(&world.ice);
     info!(
@@ -321,7 +402,15 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     let _l_ice = renderer.add_layer_mesh(&ice_mesh);
 
     // 4. Water: lakes, rivers
-    let lake_mesh = build_lake_mesh(&world.pack);
+    let lake_mesh = build_lake_mesh(
+        &world.pack,
+        world.grid.width as f32,
+        world.grid.height as f32,
+        &FractalSettings {
+            seed: world.header.seed.parse::<u64>().unwrap_or(0),
+            ..Default::default()
+        },
+    );
     info!(
         "lake mesh: {}v/{}i",
         lake_mesh.vertices.len(),
@@ -347,76 +436,68 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
 
     // 5. Human geography fills: states, provinces, cultures, religions, population, zones
     // Each one carries its own water gap to keep colors from bleeding into the ocean.
+    // States/provinces/cultures/religions use the common isoline engine
+    // (`build_region_mesh` + `append_water_gap`), matching FMG `getIsolines`.
 
-    let mut state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states);
-    append_water_gap(&mut state_mesh, &world.pack, &is_water, |p| {
-        let sid = world.pack.cells.state.get(p).copied().unwrap_or(0) as usize;
-        match world.states.get(sid) {
-            Some(s) if !s.color.is_empty() => vor_render::biome::hex_color_to_linear(&s.color),
-            _ => [0.0, 0.0, 0.0, 0.0],
-        }
-    });
+    let state_mesh = build_state_mesh(&world.pack.vertices, &world.pack, &world.states, &is_water);
     info!(
         "state fill + water gap: {}v/{}i",
         state_mesh.vertices.len(),
         state_mesh.indices.len()
     );
-    let _l_state = renderer.add_layer_mesh(&state_mesh);
+    let _l_state = renderer.add_layer_mesh_masked(&state_mesh, true);
 
-    let mut province_mesh =
-        build_province_mesh(&world.pack.vertices, &world.pack, &world.provinces);
-    append_water_gap(&mut province_mesh, &world.pack, &is_water, |p| {
-        let pid = world.pack.cells.province.get(p).copied().unwrap_or(0) as usize;
-        match world.provinces.get(pid) {
-            Some(pr) if !pr.color.is_empty() => vor_render::biome::hex_color_to_linear(&pr.color),
-            _ => [0.0, 0.0, 0.0, 0.0],
-        }
-    });
+    let province_mesh = build_province_mesh(
+        &world.pack.vertices,
+        &world.pack,
+        &world.provinces,
+        &is_water,
+    );
     info!(
         "province fill + water gap: {}v/{}i",
         province_mesh.vertices.len(),
         province_mesh.indices.len()
     );
-    let _l_province = renderer.add_layer_mesh(&province_mesh);
+    let _l_province = renderer.add_layer_mesh_masked(&province_mesh, true);
 
-    let mut culture_mesh = build_culture_mesh(&world.pack.vertices, &world.pack, &world.cultures);
-    append_water_gap(&mut culture_mesh, &world.pack, &is_water, |p| {
-        let cid = world.pack.cells.culture.get(p).copied().unwrap_or(0) as usize;
-        match world.cultures.get(cid) {
-            Some(c) if !c.color.is_empty() => vor_render::biome::hex_color_to_linear(&c.color),
-            _ => [0.0, 0.0, 0.0, 0.0],
-        }
-    });
+    let culture_mesh = build_culture_mesh(
+        &world.pack.vertices,
+        &world.pack,
+        &world.cultures,
+        &is_water,
+    );
     info!(
         "culture fill + water gap: {}v/{}i",
         culture_mesh.vertices.len(),
         culture_mesh.indices.len()
     );
-    let _l_culture = renderer.add_layer_mesh(&culture_mesh);
+    let _l_culture = renderer.add_layer_mesh_masked(&culture_mesh, true);
 
-    let mut religion_mesh =
-        build_religion_mesh(&world.pack.vertices, &world.pack, &world.religions);
-    append_water_gap(&mut religion_mesh, &world.pack, &is_water, |p| {
-        let rid = world.pack.cells.religion.get(p).copied().unwrap_or(0) as usize;
-        match world.religions.get(rid) {
-            Some(r) if !r.color.is_empty() => vor_render::biome::hex_color_to_linear(&r.color),
-            _ => [0.0, 0.0, 0.0, 0.0],
-        }
-    });
+    let religion_mesh = build_religion_mesh(
+        &world.pack.vertices,
+        &world.pack,
+        &world.religions,
+        &is_water,
+    );
     info!(
         "religion fill + water gap: {}v/{}i",
         religion_mesh.vertices.len(),
         religion_mesh.indices.len()
     );
-    let _l_religion = renderer.add_layer_mesh(&religion_mesh);
+    let _l_religion = renderer.add_layer_mesh_masked(&religion_mesh, true);
 
-    let population_mesh = build_population_mesh(&world.pack.vertices, &world.pack);
+    let population_mesh = build_population_bars_mesh(
+        &world.pack.vertices,
+        &world.pack,
+        &world.burgs,
+        1.0, // urbanization factor (Azgaar default `urbanization` = 1)
+    );
     info!(
-        "population: {}v/{}i",
+        "population bars: {}v/{}i",
         population_mesh.vertices.len(),
         population_mesh.indices.len()
     );
-    let _l_population = renderer.add_layer_mesh(&population_mesh);
+    let _l_population = renderer.add_layer_mesh_blended(&population_mesh);
 
     let zone_mesh = build_zone_mesh(&world.pack.vertices, &world.pack, &world.zones);
     info!(
@@ -424,7 +505,7 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         zone_mesh.vertices.len(),
         zone_mesh.indices.len()
     );
-    let _l_zones = renderer.add_layer_mesh(&zone_mesh);
+    let _l_zones = renderer.add_layer_mesh_blended(&zone_mesh);
 
     // 6. Borders & markers on top
     let border_state_mesh = build_border_mesh(&world.pack, BorderKind::State);
@@ -439,11 +520,11 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         border_culture_mesh.vertices.len(),
         border_culture_mesh.indices.len(),
     );
-    let _l_borders = renderer.add_layer_mesh(&border_state_mesh);
-    let _l_bprov = renderer.add_layer_mesh(&border_province_mesh);
-    let _l_bcult = renderer.add_layer_mesh(&border_culture_mesh);
+    let _l_borders = renderer.add_layer_mesh_blended(&border_state_mesh);
+    let _l_bprov = renderer.add_layer_mesh_blended(&border_province_mesh);
+    let _l_bcult = renderer.add_layer_mesh_blended(&border_culture_mesh);
 
-    let burg_mesh = build_burg_mesh(&world.pack, &world.states);
+    let burg_mesh = build_burg_icons_mesh(&world.pack, &world.states);
     info!(
         "burgs: {}v/{}i",
         burg_mesh.vertices.len(),
@@ -451,7 +532,66 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     );
     let _l_burgs = renderer.add_layer_mesh(&burg_mesh);
 
-    // --- Line layers (cells, grid, contours, coordinates) ---
+    // Extra economy layers (goods / markets / trade) are registered AFTER all
+    // the fixed-constant layers (0..18) so `active_indices()` keeps matching.
+    // They are drawn explicitly in the render loop via the indices stored here.
+
+    // 6b. Goods (cells + icons) — FMG `#goods` sub-layers.
+    let goods_cells_mesh = vor_render::goods::build_goods_cells_mesh(&world.pack, &world.goods);
+    let layer_goods_cells_idx = renderer.add_layer_mesh_masked(&goods_cells_mesh, true);
+    info!(
+        "goods cells mesh: {}v/{}i (layer {})",
+        goods_cells_mesh.vertices.len(),
+        goods_cells_mesh.indices.len(),
+        layer_goods_cells_idx
+    );
+    let goods_icons_mesh = vor_render::goods::build_goods_icons_mesh(&world.pack, &world.goods);
+    let layer_goods_icons_idx = renderer.add_layer_mesh_masked(&goods_icons_mesh, false);
+    info!(
+        "goods icons mesh: {}v/{}i (layer {})",
+        goods_icons_mesh.vertices.len(),
+        goods_icons_mesh.indices.len(),
+        layer_goods_icons_idx
+    );
+
+    // 6c. Markets (fill + border + center) — FMG `#markets`.
+    let market_fill_mesh = vor_render::market::build_market_fill_mesh(&world.pack, &world.markets);
+    let layer_market_fill_idx = renderer.add_layer_mesh_blended(&market_fill_mesh);
+    let market_border_mesh =
+        vor_render::market::build_market_border_mesh(&world.pack, &world.markets);
+    let layer_market_border_idx = renderer.add_layer_mesh_blended(&market_border_mesh);
+    let market_center_mesh =
+        vor_render::market::build_market_center_mesh(&world.markets, &world.burgs);
+    let layer_market_center_idx = renderer.add_layer_mesh(&market_center_mesh);
+    info!(
+        "markets mesh: fill {}v/{}i, border {}v/{}i, center {}v/{}i (layers {}/{}/{})",
+        market_fill_mesh.vertices.len(),
+        market_fill_mesh.indices.len(),
+        market_border_mesh.vertices.len(),
+        market_border_mesh.indices.len(),
+        market_center_mesh.vertices.len(),
+        market_center_mesh.indices.len(),
+        layer_market_fill_idx,
+        layer_market_border_idx,
+        layer_market_center_idx
+    );
+
+    // 6d. Trade routes — FMG `#tradeAnimation` (static approximation).
+    let trade_mesh = vor_render::trade::build_trade_routes_mesh(
+        &world.deals,
+        &world.burgs,
+        &world.markets,
+        &world.goods,
+    );
+    let layer_trade_idx = renderer.add_layer_mesh_blended(&trade_mesh);
+    info!(
+        "trade routes mesh: {}v/{}i (layer {})",
+        trade_mesh.vertices.len(),
+        trade_mesh.indices.len(),
+        layer_trade_idx
+    );
+
+    // --- Line layers (cells, grid, coordinates) ---
     let cells_mesh = build_cell_wireframe(&world.pack.vertices, world.pack.points_n());
     info!(
         "cells wireframe: {}v/{}i",
@@ -468,21 +608,18 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
     );
     let line_grid_idx = renderer.add_line_layer(&grid_mesh);
 
-    let contour_mesh = build_contour_lines(&world.grid);
-    info!(
-        "contour lines: {}v/{}i",
-        contour_mesh.vertices.len(),
-        contour_mesh.indices.len()
+    let coord_graticule = build_coordinate_graticule(
+        &world.coordinates,
+        world.grid.width as f32,
+        world.grid.height as f32,
     );
-    let line_contours_idx = renderer.add_line_layer(&contour_mesh);
-
-    let coord_mesh = build_coordinate_lines(mesh_bounds_min, mesh_bounds_max);
     info!(
-        "coordinate lines: {}v/{}i",
-        coord_mesh.vertices.len(),
-        coord_mesh.indices.len()
+        "coordinate graticule: {} lines ({:.0}° step), {} labels",
+        coord_graticule.lines.vertices.len() / 2,
+        vor_render::coordinates::pick_step(world.coordinates.lon_r - world.coordinates.lon_l),
+        coord_graticule.labels.len()
     );
-    let line_coordinates_idx = renderer.add_line_layer(&coord_mesh);
+    let line_coordinates_idx = renderer.add_line_layer(&coord_graticule.lines);
 
     let route_mesh = build_route_mesh(&world.routes);
     info!(
@@ -563,9 +700,16 @@ async fn init_state(window: Arc<Window>, cfg: ViewerConfig) -> State {
         text_system,
         line_cells_idx,
         line_grid_idx,
-        line_contours_idx,
         line_coordinates_idx,
         line_routes_idx,
+        layer_goods_cells_idx,
+        layer_goods_icons_idx,
+        layer_market_fill_idx,
+        layer_market_border_idx,
+        layer_market_center_idx,
+        layer_trade_idx,
+        graticule_labels: coord_graticule.labels,
+        fit_extent_y: camera.extent_y,
         active_tab: ui::TabId::Layers,
         show_export_modal: false,
         show_save_modal: false,
@@ -915,6 +1059,43 @@ impl State {
             );
         }
 
+        // Graticule labels (coordinates layer): project each world anchor to
+        // screen and batch them into the text system. Font size scales with zoom
+        // (like Azgaar's viewbox text).
+        if self.layer_flags.coordinates {
+            if let Some(ref mut ts) = self.text_system {
+                let base_font = 10.0;
+                let zoom = zoom_factor(&self.camera, self.fit_extent_y);
+                let surface = [screen_size_px.width as f32, screen_size_px.height as f32];
+                let labels: Vec<vor_render::Label> = self
+                    .graticule_labels
+                    .iter()
+                    .map(|gl| {
+                        // Longitude labels ride the viewport's top edge, latitude
+                        // labels ride the viewport's left edge (like FMG's
+                        // `drawCoordinates`), so they follow the view on pan and
+                        // zoom instead of being anchored to world (0,0).
+                        let margin = 4.0;
+                        let xy = if gl.is_latitude {
+                            let s = self.camera.world_to_screen([0.0, gl.world_y], surface);
+                            [margin, s[1] - base_font * zoom * 0.6]
+                        } else {
+                            let s = self.camera.world_to_screen([gl.world_x, 0.0], surface);
+                            [s[0] + margin, margin]
+                        };
+                        vor_render::Label::new(
+                            &gl.text,
+                            xy[0],
+                            xy[1],
+                            base_font * zoom,
+                            [0.35, 0.45, 0.55, 0.9],
+                        )
+                    })
+                    .collect();
+                ts.prepare(&self.renderer.device, &self.renderer.queue, &labels);
+            }
+        }
+
         let mut encoder =
             self.renderer
                 .device
@@ -941,7 +1122,18 @@ impl State {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: self.renderer.stencil_view().map(|view| {
+                    wgpu::RenderPassDepthStencilAttachment {
+                        view,
+                        depth_ops: None,
+                        stencil_ops: Some(wgpu::Operations {
+                            // Clear the landmask every frame; layer 0 (the
+                            // fractal landmass) stamps stencil = 1 right after.
+                            load: wgpu::LoadOp::Clear(0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                    }
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
@@ -970,10 +1162,6 @@ impl State {
             if self.layer_flags.grid {
                 self.renderer.draw_line_layer(&mut pass, self.line_grid_idx);
             }
-            if self.layer_flags.contours {
-                self.renderer
-                    .draw_line_layer(&mut pass, self.line_contours_idx);
-            }
             if self.layer_flags.coordinates {
                 self.renderer
                     .draw_line_layer(&mut pass, self.line_coordinates_idx);
@@ -981,6 +1169,29 @@ impl State {
             if self.layer_flags.routes {
                 self.renderer
                     .draw_line_layer(&mut pass, self.line_routes_idx);
+            }
+
+            // Goods sub-layers (cells + icons) — FMG `#goods`.
+            if self.layer_flags.goods {
+                self.renderer
+                    .draw_layer(&mut pass, self.layer_goods_cells_idx);
+                self.renderer
+                    .draw_layer(&mut pass, self.layer_goods_icons_idx);
+            }
+
+            // Markets sub-layers (fill + border + center) — FMG `#markets`.
+            if self.layer_flags.markets {
+                self.renderer
+                    .draw_layer(&mut pass, self.layer_market_fill_idx);
+                self.renderer
+                    .draw_layer(&mut pass, self.layer_market_border_idx);
+                self.renderer
+                    .draw_layer(&mut pass, self.layer_market_center_idx);
+            }
+
+            // Trade routes — FMG `#tradeAnimation`.
+            if self.layer_flags.trade {
+                self.renderer.draw_layer(&mut pass, self.layer_trade_idx);
             }
 
             // Text overlay (glyphon, inside the MSAA pass)
@@ -1063,6 +1274,13 @@ impl State {
 
         Ok(())
     }
+}
+
+/// Zoom factor relative to the initial fit: `fit_extent_y / extent_y`.
+/// `>1.0` when zoomed in, `<1.0` when zoomed out. Used to scale screen text
+/// (grid labels) the way Azgaar's viewbox text scales with the zoom.
+fn zoom_factor(camera: &Camera, fit_extent_y: f32) -> f32 {
+    fit_extent_y / camera.extent_y
 }
 
 async fn list_adapters() -> Vec<String> {

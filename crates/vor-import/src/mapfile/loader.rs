@@ -217,6 +217,18 @@ impl Loader {
             })
             .collect();
 
+        // Populate water_type (cells.t) for pack cells from the grid via grid_id
+        // mapping — used by the state/culture expansion cost functions.
+        pack.cells.water_type = pack
+            .cells
+            .grid_id
+            .iter()
+            .map(|&gid| {
+                let idx = gid as usize;
+                grid_cells.water_type.get(idx).copied().unwrap_or(0)
+            })
+            .collect();
+
         // --- Grid model — the Voronoi topology is not persisted in vor-core::Grid
         // (derivable), only serialized attributes. We keep points/boundary/cells/vertices.
         let grid = Grid {
@@ -258,11 +270,11 @@ impl Loader {
         let measurers = crate::mapfile::catalogs::parse_measurers(raw.get(46))?;
         let namebases = crate::mapfile::catalogs::parse_namebases(raw.get(31))?;
 
-        // Opaques: fonts [34], goods [41]/[42]/[43], custom_good_icons [45]
+        // Opaques: fonts [34], custom_good_icons [45]
         let fonts = parse_json_opaque(raw.get(34));
-        let goods = parse_json_opaque(raw.get(41));
-        let markets = parse_json_opaque(raw.get(42));
-        let deals = parse_json_opaque(raw.get(43));
+        let goods = parse_goods(raw.get(41));
+        let markets = parse_markets(raw.get(42));
+        let deals = parse_deals(raw.get(43));
         let custom_good_icons = parse_string_opaque(raw.get(45));
 
         // --- Trace each river's path (cell_path from source to mouth) ---
@@ -375,6 +387,30 @@ fn parse_json_opaque(slot: Option<&str>) -> serde_json::Value {
     }
 }
 
+/// Parses slot `[41]` → `Vec<Good>` (typed economy catalog).
+fn parse_goods(slot: Option<&str>) -> Vec<vor_core::entities::good::Good> {
+    match slot {
+        Some(s) if !s.is_empty() => serde_json::from_str(s).unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+/// Parses slot `[42]` → `Vec<Market>` (typed economy catalog).
+fn parse_markets(slot: Option<&str>) -> Vec<vor_core::entities::market::Market> {
+    match slot {
+        Some(s) if !s.is_empty() => serde_json::from_str(s).unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+/// Parses slot `[43]` → `Vec<Deal>` (typed economy catalog).
+fn parse_deals(slot: Option<&str>) -> Vec<vor_core::entities::deal::Deal> {
+    match slot {
+        Some(s) if !s.is_empty() => serde_json::from_str(s).unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
 fn parse_string_opaque(slot: Option<&str>) -> serde_json::Value {
     match slot {
         Some(s) if !s.is_empty() => serde_json::Value::String(s.to_string()),
@@ -406,6 +442,8 @@ fn voronoi_to_vor_core(v: &Voronoi) -> vor_core::voronoi::VoronoiVertices {
             .map(|v| [v[0] as i32, v[1] as i32, v[2] as i32])
             .collect(),
         cell_rings: v.cells.v.clone(),
+        cell_neighbors: v.cells.c.clone(),
+        cell_border: v.cells.b.clone(),
     }
 }
 

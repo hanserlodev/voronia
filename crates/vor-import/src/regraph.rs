@@ -257,6 +257,8 @@ fn voronoi_to_vor_core(voronoi: &Voronoi) -> VoronoiVertices {
         adjacent_cells,
         adjacent_vertices,
         cell_rings: voronoi.cells.v.clone(),
+        cell_neighbors: voronoi.cells.c.clone(),
+        cell_border: voronoi.cells.b.clone(),
     }
 }
 

@@ -1,11 +1,13 @@
-use lyon::geom::point;
-use lyon::path::Path;
 use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator, VertexBuffers};
 use vor_core::feature::{FeatureType, LakeGroup};
 use vor_core::Pack;
 
+use crate::clip_poly::clip_polygon;
+use crate::coastline::fractalize_polygon;
+use crate::coastline::FractalSettings;
+use crate::coastline_path::{build_coastline_path, coastline_path_to_lyon};
 use crate::heightmap::{ColorCtor, HeightmapMesh, HeightmapVertex};
-use crate::mesh::catmull_rom_closed;
+use crate::simplify::simplify;
 
 fn lake_color(group: Option<LakeGroup>) -> [f32; 4] {
     match group {
@@ -18,12 +20,23 @@ fn lake_color(group: Option<LakeGroup>) -> [f32; 4] {
     }
 }
 
-pub fn build_lake_mesh(pack: &Pack) -> HeightmapMesh {
+/// Builds the filled lake polygons, applying the same coastline fractal
+/// pipeline Azgaar uses in `getFeaturePath()` (draw-features.ts):
+/// `simplify(0.3)` → `clipPoly(secure=1)` → `fractalizeCoastline(feature.i,
+/// feature.type)` → `buildCoastlinePath` → close → lyon fill.
+pub fn build_lake_mesh(
+    pack: &Pack,
+    map_width: f32,
+    map_height: f32,
+    settings: &FractalSettings,
+) -> HeightmapMesh {
     let mut vertices: Vec<HeightmapVertex> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut bounds_min = [f32::INFINITY, f32::INFINITY];
     let mut bounds_max = [f32::NEG_INFINITY, f32::NEG_INFINITY];
     let mut tess = FillTessellator::new();
+    let in_bounds =
+        |p: &[f32; 2]| p[0] >= 0.0 && p[0] <= map_width && p[1] >= 0.0 && p[1] <= map_height;
 
     for feature in &pack.features {
         if feature.kind != FeatureType::Lake {
@@ -34,21 +47,34 @@ pub fn build_lake_mesh(pack: &Pack) -> HeightmapMesh {
             .perimeter_vertices
             .iter()
             .filter_map(|&vi| pack.vertices.positions.get(vi as usize).copied())
+            .filter(in_bounds)
             .collect();
         if raw.len() < 3 {
             continue;
         }
-        let smooth = catmull_rom_closed(&raw, 6);
-
-        let mut builder = Path::builder();
-        if let Some(first) = smooth.first() {
-            builder.begin(point(first[0], first[1]));
-            for pt in smooth.iter().skip(1) {
-                builder.line_to(point(pt[0], pt[1]));
-            }
-            builder.end(true);
+        let simplified = if settings.simplify_tolerance > 0.0 {
+            simplify(&raw, settings.simplify_tolerance)
+        } else {
+            raw
+        };
+        if simplified.len() < 3 {
+            continue;
         }
-        let path = builder.build();
+        let clipped = clip_polygon(&simplified, map_width, map_height, settings.clip_secure);
+        if clipped.len() < 3 {
+            continue;
+        }
+
+        let (fractal_pts, spans) = fractalize_polygon(
+            &clipped,
+            feature.id as usize,
+            true,
+            map_width,
+            map_height,
+            settings,
+        );
+        let coastline_path = build_coastline_path(&fractal_pts, &spans);
+        let path = coastline_path_to_lyon(&coastline_path);
 
         let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
         let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));

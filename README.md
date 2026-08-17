@@ -6,7 +6,7 @@ Voronia is a from-scratch reimplementation of the procedural pipeline behind [Az
 
 ## Status
 
-Development version: **0.2.0**. See [`CHANGELOG.md`](CHANGELOG.md). The master plan — roadmap, data model, architectural decisions — lives in [`docs/plans/master-plan.md`](docs/plans/master-plan.md).
+Development version: **0.3.0**. See [`CHANGELOG.md`](CHANGELOG.md). The master plan — roadmap, data model, architectural decisions — lives in [`docs/plans/master-plan.md`](docs/plans/master-plan.md).
 
 **Completed phases** (roadmap §22):
 

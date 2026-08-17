@@ -1,4 +1,8 @@
+pub mod cultures;
+pub mod provinces;
+pub mod religions;
 pub mod river;
+pub mod states;
 
 #[cfg(test)]
 mod tests {

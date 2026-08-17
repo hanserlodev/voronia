@@ -396,6 +396,8 @@ mod tests {
             adjacent_cells: Vec::new(),
             adjacent_vertices: Vec::new(),
             cell_rings: Vec::new(),
+            cell_neighbors: Vec::new(),
+            cell_border: Vec::new(),
         };
         let features = vec![make_test_feature()];
         let settings = FractalSettings::default();

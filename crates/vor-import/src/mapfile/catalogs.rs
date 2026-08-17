@@ -281,6 +281,8 @@ pub struct CultureRaw {
     #[serde(default)]
     pub color: String,
     #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
     pub expansionism: f32,
     #[serde(default)]
     pub shield: serde_json::Value,
@@ -598,6 +600,7 @@ pub fn parse_religions(slot29: Option<&str>) -> Result<Vec<Religion>, CatalogErr
             color: r.color,
             kind,
             expansion,
+            expansionism: 0.0,
             center_cell: r.center,
             cells: 0,
             area_px: 0,
@@ -820,6 +823,8 @@ pub struct ZoneRaw {
     pub cells: Vec<u32>,
     #[serde(default)]
     pub color: String,
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 pub fn parse_zones(slot38: Option<&str>) -> Result<Vec<Zone>, CatalogError> {
@@ -833,8 +838,10 @@ pub fn parse_zones(slot38: Option<&str>) -> Result<Vec<Zone>, CatalogError> {
             name: z.name,
             color: z.color,
             cells: z.cells,
-            style: Some(z.kind_str),
+            style: Some(z.kind_str.clone()),
             description: None,
+            hidden: z.hidden,
+            kind: z.kind_str,
         })
         .collect())
 }

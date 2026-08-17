@@ -26,6 +26,45 @@ pub struct LayerBuffer {
     /// `alpha == 0` (the ocean) stay transparent and let the sea pass through,
     /// matching Azgaar's `oceanHeights.data-render = 0` (ocean has no heightmap).
     pub blend: bool,
+    /// Draw with the landmask test pipeline (stencil == 1), clipping the layer
+    /// to the fractal landmass. This is the wgpu equivalent of Azgaar's
+    /// `mask: url(#land)` (see `docs/layers/biosphere-layers.md`).
+    pub masked: bool,
+}
+
+/// Stencil-only buffer used to clip thematic fills (biomes, states, ...) to the
+/// fractal landmass, replicating Azgaar's `mask: url(#land)` technique.
+///
+/// The depth aspect of the texture is never used; it exists only so the format
+/// (Depth24PlusStencil8) is compatible with every pipeline in the map pass.
+pub const STENCIL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
+
+/// A `DepthStencilState` that ignores stencil entirely (always passes, keeps).
+/// Required for pipelines drawn in the map pass, which now carries a
+/// depth-stencil attachment.
+pub fn stencil_passthrough() -> wgpu::DepthStencilState {
+    wgpu::DepthStencilState {
+        format: STENCIL_FORMAT,
+        depth_write_enabled: false,
+        depth_compare: wgpu::CompareFunction::Always,
+        stencil: wgpu::StencilState {
+            front: wgpu::StencilFaceState {
+                compare: wgpu::CompareFunction::Always,
+                fail_op: wgpu::StencilOperation::Keep,
+                depth_fail_op: wgpu::StencilOperation::Keep,
+                pass_op: wgpu::StencilOperation::Keep,
+            },
+            back: wgpu::StencilFaceState {
+                compare: wgpu::CompareFunction::Always,
+                fail_op: wgpu::StencilOperation::Keep,
+                depth_fail_op: wgpu::StencilOperation::Keep,
+                pass_op: wgpu::StencilOperation::Keep,
+            },
+            read_mask: 0,
+            write_mask: 0,
+        },
+        bias: wgpu::DepthBiasState::default(),
+    }
 }
 
 #[derive(Debug, Error)]
@@ -55,11 +94,23 @@ pub struct Renderer {
     /// Transparent (alpha-blended) pipeline for the ocean so the texture
     /// canvas/paper background shows through the sea (Azgaar parity).
     pub ocean_pipeline: wgpu::RenderPipeline,
+    /// Writes `stencil = 1` where the fractal landmass is (layer 0). Color
+    /// keeps drawing the landmass fill (Azgaar's `#land` mask source).
+    pub mask_write_pipeline: wgpu::RenderPipeline,
+    /// Clips an opaque thematic layer to the landmass (`stencil == 1`).
+    pub mask_test_pipeline: wgpu::RenderPipeline,
+    /// Clips an alpha-blended thematic layer to the landmass (`stencil == 1`).
+    /// Used by climate layers that FMG masks to land too (temperature,
+    /// precipitation), so their fills never bleed into the ocean.
+    pub mask_test_blend_pipeline: wgpu::RenderPipeline,
 
     // MSAA 4x
     pub msaa_count: u32,
     pub msaa_texture: Option<wgpu::Texture>,
     pub msaa_view: Option<wgpu::TextureView>,
+    // Stencil mask (landmass clip), MSAA-matched
+    pub stencil_texture: Option<wgpu::Texture>,
+    pub stencil_view: Option<wgpu::TextureView>,
 
     // Ocean background: a full-world rectangle filled with the sea color so
     // the ocean never bleeds past the world edge (Azgaar has no sea beyond the
@@ -117,6 +168,25 @@ impl Renderer {
             view_formats: &[],
         });
         let msaa_view = Some(msaa_texture.create_view(&wgpu::TextureViewDescriptor::default()));
+
+        // Stencil mask buffer (landmass clip). MSAA-matched so it can be used in
+        // the same render pass as the color MSAA targets.
+        let stencil_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vor-stencil-buffer"),
+            size: wgpu::Extent3d {
+                width: size.0.max(1),
+                height: size.1.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: msaa_count,
+            dimension: wgpu::TextureDimension::D2,
+            format: STENCIL_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let stencil_view =
+            Some(stencil_texture.create_view(&wgpu::TextureViewDescriptor::default()));
 
         // Camera uniform buffer (4x4 matrix = 64 bytes).
         let camera_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -215,7 +285,7 @@ impl Renderer {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(stencil_passthrough()),
             multisample,
             multiview: None,
             cache: None,
@@ -248,7 +318,7 @@ impl Renderer {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(stencil_passthrough()),
             multisample,
             multiview: None,
             cache: None,
@@ -277,11 +347,122 @@ impl Renderer {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(stencil_passthrough()),
             multisample,
             multiview: None,
             cache: None,
         });
+
+        // --- Landmask pipelines (Azgaar `mask: url(#land)` equivalent) ---
+
+        // Mask write: draws the landmass fill AND stamps stencil = 1 (replace), so
+        // later masked fills only paint where the land is (ocean/lakes excluded).
+        let mask_write_stencil = wgpu::DepthStencilState {
+            format: STENCIL_FORMAT,
+            depth_write_enabled: false,
+            depth_compare: wgpu::CompareFunction::Always,
+            stencil: wgpu::StencilState {
+                front: wgpu::StencilFaceState {
+                    compare: wgpu::CompareFunction::Always,
+                    fail_op: wgpu::StencilOperation::Replace,
+                    depth_fail_op: wgpu::StencilOperation::Replace,
+                    pass_op: wgpu::StencilOperation::Replace,
+                },
+                back: wgpu::StencilFaceState {
+                    compare: wgpu::CompareFunction::Always,
+                    fail_op: wgpu::StencilOperation::Replace,
+                    depth_fail_op: wgpu::StencilOperation::Replace,
+                    pass_op: wgpu::StencilOperation::Replace,
+                },
+                read_mask: u32::MAX,
+                write_mask: u32::MAX,
+            },
+            bias: wgpu::DepthBiasState::default(),
+        };
+        let mask_write_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("vor-landmask-write-pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[vertex_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(mask_write_stencil),
+            multisample,
+            multiview: None,
+            cache: None,
+        });
+
+        // Mask test (opaque): only paints where stencil == 1.
+        let mask_test_stencil = wgpu::DepthStencilState {
+            format: STENCIL_FORMAT,
+            depth_write_enabled: false,
+            depth_compare: wgpu::CompareFunction::Always,
+            stencil: wgpu::StencilState {
+                front: wgpu::StencilFaceState {
+                    compare: wgpu::CompareFunction::Equal,
+                    fail_op: wgpu::StencilOperation::Keep,
+                    depth_fail_op: wgpu::StencilOperation::Keep,
+                    pass_op: wgpu::StencilOperation::Keep,
+                },
+                back: wgpu::StencilFaceState {
+                    compare: wgpu::CompareFunction::Equal,
+                    fail_op: wgpu::StencilOperation::Keep,
+                    depth_fail_op: wgpu::StencilOperation::Keep,
+                    pass_op: wgpu::StencilOperation::Keep,
+                },
+                read_mask: u32::MAX,
+                write_mask: 0,
+            },
+            bias: wgpu::DepthBiasState::default(),
+        };
+        let make_mask_pipeline = |blend: bool| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("vor-landmask-test-pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "vs_main",
+                    buffers: &[vertex_layout()],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "fs_main",
+                    targets: if blend {
+                        &line_color_targets
+                    } else {
+                        &color_targets
+                    },
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: Some(mask_test_stencil.clone()),
+                multisample,
+                multiview: None,
+                cache: None,
+            })
+        };
+        let mask_test_pipeline = make_mask_pipeline(false);
+        let mask_test_blend_pipeline = make_mask_pipeline(true);
 
         Self {
             device,
@@ -295,9 +476,14 @@ impl Renderer {
             heightmap_pipeline,
             line_pipeline,
             ocean_pipeline,
+            mask_write_pipeline,
+            mask_test_pipeline,
+            mask_test_blend_pipeline,
             msaa_count,
             msaa_texture: Some(msaa_texture),
             msaa_view,
+            stencil_texture: Some(stencil_texture),
+            stencil_view,
             ocean_buf: None,
             ocean_index_buf: None,
             ocean_index_count: 0,
@@ -333,6 +519,24 @@ impl Renderer {
         });
         self.msaa_view = Some(tex.create_view(&wgpu::TextureViewDescriptor::default()));
         self.msaa_texture = Some(tex);
+
+        // Recreate the stencil buffer at the new size.
+        let stex = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vor-stencil-buffer"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: self.msaa_count,
+            dimension: wgpu::TextureDimension::D2,
+            format: STENCIL_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        self.stencil_view = Some(stex.create_view(&wgpu::TextureViewDescriptor::default()));
+        self.stencil_texture = Some(stex);
     }
 
     /// Uploads the tessellated heightmap mesh to the GPU.
@@ -421,6 +625,7 @@ impl Renderer {
             index_buf: Some(index_buf),
             index_count: mesh.indices.len() as u32,
             blend: false,
+            masked: false,
         });
         idx + 1 // 0-indexed, +1 because layer 0 is the heightmap
     }
@@ -432,6 +637,18 @@ impl Renderer {
     pub fn add_layer_mesh_blended(&mut self, mesh: &HeightmapMesh) -> usize {
         let idx = self.add_layer_mesh(mesh);
         self.layers[idx - 1].blend = true;
+        idx
+    }
+
+    /// Adds a layer that is clipped to the fractal landmass via the stencil
+    /// mask (Azgaar's `mask: url(#land)`). `blend=true` uses the alpha-blended
+    /// masked pipeline (for semi-transparent climate fills); `false` uses the
+    /// opaque masked pipeline (biomes, states, provinces, ...).
+    pub fn add_layer_mesh_masked(&mut self, mesh: &HeightmapMesh, blend: bool) -> usize {
+        let idx = self.add_layer_mesh(mesh);
+        let layer = &mut self.layers[idx - 1];
+        layer.masked = true;
+        layer.blend = blend;
         idx
     }
 
@@ -449,15 +666,29 @@ impl Renderer {
         }
     }
 
-    /// Draws a layer in the render pass. `layer_index=0` -> heightmap;
-    /// `layer_index>=1` -> additional layers registered with `add_layer_mesh`.
+    /// Draws a layer in the render pass. `layer_index=0` -> landmass (writes the
+    /// stencil mask + draws the landmass fill); `layer_index>=1` -> additional
+    /// layers registered with `add_layer_mesh`. Masked layers are clipped to the
+    /// landmass via the stencil test.
     pub fn draw_layer<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, layer_index: usize) {
-        let (vbo, ibo, count, blend) = if layer_index == 0 {
-            (&self.vertex_buf, &self.index_buf, self.index_count, false)
+        let (vbo, ibo, count, blend, masked) = if layer_index == 0 {
+            (
+                &self.vertex_buf,
+                &self.index_buf,
+                self.index_count,
+                false,
+                false,
+            )
         } else {
             let idx = layer_index - 1;
             match self.layers.get(idx) {
-                Some(l) => (&l.vertex_buf, &l.index_buf, l.index_count, l.blend),
+                Some(l) => (
+                    &l.vertex_buf,
+                    &l.index_buf,
+                    l.index_count,
+                    l.blend,
+                    l.masked,
+                ),
                 None => return,
             }
         };
@@ -465,12 +696,26 @@ impl Renderer {
             if count == 0 {
                 return;
             }
-            let pipeline = if blend {
+            let pipeline = if layer_index == 0 {
+                &self.mask_write_pipeline
+            } else if masked {
+                if blend {
+                    &self.mask_test_blend_pipeline
+                } else {
+                    &self.mask_test_pipeline
+                }
+            } else if blend {
                 &self.ocean_pipeline
             } else {
                 &self.heightmap_pipeline
             };
             pass.set_pipeline(pipeline);
+            // Stencil reference must be 1 for both the mask write (Replace) and
+            // the mask test (Equal): the landmass stamps 1, masked fills pass only
+            // where stencil == 1.
+            if layer_index == 0 || masked {
+                pass.set_stencil_reference(1);
+            }
             pass.set_bind_group(0, &self.camera_bind, &[]);
             pass.set_vertex_buffer(0, vbo.slice(..));
             pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -500,6 +745,7 @@ impl Renderer {
             index_buf: Some(index_buf),
             index_count: mesh.indices.len() as u32,
             blend: false,
+            masked: false,
         });
         idx
     }
@@ -573,13 +819,22 @@ impl Renderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("vor-heightmap-pass"),
                 color_attachments: &color_attachments[..],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: self.stencil_view.as_ref().map(|view| {
+                    wgpu::RenderPassDepthStencilAttachment {
+                        view,
+                        depth_ops: None,
+                        stencil_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                    }
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
 
             if let (Some(vbo), Some(ibo)) = (&self.vertex_buf, &self.index_buf) {
-                pass.set_pipeline(&self.heightmap_pipeline);
+                pass.set_pipeline(&self.mask_write_pipeline);
                 pass.set_bind_group(0, &self.camera_bind, &[]);
                 pass.set_vertex_buffer(0, vbo.slice(..));
                 pass.set_index_buffer(ibo.slice(..), wgpu::IndexFormat::Uint32);
@@ -606,6 +861,11 @@ impl Renderer {
     /// Returns a reference to the MSAA TextureView.
     pub fn msaa_view(&self) -> Option<&wgpu::TextureView> {
         self.msaa_view.as_ref()
+    }
+
+    /// Returns a reference to the stencil TextureView (landmask buffer).
+    pub fn stencil_view(&self) -> Option<&wgpu::TextureView> {
+        self.stencil_view.as_ref()
     }
 
     /// Camera bind group layout (so vor-app can map the same layout if it wants

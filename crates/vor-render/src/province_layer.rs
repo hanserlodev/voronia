@@ -4,18 +4,29 @@ use vor_core::Pack;
 
 use crate::biome::hex_color_to_linear;
 use crate::heightmap::HeightmapMesh;
-use crate::mesh::build_pack_mesh;
+use crate::isoline::build_region_mesh;
+use crate::water_gap::append_water_gap_raw;
 
 pub fn build_province_mesh(
     vertices: &VoronoiVertices,
     pack: &Pack,
     provinces: &[Province],
+    is_water: &[bool],
 ) -> HeightmapMesh {
-    build_pack_mesh(vertices, pack.points_n(), |p| {
-        let pid = pack.cells.province.get(p).copied().unwrap_or(0) as usize;
-        match provinces.get(pid) {
-            Some(pr) if !pr.color.is_empty() => hex_color_to_linear(&pr.color),
-            _ => [0.0, 0.0, 0.0, 0.0],
+    let get_type = |p: usize| pack.cells.province.get(p).copied().unwrap_or(0);
+    let color_fn = |pid: u16| match provinces.get(pid as usize) {
+        Some(pr) if !pr.color.is_empty() => {
+            let mut c = hex_color_to_linear(&pr.color);
+            c[3] = 0.7;
+            c
         }
-    })
+        _ => [0.0, 0.0, 0.0, 0.0],
+    };
+    let mut mesh = build_region_mesh(pack, &get_type, &color_fn);
+    append_water_gap_raw(&mut mesh, pack, is_water, |p| {
+        let pid = pack.cells.province.get(p).copied().unwrap_or(0);
+        color_fn(pid)
+    });
+    let _ = vertices;
+    mesh
 }

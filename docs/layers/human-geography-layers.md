@@ -86,10 +86,20 @@ Color the pack cells that belong to zones.
 |------|---------------|------|
 | `[37]` | `world.routes` | `Vec<Route>` |
 | — | `route.points` | `Vec<[f32;3]>` |
-| — | `route.group` | RouteGroup |
+| — | `route.group` | RouteGroup (roads/trails/searoutes) |
+| — | `route.feature` | `u32` (island/lake/ocean id) |
+| — | `route.length` | `f32` |
 
-### Implementation
-Lines between route points. Color by group: roads=brown, trails=tan, searoutes=blue.
+### Voronia implementation
+- **Modelo**: `vor-core/src/entities/route.rs` — `Route` + `RouteGroup` (paridad de slot `[37]`).
+- **Render**: `vor-render/src/route_layer.rs::build_route_mesh` — líneas entre `route.points`, color por grupo (roads=brown `[0.5,0.3,0.1]`, trails=tan `[0.6,0.5,0.3]`, searoutes=blue `[0.2,0.4,0.8]`, semi-transparentes).
+- **Cableado**: `vor-app/src/lib.rs:564-570` → `add_line_layer`, flag `layer_flags.routes` (checkbox en la UI).
+
+### Estado: 🟡 ~70%
+Completo: modelo de datos, render de líneas por grupo, toggle en la app. Pendiente: generación nativa en `vor-sim` (hoy solo import del `.map`), paridad visual (stroke-width/dash, curvas Catmull-Rom), iconos de burg en extremos de ruta.
+
+### Goods (depende de Routes)
+El trade de bienes se dibuja sobre las rutas (`#goods` z=23 tras `#routes`). En Voronia `world.goods` (slot `[41]`) se re-exporta opaco (`serde_json::Value`) sin modelo ni render: pendiente `Good`/`Market`, `build_goods_mesh` y presets de UI. Ver `docs/layers/biosphere-layers.md` §3 (z-order).
 
 ---
 
@@ -104,4 +114,5 @@ Lines between route points. Color by group: roads=brown, trails=tan, searoutes=b
 | Population | TriangleList | `build_pack_mesh` + heatmap | `population[]` |
 | Burgs | TriangleList | existing + color by state | `burg[]` → `state[]` |
 | Zones | TriangleList | `build_pack_mesh` + lookup | `zone[].cells` |
-| Routes | LineList | line segments | `route[].points` |
+| Routes | LineList | line segments | `route[].points` | ✅ ~70% (`route_layer.rs` + cableado) |
+| Goods/Trade | — | — | `world.goods` | 🔴 sin modelo/render (solo re-export opaco) |

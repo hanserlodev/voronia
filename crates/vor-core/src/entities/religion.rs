@@ -20,6 +20,8 @@ pub enum ReligionExpansion {
     /// Only within its culture of origin.
     #[default]
     Culture,
+    /// Only within its state of origin.
+    State,
     /// Global — any culture.
     Global,
 }
@@ -40,6 +42,9 @@ pub struct Religion {
     /// Expansion mode.
     #[serde(default)]
     pub expansion: ReligionExpansion,
+    /// Expansion multiplier (FMG `expansionism`).
+    #[serde(default)]
+    pub expansionism: f32,
     /// Central cell.
     #[serde(default)]
     pub center_cell: u32,

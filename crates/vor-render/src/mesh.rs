@@ -132,6 +132,85 @@ pub fn build_pack_mesh(
     result
 }
 
+/// Builds a white mesh covering exactly the land cells (where `is_land(p)` is
+/// `true`), using the RAW (unsmoothed) Voronoi vertices.
+///
+/// The fractal landmass (`build_fractal_landmass_mesh`) can shrink below the
+/// land cells on small islands, leaving those cells outside the stencil mask
+/// and therefore unpainted (holes that "fight the sea"). Merging this mesh into
+/// the mask layer guarantees every land cell is covered: a paint-bucket fill of
+/// the landmass shape. The raw vertices are used so the mask never shrinks
+/// below the actual cell polygons (Laplacian smoothing would contract them).
+pub fn build_land_cells_mask_mesh(
+    vertices: &VoronoiVertices,
+    points_n: usize,
+    is_land: impl Fn(usize) -> bool,
+) -> HeightmapMesh {
+    let mut result = HeightmapMesh {
+        vertices: Vec::with_capacity(points_n.saturating_mul(3)),
+        indices: Vec::with_capacity(points_n.saturating_mul(6)),
+        bounds_min: [f32::INFINITY, f32::INFINITY],
+        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+    };
+
+    let mut tess = FillTessellator::new();
+    const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
+    for p in 0..points_n {
+        if !is_land(p) {
+            continue;
+        }
+        let ann = match vertices.cell_rings.get(p) {
+            Some(v) if !v.is_empty() => v,
+            _ => continue,
+        };
+        let first_t = ann[0] as usize;
+        let first_pos = vertices
+            .positions
+            .get(first_t)
+            .copied()
+            .unwrap_or([0.0, 0.0]);
+        let mut builder = Path::builder();
+        builder.begin(point(first_pos[0], first_pos[1]));
+        for &t in ann.iter().skip(1) {
+            let ti = t as usize;
+            let pos = vertices.positions.get(ti).copied().unwrap_or([0.0, 0.0]);
+            builder.line_to(point(pos[0], pos[1]));
+        }
+        builder.end(true);
+        let path = builder.build();
+
+        let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+        let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(WHITE));
+        let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+
+        if tess
+            .tessellate_path(&path, &opts, &mut buffer_builder)
+            .is_err()
+        {
+            continue;
+        }
+
+        let base = result.vertices.len() as u32;
+        result.vertices.extend_from_slice(&mesh.vertices);
+        result.indices.extend(mesh.indices.iter().map(|i| i + base));
+
+        for v in &mesh.vertices {
+            result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+            result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+            result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+            result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+        }
+    }
+
+    if !result.bounds_min.iter().all(|v| v.is_finite()) {
+        result.bounds_min = [0.0, 0.0];
+        result.bounds_max = [0.0, 0.0];
+    }
+
+    result
+}
+
 /// Subdivides a closed polygon with uniform cubic Catmull-Rom (α=0).
 /// Each edge produces `subdivisions` points along the curve.
 /// Uses 3 subdivisions by default for an Azgaar-like smoothing.

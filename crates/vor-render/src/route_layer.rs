@@ -1,6 +1,7 @@
 use vor_core::entities::route::{Route, RouteGroup};
 
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
+use crate::mesh::catmull_rom_open;
 
 fn route_color(group: RouteGroup) -> [f32; 4] {
     match group {
@@ -10,15 +11,33 @@ fn route_color(group: RouteGroup) -> [f32; 4] {
     }
 }
 
+/// Builds the routes mesh.
+///
+/// FMG renders each route as a Catmull-Rom curve over its control points
+/// (`Routes.getPath` — `curveCatmullRom.alpha(0.1)` for roads/trails,
+/// `alpha(0.5)` for searoutes). Voronia subdivides each route with
+/// `catmull_rom_open` so the segments follow a smooth curve instead of the raw
+/// straight segments between control points.
 pub fn build_route_mesh(routes: &[Route]) -> HeightmapMesh {
     let mut verts: Vec<HeightmapVertex> = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
 
     for r in routes {
         let color = route_color(r.group);
-        for pair in r.points.windows(2) {
-            let a = [pair[0][0], pair[0][1]];
-            let b = [pair[1][0], pair[1][1]];
+        let pts: Vec<[f32; 2]> = r.points.iter().map(|p| [p[0], p[1]]).collect();
+        if pts.len() < 2 {
+            continue;
+        }
+        // Subdivide: searoutes get a tighter curve (alpha 0.5 => more subdiv),
+        // roads/trails a gentler one (alpha 0.1). Approximate via subdivisions.
+        let subdivisions = match r.group {
+            RouteGroup::Searoutes => 8,
+            _ => 6,
+        };
+        let smooth = catmull_rom_open(&pts, subdivisions);
+        for pair in smooth.windows(2) {
+            let a = pair[0];
+            let b = pair[1];
             let base = verts.len() as u32;
             verts.push(HeightmapVertex { pos: a, color });
             verts.push(HeightmapVertex { pos: b, color });

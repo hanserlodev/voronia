@@ -2,9 +2,9 @@
 
 use crate::coordinates::MapCoordinates;
 use crate::entities::{
-    biome::Biome, burg::Burg, culture::Culture, ice::Ice, marker::Marker, measurer::Measurer,
-    namebase::NameBase, note::Note, province::Province, religion::Religion, river::River,
-    route::Route, state::State, zone::Zone,
+    biome::Biome, burg::Burg, culture::Culture, deal::Deal, good::Good, ice::Ice, marker::Marker,
+    market::Market, measurer::Measurer, namebase::NameBase, note::Note, province::Province,
+    religion::Religion, river::River, route::Route, state::State, zone::Zone,
 };
 use crate::grid::Grid;
 use crate::pack::Pack;
@@ -72,12 +72,13 @@ pub struct World {
     /// Custom good icons (slot `[45]`) — HTML outer string; keep opaque.
     #[serde(default, with = "crate::serde_json_string")]
     pub custom_good_icons: serde_json::Value,
-    /// Economy: `pack.goods`, `pack.markets`, `pack.deals` (slots `[41]`/`[42]`/`[43]`).
-    /// We keep them as `serde_json::Value` to avoid modeling the subsystem in Phase 1.
-    #[serde(default, with = "crate::serde_json_string")]
-    pub goods: serde_json::Value,
-    #[serde(default, with = "crate::serde_json_string")]
-    pub markets: serde_json::Value,
-    #[serde(default, with = "crate::serde_json_string")]
-    pub deals: serde_json::Value,
+    /// Economy: `pack.goods` (slot `[41]`) — typed catalog.
+    #[serde(default)]
+    pub goods: Vec<Good>,
+    /// Economy: `pack.markets` (slot `[42]`) — typed catalog.
+    #[serde(default)]
+    pub markets: Vec<Market>,
+    /// Economy: `pack.deals` (slot `[43]`) — typed catalog.
+    #[serde(default)]
+    pub deals: Vec<Deal>,
 }

@@ -40,6 +40,10 @@ pub fn connect_vertices(
     check_cell: &mut impl FnMut(usize),
     close_ring: bool,
 ) -> Vec<u32> {
+    // Literal port of `pathUtils.ts:connectVertices`: the chain always stops when the
+    // walk returns to the starting vertex; `close_ring` only controls whether the
+    // starting vertex is appended again at the end (Azgaar does NOT pass it for
+    // temperature — the single chains are left open).
     let mut chain = Vec::new();
     let mut current = starting_vertex;
 
@@ -53,6 +57,8 @@ pub fn connect_vertices(
             .copied()
             .unwrap_or([-1, -1, -1]);
         for &c in &cells {
+            // `neibCells.filter(ofSameType).forEach(addToChecked)` — only positive,
+            // same-type cell ids (boundary cells `c >= n` fail `same_type`).
             if c >= 0 && same_type(c as usize) {
                 check_cell(c as usize);
             }
@@ -82,8 +88,12 @@ pub fn connect_vertices(
         };
 
         match next {
-            Some(n) if close_ring && n == starting_vertex => {
-                chain.push(n);
+            Some(n) if n == starting_vertex => {
+                // Azgaar's `for (let i = 0; i === 0 || next !== startingVertex; i++)`
+                // exits when the walk returns to the start — no separate push.
+                if close_ring {
+                    chain.push(n);
+                }
                 break;
             }
             Some(n) => current = n,
@@ -94,6 +104,64 @@ pub fn connect_vertices(
     chain
 }
 
+/// d3's `line().curve(curveBasisClosed)` — a cubic B-spline over the points,
+/// baked into cubic Bézier segments exactly as d3-shape's `basis.js` +
+/// `basisClosed.js` (used by `lineGen` in `draw-temperature.ts`).
+///
+/// For input points `p = [p0, p1, …, pn-1]` (n ≥ 3) the closed curve starts at
+/// `(p0 + 4 p1 + p2) / 6` and emits **n** `cubicBezierTo` segments, one per
+/// triple `(A, B, C) = (p_j, p_{j+1}, p_{j+2})` for `j = 1..n` (mod `n`):
+///
+/// ```text
+/// c1 = (2 A + B) / 3, c2 = (A + 2 B) / 3, end = (A + 4 B + C) / 6
+/// ```
+///
+/// The last triple `(p0, p1, p2)` ends exactly at `(p0 + 4 p1 + p2) / 6` = the
+/// start point, so the ring closes with no straight-line seam (d3 `basisClosed`
+/// re-emits the first three points at `lineEnd`). `round` param mirrors FMG's
+/// `round(path, 1)` applied to each emitted coordinate.
+pub fn build_curve_basis_closed(pts: &[[f32; 2]], round_to: Option<f32>) -> Path {
+    let n = pts.len();
+    let mut builder = Path::builder();
+    if n < 3 {
+        return builder.build();
+    }
+    let r1 = |v: f32| match round_to {
+        Some(m) => (v * m).round() / m,
+        None => v,
+    };
+    let start = [
+        r1((pts[0][0] + 4.0 * pts[1][0] + pts[2][0]) / 6.0),
+        r1((pts[0][1] + 4.0 * pts[1][1] + pts[2][1]) / 6.0),
+    ];
+    builder.begin(point(start[0], start[1]));
+    // `basisClosed.js`: after the `moveTo((p0+4p1+p2)/6)`, the `point`/`lineEnd`
+    // handlers emit one bezier per triple `(p_j, p_{j+1}, p_{j+2})`, j = 1..n.
+    for j in 1..=n {
+        let a = pts[j % n];
+        let b = pts[(j + 1) % n];
+        let c = pts[(j + 2) % n];
+        let c1 = [r1((2.0 * a[0] + b[0]) / 3.0), r1((2.0 * a[1] + b[1]) / 3.0)];
+        let c2 = [r1((a[0] + 2.0 * b[0]) / 3.0), r1((a[1] + 2.0 * b[1]) / 3.0)];
+        let end = [
+            r1((a[0] + 4.0 * b[0] + c[0]) / 6.0),
+            r1((a[1] + 4.0 * b[1] + c[1]) / 6.0),
+        ];
+        builder.cubic_bezier_to(
+            point(c1[0], c1[1]),
+            point(c2[0], c2[1]),
+            point(end[0], end[1]),
+        );
+    }
+    builder.end(true);
+    builder.build()
+}
+
+/// Builds the SVG fill path for an isoline chain the way FMG does
+/// (`pathUtils.ts:getFillPath`): straight `M…L…Z` segments, **not** smoothed.
+/// Regional fills (states, provinces, cultures, religions, zones, markets) use
+/// the raw Voronoi boundary — smoothing is only applied to climate isolines
+/// (`build_curve_basis_closed`), matching Azgaar.
 pub fn get_fill_path(chain: &[u32], vertices: &VoronoiVertices) -> Path {
     let mut builder = Path::builder();
     if chain.len() < 3 {
@@ -108,18 +176,10 @@ pub fn get_fill_path(chain: &[u32], vertices: &VoronoiVertices) -> Path {
         return builder.build();
     }
 
-    let n = pts.len();
-    let start_mid = [
-        (pts[n - 1][0] + pts[0][0]) * 0.5,
-        (pts[n - 1][1] + pts[0][1]) * 0.5,
-    ];
-    builder.begin(point(start_mid[0], start_mid[1]));
-
-    for i in 0..n {
-        let curr = pts[i];
-        let next = pts[(i + 1) % n];
-        let mid = [(curr[0] + next[0]) * 0.5, (curr[1] + next[1]) * 0.5];
-        builder.quadratic_bezier_to(point(curr[0], curr[1]), point(mid[0], mid[1]));
+    let first = pts[0];
+    builder.begin(point(first[0], first[1]));
+    for p in pts.iter().skip(1) {
+        builder.line_to(point(p[0], p[1]));
     }
     builder.end(true);
     builder.build()
@@ -308,6 +368,203 @@ pub fn get_isolines(
     result
 }
 
+/// Common regional layer builder (FMG `getIsolines` + fill).
+///
+/// Groups cells by `get_type`, walks the Voronoi boundary with `connect_vertices`,
+/// and produces a single `HeightmapMesh` with the **fill** polygons (straight
+/// Voronoi boundary, `get_fill_path` — the same `M…L…Z` FMG emits).
+///
+/// `color_fn(type_id)` maps each region type to its color. Regions with type `0`
+/// (no entity) are skipped, matching FMG's `if (!getType(cellId)) continue`.
+///
+/// The **water gap** (Azgaar `getGappedFillPaths` `stroke-width:3`) is appended
+/// separately with `water_gap::append_water_gap`, exactly like the biome layer —
+/// callers pass their `is_water` array so both share the same gap geometry.
+pub fn build_region_mesh(
+    pack: &Pack,
+    get_type: &impl Fn(usize) -> u16,
+    color_fn: &impl Fn(u16) -> [f32; 4],
+) -> HeightmapMesh {
+    let mut result = HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [f32::INFINITY, f32::INFINITY],
+        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+    };
+
+    let iso_options = IsolineOptions {
+        polygons: false,
+        fill: true,
+        water_gap: false,
+        halo: false,
+    };
+    let isolines = get_isolines(pack, get_type, &iso_options);
+
+    let mut tess = FillTessellator::new();
+
+    for out in &isolines {
+        let first_cell_type = {
+            // Recover the type id from the chain's first cell (the isoline output
+            // doesn't carry it). We look up the boundary vertex's adjacent cells.
+            let mut t = 0u16;
+            if let Some(&v) = out.chain.first() {
+                if let Some(cells) = pack.vertices.adjacent_cells.get(v as usize).copied() {
+                    for &c in &cells {
+                        if c >= 0 {
+                            let ty = get_type(c as usize);
+                            if ty != 0 {
+                                t = ty;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            t
+        };
+
+        let color = color_fn(first_cell_type);
+        if color[3] == 0.0 {
+            continue;
+        }
+
+        let path = get_fill_path(&out.chain, &pack.vertices);
+        if out.chain.len() < 3 {
+            continue;
+        }
+
+        let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+        let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));
+        let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+        if tess
+            .tessellate_path(&path, &opts, &mut buffer_builder)
+            .is_err()
+        {
+            continue;
+        }
+
+        let base = result.vertices.len() as u32;
+        result.vertices.extend_from_slice(&mesh.vertices);
+        result.indices.extend(mesh.indices.iter().map(|i| i + base));
+        for v in &mesh.vertices {
+            result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+            result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+            result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+            result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+        }
+    }
+
+    if !result.bounds_min.iter().all(|v| v.is_finite()) {
+        result.bounds_min = [0.0, 0.0];
+        result.bounds_max = [0.0, 0.0];
+    }
+
+    result
+}
+
+/// Builds the fill mesh for an arbitrary **cell set**
+/// (FMG `getVertexPath(cellsArray)` in `pathUtils.ts`).
+///
+/// Unlike `build_region_mesh` (which keys off a per-cell type array), this walks
+/// the **outer boundary** of the given set and fills it, exactly like FMG's
+/// `getVertexPath` → `getFillPath`. Used by the zones layer.
+///
+/// `in_zone(cell_id)` decides membership; `color` is the overlay color.
+/// Returns a single mesh covering all connected polygons of the cell set.
+pub fn build_vertex_path_mesh(
+    pack: &Pack,
+    in_zone: &impl Fn(usize) -> bool,
+    color: [f32; 4],
+) -> HeightmapMesh {
+    let mut result = HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [f32::INFINITY, f32::INFINITY],
+        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+    };
+
+    let n_cells = pack.points_n();
+    if n_cells == 0 {
+        return result;
+    }
+
+    let mut checked = vec![false; n_cells];
+    let vertices = &pack.vertices;
+    let mut tess = FillTessellator::new();
+
+    for cell in 0..n_cells {
+        if checked[cell] || !in_zone(cell) {
+            continue;
+        }
+        checked[cell] = true;
+
+        let same_type = |c: usize| c < n_cells && in_zone(c);
+
+        let neighbors = match pack.cells.adjacency.get(cell) {
+            Some(v) => v,
+            None => continue,
+        };
+        let has_border = neighbors.iter().any(|&nb| !same_type(nb as usize));
+        if !has_border {
+            continue;
+        }
+
+        let cell_ring = match vertices.cell_rings.get(cell) {
+            Some(v) if !v.is_empty() => v,
+            _ => continue,
+        };
+        let start_vertex = match cell_ring.iter().copied().find(|&v| {
+            let adj = vertices
+                .adjacent_cells
+                .get(v as usize)
+                .copied()
+                .unwrap_or([-1, -1, -1]);
+            adj.iter().any(|&c| c >= 0 && !same_type(c as usize))
+        }) {
+            Some(v) => v,
+            None => continue,
+        };
+
+        let mut check_cell = |c: usize| {
+            if c < n_cells && same_type(c) && !checked[c] {
+                checked[c] = true;
+            }
+        };
+        let chain = connect_vertices(vertices, start_vertex, &same_type, &mut check_cell, true);
+        if chain.len() < 3 {
+            continue;
+        }
+
+        let path = get_fill_path(&chain, vertices);
+        let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+        let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));
+        let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+        if tess
+            .tessellate_path(&path, &opts, &mut buffer_builder)
+            .is_err()
+        {
+            continue;
+        }
+
+        let base = result.vertices.len() as u32;
+        result.vertices.extend_from_slice(&mesh.vertices);
+        result.indices.extend(mesh.indices.iter().map(|i| i + base));
+        for v in &mesh.vertices {
+            result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+            result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+            result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+            result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+        }
+    }
+
+    if !result.bounds_min.iter().all(|v| v.is_finite()) {
+        result.bounds_min = [0.0, 0.0];
+        result.bounds_max = [0.0, 0.0];
+    }
+
+    result
+}
+
 /// Minimum height for land isolines (Azgaar: `height < 20` = ocean).
 const MIN_LAND_HEIGHT: u8 = 20;
 /// Maximum isoline level to draw (Azgaar stops at 100).
@@ -423,7 +680,40 @@ mod tests {
             adjacent_cells,
             adjacent_vertices,
             cell_rings,
+            cell_neighbors: Vec::new(),
+            cell_border: Vec::new(),
         }
+    }
+
+    #[test]
+    fn basis_closed_returns_to_start() {
+        use lyon::path::Event;
+
+        // Square of 4 points. d3 `basisClosed` emits one bezier per triple
+        // `(p_j, p_{j+1}, p_{j+2})`, j = 1..n, and the last one must land
+        // exactly on the `moveTo` point `(p0 + 4p1 + p2) / 6`.
+        let pts = [[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]];
+        let path = build_curve_basis_closed(&pts, None);
+
+        let cubics: Vec<_> = path
+            .iter()
+            .filter_map(|e| match e {
+                Event::Cubic { to, .. } => Some([to.x, to.y]),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(cubics.len(), pts.len(), "one bezier per ring point");
+
+        let start = [
+            (pts[0][0] + 4.0 * pts[1][0] + pts[2][0]) / 6.0,
+            (pts[0][1] + 4.0 * pts[1][1] + pts[2][1]) / 6.0,
+        ];
+        let last = *cubics.last().unwrap();
+        assert!(
+            (last[0] - start[0]).abs() < 1e-4 && (last[1] - start[1]).abs() < 1e-4,
+            "last bezier must end at the start point: {last:?} vs {start:?}"
+        );
     }
 
     #[test]
@@ -464,6 +754,7 @@ mod tests {
                 market: vec![0; n],
                 routes: vec![vor_core::cells::RoutesFromCell::default(); n],
                 feature_id: vec![1, 1, 2, 2],
+                water_type: vec![0, 0, -1, -1],
                 adjacency: vec![vec![1, 2], vec![0, 3], vec![0, 3], vec![1, 2]],
             },
             vertices: vertices.clone(),
@@ -503,6 +794,35 @@ mod tests {
         assert!(
             mesh.vertices.iter().all(|v| v.pos[0].is_finite()),
             "band mesh vertices must be finite"
+        );
+    }
+
+    #[test]
+    fn region_mesh_fill_matches_isolines() {
+        let vertices = make_test_vertices();
+        let pack = make_test_vertices_in_pack(&vertices);
+
+        let get_type = |c: usize| pack.cells.state[c];
+        let color_fn = |t: u16| [t as f32 * 0.1, 0.2, 0.3, 1.0];
+        let mesh = build_region_mesh(&pack, &get_type, &color_fn);
+
+        // The region mesh must tessellate at least one filled polygon for the
+        // non-zero state regions present in the pack.
+        assert!(!mesh.vertices.is_empty(), "region fill must have geometry");
+        assert!(!mesh.indices.is_empty(), "region fill must have indices");
+        assert!(
+            mesh.vertices.iter().all(|v| v.pos[0].is_finite()),
+            "region mesh vertices must be finite"
+        );
+
+        let opts = IsolineOptions {
+            polygons: true,
+            ..Default::default()
+        };
+        let isolines = get_isolines(&pack, &get_type, &opts);
+        assert!(
+            !isolines.is_empty() && mesh.indices.len() >= 3,
+            "fill mesh must cover the isoline polygons"
         );
     }
 }

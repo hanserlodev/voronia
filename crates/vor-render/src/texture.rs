@@ -158,7 +158,7 @@ impl TextureOverlay {
                 cull_mode: None,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(crate::renderer::stencil_passthrough()),
             multisample: wgpu::MultisampleState {
                 count: msaa_count,
                 mask: !0,

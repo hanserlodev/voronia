@@ -17,4 +17,10 @@ pub struct Zone {
     /// Free-form description/lore for the UI.
     #[serde(default)]
     pub description: Option<String>,
+    /// FMG hides zones from the rendered overlay when this is true.
+    #[serde(default)]
+    pub hidden: bool,
+    /// FMG zone type/category. Kept for filtering and style selection.
+    #[serde(rename = "type", default)]
+    pub kind: String,
 }

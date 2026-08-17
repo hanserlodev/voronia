@@ -173,7 +173,6 @@ impl Preset {
                 f.relief = true;
                 f.cells = true;
                 f.grid = true;
-                f.contours = true;
                 f.coordinates = true;
             }
         }
@@ -197,7 +196,6 @@ fn fields_match(a: &LayerFlags, b: &LayerFlags) -> bool {
         && a.relief == b.relief
         && a.cells == b.cells
         && a.grid == b.grid
-        && a.contours == b.contours
         && a.coordinates == b.coordinates
         && a.lakes == b.lakes
         && a.rivers == b.rivers
@@ -272,7 +270,6 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
         checkbox(ui, layer_flags, "relief", |f| &mut f.relief);
         checkbox(ui, layer_flags, "cells", |f| &mut f.cells);
         checkbox(ui, layer_flags, "grid", |f| &mut f.grid);
-        checkbox(ui, layer_flags, "contours", |f| &mut f.contours);
         checkbox(ui, layer_flags, "coordinates", |f| &mut f.coordinates);
     });
 
