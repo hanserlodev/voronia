@@ -1,0 +1,4 @@
+# Pins the CI toolchain to match the maintainer's local Rust (Arch Linux).
+# Bump deliberately when upgrading the local toolchain.
+[toolchain]
+channel = "1.97.1"
