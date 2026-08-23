@@ -212,7 +212,9 @@ pub fn export_png(
     let rgba: Vec<u8> = if format == wgpu::TextureFormat::Bgra8Unorm
         || format == wgpu::TextureFormat::Bgra8UnormSrgb
     {
-        data.chunks_exact(4)
+        data.as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|px| [px[2], px[1], px[0], px[3]])
             .collect()
     } else {

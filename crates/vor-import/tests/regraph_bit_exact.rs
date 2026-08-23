@@ -154,7 +154,7 @@ fn regraph_rust_matches_js_self_reference() {
         "pack_points_bits = N*2 f64s"
     );
     let mut mismatches_pts = 0usize;
-    for (i, expected) in expected_pts_flat.chunks_exact(2).enumerate() {
+    for (i, expected) in expected_pts_flat.as_chunks::<2>().0.iter().enumerate() {
         let got_x = new_pts[i][0];
         let got_y = new_pts[i][1];
         if got_x != expected[0] || got_y != expected[1] {

@@ -75,7 +75,7 @@ pub fn build_biome_coast_fill(
         [(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0]
     };
 
-    for chunk in landmass.indices.chunks_exact(3) {
+    for chunk in landmass.indices.as_chunks::<3>().0 {
         let a = landmass.vertices[chunk[0] as usize].pos;
         let b = landmass.vertices[chunk[1] as usize].pos;
         let c = landmass.vertices[chunk[2] as usize].pos;

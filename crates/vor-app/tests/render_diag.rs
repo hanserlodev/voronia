@@ -155,7 +155,7 @@ fn dump_biome_render_svg() {
 "##,
         {
             let mut s = String::new();
-            for c in mask_mesh.indices.chunks_exact(3) {
+            for c in mask_mesh.indices.as_chunks::<3>().0 {
                 let a = mask_mesh.vertices[c[0] as usize].pos;
                 let b = mask_mesh.vertices[c[1] as usize].pos;
                 let d = mask_mesh.vertices[c[2] as usize].pos;
@@ -178,7 +178,7 @@ fn dump_biome_render_svg() {
     // fill de biomes + water gap recortados
     let _ = writeln!(svg, "<g clip-path=\"url(#land)\">{}</g>", {
         let mut s = String::new();
-        for c in biome_mesh.indices.chunks_exact(3) {
+        for c in biome_mesh.indices.as_chunks::<3>().0 {
             let a = biome_mesh.vertices[c[0] as usize].pos;
             let b = biome_mesh.vertices[c[1] as usize].pos;
             let d = biome_mesh.vertices[c[2] as usize].pos;
@@ -275,7 +275,7 @@ fn dump_biome_render_svg() {
     let mut coast_samples_outside = 0usize;
     let mut coast_samples_total = 0usize;
     let mut max_outside_d = 0.0f32;
-    for c in mask_mesh.indices.chunks_exact(3) {
+    for c in mask_mesh.indices.as_chunks::<3>().0 {
         let a = mask_mesh.vertices[c[0] as usize].pos;
         let b = mask_mesh.vertices[c[1] as usize].pos;
         let d = mask_mesh.vertices[c[2] as usize].pos;
@@ -326,7 +326,9 @@ fn dump_biome_render_svg() {
     let (mut mask_only, mut land_only, mut both, mut neither) = (0usize, 0usize, 0usize, 0usize);
     let mask_tris: Vec<[[f32; 2]; 3]> = mask_mesh
         .indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|c| {
             [
                 mask_mesh.vertices[c[0] as usize].pos,
@@ -364,7 +366,9 @@ fn dump_biome_render_svg() {
     // now cover the mask-only area too? The white halo should be gone.
     let merged_tris: Vec<[[f32; 2]; 3]> = biome_mesh
         .indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|c| {
             [
                 biome_mesh.vertices[c[0] as usize].pos,
@@ -451,7 +455,9 @@ fn dump_biome_render_svg() {
     // Every land cell centroid must be inside the union mask mesh.
     let mask_tris2: Vec<[[f32; 2]; 3]> = mask_mesh
         .indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|c| {
             [
                 mask_mesh.vertices[c[0] as usize].pos,

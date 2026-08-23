@@ -89,7 +89,9 @@ fn landmass_mask_covers_all_land_cell_centroids() {
 
     let tris: Vec<[[f32; 2]; 3]> = mesh
         .indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|c| {
             [
                 mesh.vertices[c[0] as usize].pos,
@@ -148,7 +150,9 @@ fn landmass_mask_covers_all_land_cell_centroids() {
     });
     let fill_tris: Vec<[[f32; 2]; 3]> = fill_mesh
         .indices
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|c| {
             [
                 fill_mesh.vertices[c[0] as usize].pos,
