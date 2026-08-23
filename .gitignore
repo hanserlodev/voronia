@@ -1,9 +1,6 @@
 # Rust / Cargo
 target/
 **/*.rs.bk
-# Cargo.lock: por ahora sigue ignorado (estado heredado del commit inicial).
-# Para un workspace de app nativa normalmente se commitea — ver decisión más adelante.
-Cargo.lock
 
 # Voronia's own binary format (world snapshots)
 *.gmap
