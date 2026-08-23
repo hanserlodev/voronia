@@ -2,10 +2,10 @@ use lyon::geom::point;
 use lyon::path::Path;
 use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator, VertexBuffers};
 use vor_core::entities::river::River;
-use vor_core::voronoi::VoronoiVertices;
 
+use crate::biome::hex_color_to_linear;
 use crate::heightmap::{ColorCtor, HeightmapMesh, HeightmapVertex};
-use crate::mesh::catmull_rom_open;
+use crate::mesh::catmull_rom_open_alpha;
 
 /// Port of Azgaar's `meander()` from pathUtils.ts.
 /// Inserts intermediate points between cell centers with perpendicular displacement.
@@ -183,7 +183,7 @@ const LENGTH_PROGRESSION: [f32; 9] = [
     34.0 / 200.0,
 ];
 
-fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_width: f32) -> f32 {
+pub fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_width: f32) -> f32 {
     if point_index == 0 {
         return starting_width;
     }
@@ -193,7 +193,7 @@ fn get_offset(flux: f32, point_index: usize, width_factor: f32, starting_width: 
     width_factor * (length_width + flux_width) + starting_width
 }
 
-fn get_width(offset: f32) -> f32 {
+pub fn get_width(offset: f32) -> f32 {
     (offset / 1.5).powf(1.8)
 }
 
@@ -237,113 +237,8 @@ fn edge_point(prev: [f32; 2], map_w: f32, map_h: f32) -> [f32; 2] {
     }
 }
 
-/// Intersects segment [s0, s1] with segment [e0, e1]; returns the point of
-/// intersection, or `None` if they don't cross within both segments.
-fn segment_intersection(
-    s0: [f32; 2],
-    s1: [f32; 2],
-    e0: [f32; 2],
-    e1: [f32; 2],
-) -> Option<[f32; 2]> {
-    let r = [s1[0] - s0[0], s1[1] - s0[1]];
-    let e = [e1[0] - e0[0], e1[1] - e0[1]];
-    let denom = r[0] * e[1] - r[1] * e[0];
-    if denom.abs() < 1e-9 {
-        return None;
-    }
-    let t = (s0[1] - e0[1]) * e[0] - (s0[0] - e0[0]) * e[1];
-    let u = (s0[1] - e0[1]) * r[0] - (s0[0] - e0[0]) * r[1];
-    let t = t / denom;
-    let u = u / denom;
-    if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
-        Some([s0[0] + t * r[0], s0[1] + t * r[1]])
-    } else {
-        None
-    }
-}
-
-/// Clips the river path at the coast. The mouth cell is water; the river should
-/// stop at the point where it enters that water cell (the coastline), not reach its
-/// center (which may be far into the ocean). We cast the river's final segment
-/// (from the last land cell outward toward the water cell) against every edge of
-/// the mouth cell's Voronoi ring and keep the closest hit, so the mouth lands on
-/// the coast regardless of which edge the flow actually crosses.
-fn clip_to_coast(
-    raw: &mut Vec<[f32; 2]>,
-    path: &[u32],
-    vertices: &VoronoiVertices,
-    is_water: &[bool],
-) {
-    // Find the last land cell followed by a water cell in the path.
-    let mut last_land: Option<(usize, usize)> = None;
-    for i in 0..path.len().saturating_sub(1) {
-        let a = path[i] as usize;
-        let b = path[i + 1] as usize;
-        let wa = is_water.get(a).copied().unwrap_or(false);
-        let wb = is_water.get(b).copied().unwrap_or(false);
-        if !wa && wb {
-            last_land = Some((i, i + 1));
-        }
-    }
-    let Some((li, wi)) = last_land else {
-        return;
-    };
-    // `raw` has one point per path cell (with edge_point substitutions); the
-    // indices li/wi map directly when both cells resolved to a point.
-    let lpt = match raw.get(li) {
-        Some(p) => *p,
-        None => return,
-    };
-    let wpt = match raw.get(wi).copied() {
-        Some(p) => p,
-        None => return,
-    };
-    let water_cell = path[wi] as usize;
-
-    // Cast the continuity beyond lpt (toward the water cell) against the water
-    // cell's Voronoi ring polygon; keep the closest intersection to the land point.
-    let ring = match vertices.cell_rings.get(water_cell) {
-        Some(r) if r.len() >= 2 => r,
-        _ => return,
-    };
-    let mut best_hit: Option<[f32; 2]> = None;
-    let mut best_dist = f32::INFINITY;
-    for k in 0..ring.len() {
-        let a = match ring.get(k).copied() {
-            Some(t) => t as usize,
-            None => return,
-        };
-        let b = match ring.get((k + 1) % ring.len()) {
-            Some(&t) => t as usize,
-            None => return,
-        };
-        let Some(pa) = vertices.positions.get(a).copied() else {
-            continue;
-        };
-        let Some(pb) = vertices.positions.get(b).copied() else {
-            continue;
-        };
-        let Some(hit) = segment_intersection(lpt, wpt, pa, pb) else {
-            continue;
-        };
-        let d = (hit[0] - lpt[0]).abs() + (hit[1] - lpt[1]).abs();
-        if d < best_dist {
-            best_dist = d;
-            best_hit = Some(hit);
-        }
-    }
-    let hit = match best_hit {
-        Some(p) => p,
-        None => return,
-    };
-    raw.truncate(wi);
-    raw.push(hit);
-}
-
 pub fn build_river_mesh(
     points: &[[f32; 2]],
-    vertices: &VoronoiVertices,
-    is_water: &[bool],
     rivers: &[River],
     km_per_px: f32,
     map_w: f32,
@@ -378,18 +273,24 @@ pub fn build_river_mesh(
         if raw.len() < 2 {
             continue;
         }
-        clip_to_coast(&mut raw, path, vertices, is_water);
-        if raw.len() < 2 {
-            continue;
-        }
+        // FMG clips the river polygon with `mask: url(#land)` at render time
+        // (index.css `#rivers`), NOT against the cell ring — the raw path
+        // keeps its water-cell points and the stencil cuts it at the fractal
+        // coastline. No manual mouth clipping here anymore.
+
         let meandered = meander_anchors(&raw);
-        let smooth = catmull_rom_open(&meandered, 4);
+        // FMG `line().curve(curveCatmullRom.alpha(0.1))` (getRiverPath).
+        let smooth = catmull_rom_open_alpha(&meandered, 0.1, 4);
         let n = smooth.len();
         if n < 2 {
             continue;
         }
 
-        let color = [0.20, 0.45, 0.80, 1.0];
+        // FMG `#rivers` fill (default.json): #5d97bb, opacity null (=1).
+        // The per-river `width_factor` already carries the main-stem ×1.2
+        // boost: FMG computes it at generation (`mainStemWidthFactor`) and
+        // stores it in the .map rivers slot.
+        let color = hex_color_to_linear("#5d97bb");
         let discharge = r.discharge_m3s.max(1.0);
         let wf = r.width_factor.max(0.1);
         let sw = r.source_width_km.max(0.05);
@@ -431,7 +332,7 @@ pub fn build_river_mesh(
 
         let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
         let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));
-        let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+        let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::NonZero);
         if tess
             .tessellate_path(&path, &opts, &mut buffer_builder)
             .is_err()

@@ -157,6 +157,7 @@ pub fn parse_features(slot12: Option<&str>) -> Result<Vec<Feature>, CatalogError
                     "dry" => Some(LakeGroup::Dry),
                     "sinkhole" => Some(LakeGroup::Sinkhole),
                     "lava" => Some(LakeGroup::Lava),
+                    "frozen" => Some(LakeGroup::Frozen),
                     _ => None,
                 }
             } else {
@@ -857,6 +858,10 @@ pub struct IceRaw {
     pub points: Vec<[f32; 2]>,
     #[serde(rename = "type", default)]
     pub kind_str: String,
+    #[serde(default)]
+    pub size: Option<f32>,
+    #[serde(default)]
+    pub offset: Option<[f32; 2]>,
 }
 
 pub fn parse_ice(slot39: Option<&str>) -> Result<Vec<Ice>, CatalogError> {
@@ -873,6 +878,8 @@ pub fn parse_ice(slot39: Option<&str>) -> Result<Vec<Ice>, CatalogError> {
             },
             vertices: i.points,
             cell: None,
+            size: i.size,
+            offset: i.offset,
         })
         .collect())
 }

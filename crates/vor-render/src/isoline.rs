@@ -6,7 +6,7 @@ use lyon::geom::point;
 use lyon::path::Path;
 use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator, VertexBuffers};
 
-use crate::heightmap::{height_color, ColorCtor, HeightmapMesh, HeightmapVertex};
+use crate::heightmap::{ColorCtor, HeightmapMesh, HeightmapVertex};
 
 #[derive(Debug, Clone)]
 pub struct IsolineOptions {
@@ -573,28 +573,66 @@ const MAX_HEIGHT: u8 = 100;
 /// `skip: 5`, and the renderer advances `currentLayer += skip + 1`, so bands
 /// are drawn every **6** height units — that discrete spacing is what produces
 /// the "faceted" concentric-band look (not a continuous gradient).
-const BAND_STEP: u8 = 6;
+/// Options for the heightmap band layer (FMG `#terrs > #landHeights` attrs,
+/// `default.json`): scheme, `skip` (level stride − 1), `relax`
+/// (`simplifyLine` stride), `terracing` and the curve toggle.
+#[derive(Debug, Clone)]
+pub struct HeightmapBandOptions {
+    /// FMG `scheme` attr (default "bright").
+    pub scheme: crate::heightmap::HeightmapScheme,
+    /// FMG `skip` attr: levels advance by `skip + 1` (default 5 → step 6).
+    pub skip: u8,
+    /// FMG `relax` attr: `simplifyLine` stride (0 = keep every vertex).
+    pub relax: usize,
+    /// FMG `terracing` attr (0–20 in UI, divided by 10 → 0–2).
+    pub terracing: f32,
+    /// `curveBasisClosed` on band contours when true (FMG default), straight
+    /// fills otherwise.
+    pub curved: bool,
+}
+
+impl Default for HeightmapBandOptions {
+    fn default() -> Self {
+        Self {
+            scheme: crate::heightmap::HeightmapScheme::Bright,
+            skip: 5,
+            relax: 0,
+            terracing: 0.0,
+            curved: true,
+        }
+    }
+}
 
 /// Builds the heightmap layer the way Azgaar does: **filled isoline bands**,
 /// one filled polygon per height level, not a flat per-cell color.
 ///
-/// Levels are spaced by `BAND_STEP` (Azgaar `#landFragment` `skip: 5`), from
-/// `MIN_LAND_HEIGHT` upward, and drawn low → high so higher contours paint over
-/// the lower ones, producing the discrete faceted bands Azgaar shows when the
-/// heightmap layer is rendered.
+/// Levels advance by `skip + 1` (FMG `#landHeights` default `skip: 5`) from
+/// `MIN_LAND_HEIGHT` upward, drawn low → high so higher contours paint over
+/// the lower ones, producing the discrete faceted bands Azgaar shows.
 ///
 /// For each level `h`, the contour of the region where `height >= h` is
-/// extracted with `get_isolines` and filled with `height_color(h)` (the regex
-/// `<h` vs `>=h` matches Azgaar's `connectVertices` boundary walk).
+/// extracted with `get_isolines`, smoothed with `curveBasisClosed` and filled
+/// with `getColor(h, scheme)`.
 ///
 /// The ocean is not part of this layer (`data-render = 0` in Azgaar): cells with
 /// `height < 20` are never included, so the sea stays untouched.
 pub fn build_heightmap_band_mesh(pack: &Pack) -> HeightmapMesh {
+    build_heightmap_band_mesh_with(pack, &HeightmapBandOptions::default())
+}
+
+/// Full-option variant mirroring `draw-heightmap.ts`: curve smoothing,
+/// terracing shadow copies (`translate(.7,1.4)` + `darker(ter)`), scheme
+/// selection and `relax` stride (`simplifyLine`). Ocean heights
+/// (`#oceanHeights data-render=1`, off by default in FMG) are not rendered yet.
+pub fn build_heightmap_band_mesh_with(
+    pack: &Pack,
+    band_opts: &HeightmapBandOptions,
+) -> HeightmapMesh {
     let mut result = HeightmapMesh {
         vertices: Vec::new(),
         indices: Vec::new(),
         bounds_min: [f32::INFINITY, f32::INFINITY],
-        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+        bounds_max: [f32::NEG_INFINITY, f32::INFINITY],
     };
 
     let mut tess = FillTessellator::new();
@@ -603,6 +641,7 @@ pub fn build_heightmap_band_mesh(pack: &Pack) -> HeightmapMesh {
         ..Default::default()
     };
 
+    let step = band_opts.skip + 1;
     let mut h = MIN_LAND_HEIGHT;
     while h <= MAX_HEIGHT {
         let get_type = |c: usize| -> u16 {
@@ -614,32 +653,99 @@ pub fn build_heightmap_band_mesh(pack: &Pack) -> HeightmapMesh {
         };
         let isolines = get_isolines(pack, &get_type, &options);
         if !isolines.is_empty() {
-            let color = height_color(h);
+            let color = crate::heightmap::height_color_scheme(band_opts.scheme, h);
+            // Terracing shadow copy first (offset + darker), main fill on top.
+            let terrace_color = if band_opts.terracing > 0.0 {
+                Some(crate::heightmap::darken(color, band_opts.terracing))
+            } else {
+                None
+            };
+            let fill_opts =
+                FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+
             for iso in &isolines {
-                let path = get_fill_path(&iso.chain, &pack.vertices);
-                let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
-                let mut buffer_builder = BuffersBuilder::new(&mut mesh, ColorCtor(color));
-                let opts =
-                    FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
-                if tess
-                    .tessellate_path(&path, &opts, &mut buffer_builder)
-                    .is_err()
-                {
+                // FMG passes the chain points through `lineGen` with
+                // `curveBasisClosed`; we bake the closed cubic B-spline into a
+                // lyon Path. `relax > 0` applies the `simplifyLine` stride,
+                // always keeping the closing vertex.
+                let src: Vec<u32> = if band_opts.relax > 0 {
+                    let n = iso.chain.len();
+                    iso.chain
+                        .iter()
+                        .enumerate()
+                        .filter(|&(i, _)| i % band_opts.relax == 0 || i + 1 == n)
+                        .map(|(_, &v)| v)
+                        .collect()
+                } else {
+                    iso.chain.clone()
+                };
+                let pts: Vec<[f32; 2]> = src
+                    .iter()
+                    .filter_map(|&v| pack.vertices.positions.get(v as usize).copied())
+                    .collect();
+                if pts.len() < 3 {
                     continue;
                 }
-                let base = result.vertices.len() as u32;
-                result.vertices.extend_from_slice(&mesh.vertices);
-                result.indices.extend(mesh.indices.iter().map(|i| i + base));
-                for v in &mesh.vertices {
-                    result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
-                    result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
-                    result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
-                    result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+                let path = if band_opts.curved && pts.len() >= 3 {
+                    build_curve_basis_closed(&pts, None)
+                } else {
+                    let mut builder = lyon::path::Path::builder();
+                    builder.begin(lyon::geom::point(pts[0][0], pts[0][1]));
+                    for p in pts.iter().skip(1) {
+                        builder.line_to(lyon::geom::point(p[0], p[1]));
+                    }
+                    builder.end(true);
+                    builder.build()
+                };
+
+                let append = |mesh: VertexBuffers<HeightmapVertex, u32>,
+                              offset: [f32; 2],
+                              result: &mut HeightmapMesh| {
+                    let base = result.vertices.len() as u32;
+                    let start = result.vertices.len();
+                    result.vertices.extend(mesh.vertices);
+                    result
+                        .indices
+                        .extend(mesh.indices.iter().map(|&i| i + base));
+                    for v in &mut result.vertices[start..] {
+                        v.pos[0] += offset[0];
+                        v.pos[1] += offset[1];
+                        result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+                        result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+                        result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+                        result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+                    }
+                };
+
+                if let Some(tc) = terrace_color {
+                    let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+                    if tess
+                        .tessellate_path(
+                            &path,
+                            &fill_opts,
+                            &mut BuffersBuilder::new(&mut mesh, ColorCtor(tc)),
+                        )
+                        .is_ok()
+                    {
+                        append(mesh, [0.7, 1.4], &mut result);
+                    }
+                }
+
+                let mut mesh: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+                if tess
+                    .tessellate_path(
+                        &path,
+                        &fill_opts,
+                        &mut BuffersBuilder::new(&mut mesh, ColorCtor(color)),
+                    )
+                    .is_ok()
+                {
+                    append(mesh, [0.0, 0.0], &mut result);
                 }
             }
         }
 
-        h += BAND_STEP;
+        h += step;
     }
 
     if !result.bounds_min.iter().all(|v| v.is_finite()) {

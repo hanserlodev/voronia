@@ -67,6 +67,34 @@ pub fn stencil_passthrough() -> wgpu::DepthStencilState {
     }
 }
 
+/// A `DepthStencilState` that only paints where the landmass mask stamped
+/// stencil == 1 (Azgaar's `mask: url(#land)`). The stencil value is kept
+/// untouched (write_mask: 0).
+pub fn stencil_mask_test() -> wgpu::DepthStencilState {
+    wgpu::DepthStencilState {
+        format: STENCIL_FORMAT,
+        depth_write_enabled: false,
+        depth_compare: wgpu::CompareFunction::Always,
+        stencil: wgpu::StencilState {
+            front: wgpu::StencilFaceState {
+                compare: wgpu::CompareFunction::Equal,
+                fail_op: wgpu::StencilOperation::Keep,
+                depth_fail_op: wgpu::StencilOperation::Keep,
+                pass_op: wgpu::StencilOperation::Keep,
+            },
+            back: wgpu::StencilFaceState {
+                compare: wgpu::CompareFunction::Equal,
+                fail_op: wgpu::StencilOperation::Keep,
+                depth_fail_op: wgpu::StencilOperation::Keep,
+                pass_op: wgpu::StencilOperation::Keep,
+            },
+            read_mask: u32::MAX,
+            write_mask: 0,
+        },
+        bias: wgpu::DepthBiasState::default(),
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum RenderError {
     #[error("wgpu: no surface texture ({0})")]
@@ -748,6 +776,31 @@ impl Renderer {
             masked: false,
         });
         idx
+    }
+
+    /// Replaces the buffers of an existing line layer (used by layers whose
+    /// geometry changes at runtime — e.g. the coordinates graticule rebuilt
+    /// on zoom steps, like FMG's `drawCoordinates` redrawing every pan).
+    pub fn update_line_layer(&mut self, layer_idx: usize, mesh: &HeightmapMesh) {
+        let vertex_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("vor-line-{layer_idx}-vbo")),
+                contents: bytemuck::cast_slice(&mesh.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("vor-line-{layer_idx}-ibo")),
+                contents: bytemuck::cast_slice(&mesh.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+        if let Some(layer) = self.line_layers.get_mut(layer_idx) {
+            layer.vertex_buf = Some(vertex_buf);
+            layer.index_buf = Some(index_buf);
+            layer.index_count = mesh.indices.len() as u32;
+        }
     }
 
     /// Draws a line layer in the render pass using `line_pipeline`.

@@ -166,22 +166,18 @@ fn chan(c: u8) -> f32 {
 }
 
 /// d3 `interpolateRgbBasis(values)` — Catmull-Rom/B-spline interpolation over
-/// each channel independently, matching `getColorScheme("bright")`.
-fn spectral(t: f32) -> [f32; 3] {
-    let n = SPECTRAL_STOPS.len();
+/// each channel independently.
+fn rgb_basis(stops: &[[u8; 3]], t: f32) -> [f32; 3] {
+    let n = stops.len();
     if t >= 1.0 {
         return [
-            chan(SPECTRAL_STOPS[n - 1][0]),
-            chan(SPECTRAL_STOPS[n - 1][1]),
-            chan(SPECTRAL_STOPS[n - 1][2]),
+            chan(stops[n - 1][0]),
+            chan(stops[n - 1][1]),
+            chan(stops[n - 1][2]),
         ];
     }
     if t <= 0.0 {
-        return [
-            chan(SPECTRAL_STOPS[0][0]),
-            chan(SPECTRAL_STOPS[0][1]),
-            chan(SPECTRAL_STOPS[0][2]),
-        ];
+        return [chan(stops[0][0]), chan(stops[0][1]), chan(stops[0][2])];
     }
     let full: f32 = (n - 1) as f32;
     let tt = t * full;
@@ -196,14 +192,10 @@ fn spectral(t: f32) -> [f32; 3] {
         t3 / 6.0,
     );
     // Neighbours clamped to the first/last stop at the boundaries.
-    let v0 = if i == 0 {
-        SPECTRAL_STOPS[0]
-    } else {
-        SPECTRAL_STOPS[i - 1]
-    };
-    let v1 = SPECTRAL_STOPS[i];
-    let v2 = SPECTRAL_STOPS[n.min(i + 2) - 1];
-    let v3 = SPECTRAL_STOPS[n.min(i + 3) - 1];
+    let v0 = if i == 0 { stops[0] } else { stops[i - 1] };
+    let v1 = stops[i];
+    let v2 = stops[n.min(i + 2) - 1];
+    let v3 = stops[n.min(i + 3) - 1];
     let mix = |a: [u8; 3], b: [u8; 3]| {
         let f = |c0: u8, c1: u8, c2: u8, c3: u8| {
             w0 * chan(c0) + w1 * chan(c1) + w2 * chan(c2) + w3 * chan(c3)
@@ -217,6 +209,129 @@ fn spectral(t: f32) -> [f32; 3] {
     mix(v0, v1)
 }
 
+fn spectral(t: f32) -> [f32; 3] {
+    rgb_basis(&SPECTRAL_STOPS, t)
+}
+
+/// FMG heightmap color schemes (`style.js heightmapColorSchemes`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeightmapScheme {
+    /// Default. `scaleSequential(interpolateSpectral)`.
+    Bright,
+    /// `scaleSequential(interpolateRdYlGn)` (ColorBrewer 11 stops).
+    Light,
+    /// `interpolateRgbBasis(["white","#EEEECC","tan","green","teal"])`.
+    Natural,
+    /// `interpolateGreens` (ColorBrewer 9 stops).
+    Green,
+    /// `interpolateRgbBasis(["#ffffff","#cea48d","#d5b085","#0c2c19","#151320"])`.
+    Olive,
+    /// `interpolateRgbBasis(["#BBBBDD","#2A3440","#17343B","#0A1E24"])`.
+    Livid,
+    /// `interpolateGreys` (ColorBrewer 9 stops).
+    Monochrome,
+}
+
+impl HeightmapScheme {
+    pub const ALL: [HeightmapScheme; 7] = [
+        HeightmapScheme::Bright,
+        HeightmapScheme::Light,
+        HeightmapScheme::Natural,
+        HeightmapScheme::Green,
+        HeightmapScheme::Olive,
+        HeightmapScheme::Livid,
+        HeightmapScheme::Monochrome,
+    ];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            HeightmapScheme::Bright => "bright",
+            HeightmapScheme::Light => "light",
+            HeightmapScheme::Natural => "natural",
+            HeightmapScheme::Green => "green",
+            HeightmapScheme::Olive => "olive",
+            HeightmapScheme::Livid => "livid",
+            HeightmapScheme::Monochrome => "monochrome",
+        }
+    }
+
+    fn hex_stops(&self) -> Vec<[u8; 3]> {
+        let parse = |s: &str| {
+            let h = s.trim_start_matches('#');
+            [
+                u8::from_str_radix(&h[0..2], 16).unwrap_or(0),
+                u8::from_str_radix(&h[2..4], 16).unwrap_or(0),
+                u8::from_str_radix(&h[4..6], 16).unwrap_or(0),
+            ]
+        };
+        match self {
+            // interpolateSpectral == rgbBasis(Spectral 11).
+            HeightmapScheme::Bright => SPECTRAL_STOPS.to_vec(),
+            // ColorBrewer RdYlGn (11).
+            HeightmapScheme::Light => [
+                "#a50026", "#d73027", "#f46d43", "#fdae61", "#fee08b", "#ffffbf", "#d9ef8b",
+                "#a6d96a", "#66bd63", "#1a9850", "#006837",
+            ]
+            .iter()
+            .map(|&s| parse(s))
+            .collect(),
+            HeightmapScheme::Natural => ["white", "#EEEECC", "tan", "green", "teal"]
+                .iter()
+                .map(|&s| named_color(s))
+                .collect(),
+            // ColorBrewer Greens (9).
+            HeightmapScheme::Green => [
+                "#f7fcf5", "#e5f5e0", "#c7e9c0", "#a1d99b", "#74c476", "#41ab5d", "#238b45",
+                "#006d2c", "#00441b",
+            ]
+            .iter()
+            .map(|&s| parse(s))
+            .collect(),
+            HeightmapScheme::Olive => ["#ffffff", "#cea48d", "#d5b085", "#0c2c19", "#151320"]
+                .iter()
+                .map(|&s| parse(s))
+                .collect(),
+            HeightmapScheme::Livid => ["#BBBBDD", "#2A3440", "#17343B", "#0A1E24"]
+                .iter()
+                .map(|&s| parse(s))
+                .collect(),
+            // ColorBrewer Greys (9).
+            HeightmapScheme::Monochrome => [
+                "#ffffff", "#f0f0f0", "#d9d9d9", "#bdbdbd", "#969696", "#737373", "#525252",
+                "#252525", "#000000",
+            ]
+            .iter()
+            .map(|&s| parse(s))
+            .collect(),
+        }
+    }
+
+    /// `scheme(t)` for `t ∈ [0,1]` — linear RGBA output.
+    pub fn at(&self, t: f32) -> [f32; 4] {
+        let srgb = match self {
+            HeightmapScheme::Bright => spectral(t.clamp(0.0, 1.0)),
+            _ => rgb_basis(&self.hex_stops(), t.clamp(0.0, 1.0)),
+        };
+        [
+            srgb_to_linear(srgb[0]),
+            srgb_to_linear(srgb[1]),
+            srgb_to_linear(srgb[2]),
+            1.0,
+        ]
+    }
+}
+
+/// Minimal CSS named-color table for the `natural` scheme stops.
+fn named_color(name: &str) -> [u8; 3] {
+    match name {
+        "white" => [0xff, 0xff, 0xff],
+        "tan" => [0xd2, 0xb4, 0x8c],
+        "green" => [0x00, 0x80, 0x00],
+        "teal" => [0x00, 0x80, 0x80],
+        _ => [0xff, 0xff, 0xff],
+    }
+}
+
 /// Azgaar heightmap color for a height value.
 ///
 /// Mirrors FMG `getColor(value, scheme)`:
@@ -226,15 +341,34 @@ fn spectral(t: f32) -> [f32; 3] {
 /// The resulting sRGB ramp is converted to **linear** RGBA (the wgpu shader
 /// does not apply gamma) via the standard sRGB OETF.
 pub fn height_color(h: u8) -> [f32; 4] {
+    height_color_scheme(HeightmapScheme::Bright, h)
+}
+
+/// FMG `getColor(value, scheme)` for any of the 7 schemes.
+pub fn height_color_scheme(scheme: HeightmapScheme, h: u8) -> [f32; 4] {
     let value = h.min(100) as f32;
     let offset = if value < 20.0 { value - 5.0 } else { value };
     let t = 1.0 - offset / 100.0;
-    let srgb = spectral(t.clamp(0.0, 1.0));
+    scheme.at(t.clamp(0.0, 1.0))
+}
+
+/// d3 `color.darker(k)`: multiply each channel by `0.7^k` (in sRGB space).
+pub fn darken(c: [f32; 4], k: f32) -> [f32; 4] {
+    let f = 0.7_f32.powf(k);
+    // c is linear here; convert to sRGB, scale, convert back (d3 works in sRGB).
+    let inv = |x: f32| {
+        let srgb = if x <= 0.003_130_8 {
+            x * 12.92
+        } else {
+            1.055 * x.powf(1.0 / 2.4) - 0.055
+        };
+        (srgb * f).clamp(0.0, 1.0)
+    };
     [
-        srgb_to_linear(srgb[0]),
-        srgb_to_linear(srgb[1]),
-        srgb_to_linear(srgb[2]),
-        1.0,
+        srgb_to_linear(inv(c[0])),
+        srgb_to_linear(inv(c[1])),
+        srgb_to_linear(inv(c[2])),
+        c[3],
     ]
 }
 
@@ -299,5 +433,44 @@ mod tests {
     #[test]
     fn height_color_clamp_above_100() {
         let _ = height_color(255);
+    }
+
+    #[test]
+    fn all_schemes_produce_valid_colors() {
+        for scheme in HeightmapScheme::ALL {
+            let low = height_color_scheme(scheme, 20);
+            let high = height_color_scheme(scheme, 100);
+            assert_eq!(low[3], 1.0);
+            assert_eq!(high[3], 1.0);
+            assert!(
+                low.iter().all(|v| v.is_finite()) && high.iter().all(|v| v.is_finite()),
+                "{:?} produced non-finite channels",
+                scheme
+            );
+        }
+        // Monochrome: getColor maps high h to t≈0 → first Greys stop (white).
+        let top = height_color_scheme(HeightmapScheme::Monochrome, 100);
+        assert!(top[0] > 0.98 && (top[0] - top[2]).abs() < 1e-6);
+        // Low land (h=20 → t=0.8) lands deep in the dark end of Greys.
+        let low = height_color_scheme(HeightmapScheme::Monochrome, 20);
+        assert!(low[0] < 0.35);
+    }
+
+    #[test]
+    fn darken_matches_d3_formula() {
+        // d3 darker(1) multiplies sRGB by 0.7; white stays neutral gray.
+        let w = [
+            srgb_to_linear(1.0),
+            srgb_to_linear(1.0),
+            srgb_to_linear(1.0),
+            1.0,
+        ];
+        let d = darken(w, 1.0);
+        let expected = srgb_to_linear(0.7);
+        assert!((d[0] - expected).abs() < 1e-6);
+        assert_eq!(d[3], 1.0);
+        // darker(0) is a no-op.
+        let same = darken(w, 0.0);
+        assert!((same[0] - w[0]).abs() < 1e-6);
     }
 }

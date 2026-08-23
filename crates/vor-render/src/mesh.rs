@@ -245,6 +245,85 @@ pub(crate) fn catmull_rom_closed(points: &[[f32; 2]], subdivisions: usize) -> Ve
     result
 }
 
+/// d3 `curveCatmullRom.alpha(a)` for open lines, ported from the d3-shape
+/// control-point math (`h_` in d3.min.js): per segment `p_i → p_{i+1}` the
+/// bézier controls are
+///   `cp1 = (p_i·u − p_{i−1}·l12² + p_{i+1}·l01²)/c`, `u = 2l01²+3l01·l12+l12²`,
+///   `c = 3l01(l01+l12)` (symmetric for cp2 with l23),
+/// where `l_ab = |p_a − p_b|^alpha`. Mirrors d3's boundary handling: the path
+/// **starts at the second point** (`p0` only influences the first control
+/// point) and the final control point is the raw last point.
+pub(crate) fn catmull_rom_open_alpha(
+    points: &[[f32; 2]],
+    alpha: f32,
+    subdivisions: usize,
+) -> Vec<[f32; 2]> {
+    let n = points.len();
+    if n < 3 || subdivisions == 0 {
+        return points.to_vec();
+    }
+    let a = alpha.max(0.0);
+    let eps = 1e-6;
+    let la = |p: [f32; 2], q: [f32; 2]| -> f32 {
+        let dx = p[0] - q[0];
+        let dy = p[1] - q[1];
+        (dx * dx + dy * dy).sqrt().powf(a)
+    };
+
+    let mut result = Vec::with_capacity((n - 2) * (subdivisions + 1) + 1);
+    result.push(points[1]);
+    for i in 1..=(n - 2) {
+        let p_im1 = points[i - 1];
+        let p_i = points[i];
+        let p_i1 = points[i + 1];
+        let l01 = la(p_im1, p_i);
+        let l12 = la(p_i, p_i1);
+        // cp1
+        let cp1 = if l01 > eps {
+            let u = 2.0 * l01 * l01 + 3.0 * l01 * l12 + l12 * l12;
+            let c = 3.0 * l01 * (l01 + l12);
+            [
+                (p_i[0] * u - p_im1[0] * l12 * l12 + p_i1[0] * l01 * l01) / c,
+                (p_i[1] * u - p_im1[1] * l12 * l12 + p_i1[1] * l01 * l01) / c,
+            ]
+        } else {
+            p_i
+        };
+        // cp2 (l23 = 0 on the final segment → raw endpoint, like d3's lineEnd)
+        let cp2 = if i + 2 < n {
+            let p_i2 = points[i + 2];
+            let l23 = la(p_i1, p_i2);
+            if l23 > eps {
+                let f = 2.0 * l23 * l23 + 3.0 * l23 * l12 + l12 * l12;
+                let s = 3.0 * l23 * (l23 + l12);
+                [
+                    (p_i1[0] * f + p_i[0] * l23 * l23 - p_i2[0] * l12 * l12) / s,
+                    (p_i1[1] * f + p_i[1] * l23 * l23 - p_i2[1] * l12 * l12) / s,
+                ]
+            } else {
+                p_i1
+            }
+        } else {
+            p_i1
+        };
+        for j in 1..=subdivisions {
+            let t = j as f32 / subdivisions as f32;
+            let t2 = t * t;
+            let t3 = t2 * t;
+            let mt = 1.0 - t;
+            let w0 = mt * mt * mt;
+            let w1 = 3.0 * mt * mt * t;
+            let w2 = 3.0 * mt * t2;
+            let w3 = t3;
+            result.push([
+                w0 * p_i[0] + w1 * cp1[0] + w2 * cp2[0] + w3 * p_i1[0],
+                w0 * p_i[1] + w1 * cp1[1] + w2 * cp2[1] + w3 * p_i1[1],
+            ]);
+        }
+    }
+    result
+}
+
 /// Subdivides an open polyline with uniform cubic Catmull-Rom (α=0).
 /// The first and last segments repeat their endpoint to dampen the curve.
 pub(crate) fn catmull_rom_open(points: &[[f32; 2]], subdivisions: usize) -> Vec<[f32; 2]> {
@@ -369,4 +448,35 @@ pub fn build_landmass_mesh(
     }
 
     result
+}
+
+#[cfg(test)]
+mod alpha_tests {
+    use super::*;
+
+    #[test]
+    fn alpha_curve_starts_at_second_point_and_differs_from_straight() {
+        // Asymmetric control spacing: alpha parameterization must bend the
+        // curve differently than a uniform Catmull-Rom would.
+        let pts = vec![[0.0, 0.0], [10.0, 1.0], [30.0, 2.0], [70.0, 0.0]];
+        let out = catmull_rom_open_alpha(&pts, 0.1, 4);
+        // d3 curveCatmullRomOpen starts at the SECOND input point.
+        assert_eq!(out[0], pts[1]);
+        // Ends exactly at the last point.
+        assert_eq!(*out.last().unwrap(), *pts.last().unwrap());
+        // Interior samples deviate from the straight polyline.
+        let mid = &out[out.len() / 2];
+        let straight_y =
+            pts[1][1] + (pts[3][1] - pts[1][1]) * (mid[0] - pts[1][0]) / (pts[3][0] - pts[1][0]);
+        assert!(
+            (mid[1] - straight_y).abs() > 1e-3,
+            "curve should bend, got {mid:?} vs straight y {straight_y}"
+        );
+    }
+
+    #[test]
+    fn alpha_curve_short_input_passthrough() {
+        let pts = vec![[0.0, 0.0], [5.0, 5.0]];
+        assert_eq!(catmull_rom_open_alpha(&pts, 0.1, 4), pts);
+    }
 }

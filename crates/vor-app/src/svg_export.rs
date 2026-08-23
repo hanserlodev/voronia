@@ -73,7 +73,9 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
         let _ = writeln!(svg, "\" fill=\"{hex}\" stroke=\"none\" opacity=\"0.95\"/>");
     }
 
-    // 3. Rivers as polylines
+    // 3. Rivers as polylines (approximation of the GPU ribbon: centerline
+    // stroke using the same width model as river.rs — get_offset/get_width —
+    // evaluated at the mouth, where the river is widest).
     for river in &world.rivers {
         if river.cell_path.is_empty() {
             continue;
@@ -86,11 +88,19 @@ pub fn export_svg(world: &World, path: &Path) -> anyhow::Result<()> {
             }
             let _ = write!(svg, "{:.1},{:.1}", pt[0], pt[1]);
         }
-        // Width based on discharge (mapped to 0.5~4px)
-        let width_px = (river.discharge_m3s / 5000.0).clamp(0.5, 4.0);
+        // Same width model as the GPU mesh: get_offset at the last point
+        // (full length progression + full flux), then get_width.
+        let flux = river.discharge_m3s.max(1.0);
+        let idx = river.cell_path.len().saturating_sub(1);
+        let wf = river.width_factor.max(0.1);
+        let sw = river.source_width_km.max(0.05);
+        let offset = vor_render::river::get_offset(flux, idx, wf, sw);
+        let width_px = (vor_render::river::get_width(offset)
+            / world.settings.distance_scale.max(0.01))
+        .clamp(0.1, 50.0);
         let _ = writeln!(
             svg,
-            "\" fill=\"none\" stroke=\"#4488cc\" stroke-width=\"{width_px:.1}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+            "\" fill=\"none\" stroke=\"#5d97bb\" stroke-width=\"{width_px:.2}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
         );
     }
 

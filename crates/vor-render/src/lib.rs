@@ -43,6 +43,7 @@ pub mod lakes;
 pub mod layers;
 pub mod market;
 pub mod mesh;
+pub mod ocean_layers;
 pub mod population_layer;
 pub mod precipitation;
 pub mod prng;
@@ -74,19 +75,19 @@ pub use coastline_path::{
     build_coastline_path, coastline_path_to_lyon, CoastlinePath, CoastlineSpan, PathCommand,
 };
 pub use coastline_stroke::{
-    build_coastline_shadow_mesh, build_coastline_stroke_mesh, CoastlineStrokeSettings,
+    build_coastline_meshes, CoastlineMeshes, CoastlineStrokeSettings, SHADOW_MAX_SCALE,
 };
 pub use coordinates::{build_coordinate_graticule, GraticuleLabel, GraticuleMesh};
 pub use culture_layer::build_culture_mesh;
 pub use grid::build_grid_lines;
 pub use heightmap::{build_mesh, height_color, HeightmapMesh};
-pub use ice_layer::build_ice_mesh;
+pub use ice_layer::{build_ice_meshes, IceMeshes};
 pub use isoline::{
     build_heightmap_band_mesh, build_region_mesh, build_vertex_path_mesh, connect_vertices,
     get_border_path, get_fill_path, get_halo_path, get_isolines, get_water_gap_path,
     IsolineOptions, IsolineOutput,
 };
-pub use lakes::build_lake_mesh;
+pub use lakes::{build_lake_meshes, LakeMeshes};
 pub use layers::LayerFlags;
 pub use mesh::{
     build_land_cells_mask_mesh, build_landmass_mesh, build_pack_mesh, laplacian_smooth_vertices,
@@ -94,15 +95,17 @@ pub use mesh::{
 pub use population_layer::build_population_bars_mesh;
 pub use precipitation::build_precipitation_mesh;
 pub use province_layer::build_province_mesh;
-pub use relief::build_relief_mesh;
+pub use relief::{
+    build_relief_instances, poisson_disc, ReliefIcon, ReliefIconsOverlay, ReliefSettings, SYMBOLS,
+};
 pub use religion_layer::build_religion_mesh;
 pub use renderer::{stencil_passthrough, Renderer, STENCIL_FORMAT};
-pub use river::build_river_mesh;
+pub use river::{build_river_mesh, get_offset, get_width};
 pub use route_layer::build_route_mesh;
 pub use simplify::simplify;
 pub use state_layer::build_state_mesh;
 pub use temperature::build_temperature_mesh;
 pub use text::{Label, TextSystem};
-pub use texture::TextureOverlay;
+pub use texture::{OceanPatternOverlay, TextureOverlay};
 pub use water_gap::{append_water_gap, build_water_gap_mesh};
 pub use zone_layer::build_zone_mesh;

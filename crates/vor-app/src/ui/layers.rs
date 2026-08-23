@@ -259,7 +259,7 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
     egui::collapsing_header::CollapsingState::load_with_default_open(
         ui.ctx(),
         ui.make_persistent_id("layers-landmass"),
-        true,
+        false,
     )
     .show_header(ui, |ui| {
         ui.strong("Landmass");
@@ -276,7 +276,7 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
     egui::collapsing_header::CollapsingState::load_with_default_open(
         ui.ctx(),
         ui.make_persistent_id("layers-water-climate"),
-        true,
+        false,
     )
     .show_header(ui, |ui| {
         ui.strong("Water & Climate");
@@ -292,7 +292,7 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
     egui::collapsing_header::CollapsingState::load_with_default_open(
         ui.ctx(),
         ui.make_persistent_id("layers-biosphere"),
-        true,
+        false,
     )
     .show_header(ui, |ui| {
         ui.strong("Biosphere");
@@ -306,7 +306,7 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
     egui::collapsing_header::CollapsingState::load_with_default_open(
         ui.ctx(),
         ui.make_persistent_id("layers-human-geo"),
-        true,
+        false,
     )
     .show_header(ui, |ui| {
         ui.strong("Human Geography");
@@ -326,7 +326,7 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
     egui::collapsing_header::CollapsingState::load_with_default_open(
         ui.ctx(),
         ui.make_persistent_id("layers-borders"),
-        true,
+        false,
     )
     .show_header(ui, |ui| {
         ui.strong("Borders");
@@ -344,7 +344,7 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
     egui::collapsing_header::CollapsingState::load_with_default_open(
         ui.ctx(),
         ui.make_persistent_id("layers-overlay"),
-        true,
+        false,
     )
     .show_header(ui, |ui| {
         ui.strong("Overlay");

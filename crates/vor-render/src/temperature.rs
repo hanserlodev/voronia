@@ -192,9 +192,78 @@ pub fn build_temperature_mesh(grid: &Grid) -> HeightmapMesh {
         bounds_max: [grid.width, grid.height],
     };
 
+    let trace = trace_temperature_chains(grid);
+    let (min_temp, step, isolines, chains_by_t) = (
+        trace.min_temp,
+        trace.step,
+        trace.isolines,
+        trace.chains_by_t,
+    );
+    let _ = step;
+
+    let mut tess = FillTessellator::new();
+    let fill_opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::NonZero);
+
+    // Base layer: whole canvas filled with the minTemp color (`stroke: none`),
+    // inheriting the CSS `fill-opacity: 0.3`.
+    let mut base_color = temp_color(min_temp);
+    base_color[3] = CSS_FILL_OPACITY;
+    fill_rect(&mut mesh, &mut tess, base_color, grid.width, grid.height);
+
+    // `for (const t of isolines)` — ascending, each band on top of the previous.
+    for t in &isolines {
+        let t_int = *t as i32;
+        let Some(paths) = chains_by_t.iter().find(|(t, _)| *t == t_int) else {
+            continue;
+        };
+        let mut fill = temp_color(*t);
+        fill[3] = CSS_FILL_OPACITY;
+        for pts in &paths.1 {
+            let path = crate::isoline::build_curve_basis_closed(pts, Some(10.0));
+            let mut verts: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+            let mut buffer_builder = BuffersBuilder::new(&mut verts, ColorCtor(fill));
+            if tess
+                .tessellate_path(&path, &fill_opts, &mut buffer_builder)
+                .is_err()
+            {
+                continue;
+            }
+            push_mesh(&mut mesh, &verts);
+            add_stroke(&mut mesh, &path, fill, CSS_STROKE_WIDTH);
+        }
+    }
+
+    if !mesh.bounds_min.iter().all(|v| v.is_finite()) {
+        mesh.bounds_min = [0.0, 0.0];
+        mesh.bounds_max = [0.0, 0.0];
+    }
+
+    mesh
+}
+
+/// Traced isotherm data shared by the mesh builder and the label anchors.
+pub struct TemperatureTrace {
+    pub min_temp: f32,
+    pub max_temp: f32,
+    pub step: f32,
+    /// Isoline values (`d3_range(min+step, max, step)`).
+    pub isolines: Vec<f32>,
+    /// Raw point chains per isoline value (draw order preserved).
+    pub chains_by_t: Vec<(i32, Vec<Vec<[f32; 2]>>)>,
+}
+
+/// Traces the isotherm chains once (shared by the mesh builder and the label
+/// anchors).
+fn trace_temperature_chains(grid: &Grid) -> TemperatureTrace {
     let n = grid.points_n().min(grid.cells.temperature.len());
     if n == 0 {
-        return mesh;
+        return TemperatureTrace {
+            min_temp: 0.0,
+            max_temp: 0.0,
+            step: 1.0,
+            isolines: Vec::new(),
+            chains_by_t: Vec::new(),
+        };
     }
 
     let min_temp = grid.cells.temperature[..n]
@@ -210,9 +279,9 @@ pub fn build_temperature_mesh(grid: &Grid) -> HeightmapMesh {
     let step = (((max_temp - min_temp).abs() / 5.0).round() as i32).max(1) as f32;
     let isolines = d3_range(min_temp + step, max_temp, step);
 
-    // Gather chains per isoline value → Vec of paths per `t`, exactly like FMG's
-    // `chains: [t, points][]` array (draw order preserved).
-    let mut chains_by_t: Vec<(i32, Vec<Path>)> = Vec::new();
+    // Gather chains per isoline value → raw point chains per `t`, exactly like
+    // FMG's `chains: [t, points][]` array (draw order preserved).
+    let mut chains_by_t: Vec<(i32, Vec<Vec<[f32; 2]>>)> = Vec::new();
 
     // Single global `checkedCells` as in FMG.
     let mut checked = vec![false; n];
@@ -261,50 +330,19 @@ pub fn build_temperature_mesh(grid: &Grid) -> HeightmapMesh {
             .iter()
             .filter_map(|&v| grid.vertices.positions.get(v as usize).copied())
             .collect();
-        let path = crate::isoline::build_curve_basis_closed(&pts, Some(10.0));
         match chains_by_t.iter_mut().find(|(t, _)| *t == cell_temp as i32) {
-            Some((_, paths)) => paths.push(path),
-            None => chains_by_t.push((cell_temp as i32, vec![path])),
+            Some((_, chains)) => chains.push(pts),
+            None => chains_by_t.push((cell_temp as i32, vec![pts])),
         }
     }
 
-    let mut tess = FillTessellator::new();
-    let fill_opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::NonZero);
-
-    // Base layer: whole canvas filled with the minTemp color (`stroke: none`),
-    // inheriting the CSS `fill-opacity: 0.3`.
-    let mut base_color = temp_color(min_temp);
-    base_color[3] = CSS_FILL_OPACITY;
-    fill_rect(&mut mesh, &mut tess, base_color, grid.width, grid.height);
-
-    // `for (const t of isolines)` — ascending, each band on top of the previous.
-    for t in &isolines {
-        let t_int = *t as i32;
-        let Some(paths) = chains_by_t.iter().find(|(t, _)| *t == t_int) else {
-            continue;
-        };
-        let mut fill = temp_color(*t);
-        fill[3] = CSS_FILL_OPACITY;
-        for path in &paths.1 {
-            let mut verts: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
-            let mut buffer_builder = BuffersBuilder::new(&mut verts, ColorCtor(fill));
-            if tess
-                .tessellate_path(path, &fill_opts, &mut buffer_builder)
-                .is_err()
-            {
-                continue;
-            }
-            push_mesh(&mut mesh, &verts);
-            add_stroke(&mut mesh, path, fill, CSS_STROKE_WIDTH);
-        }
+    TemperatureTrace {
+        min_temp,
+        max_temp,
+        step,
+        isolines,
+        chains_by_t,
     }
-
-    if !mesh.bounds_min.iter().all(|v| v.is_finite()) {
-        mesh.bounds_min = [0.0, 0.0];
-        mesh.bounds_max = [0.0, 0.0];
-    }
-
-    mesh
 }
 
 #[inline]
@@ -318,6 +356,128 @@ fn push_mesh(out: &mut HeightmapMesh, verts: &VertexBuffers<HeightmapVertex, u32
         out.bounds_max[0] = out.bounds_max[0].max(v.pos[0]);
         out.bounds_max[1] = out.bounds_max[1].max(v.pos[1]);
     }
+}
+
+/// One isotherm label anchor (world px + temperature in °C), ported from
+/// `addLabel`/`pushLabel` in `draw-temperature.ts:104-133`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TemperatureLabel {
+    pub x: f32,
+    pub y: f32,
+    pub temp_c: f32,
+}
+
+/// Temperature scales supported by FMG's `temperatureScale` select
+/// (`index.html:2525-2534`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TempUnit {
+    #[default]
+    C,
+    F,
+    K,
+    R,
+    De,
+    N,
+    Re,
+    Ro,
+}
+
+impl TempUnit {
+    pub const ALL: [TempUnit; 8] = [
+        TempUnit::C,
+        TempUnit::F,
+        TempUnit::K,
+        TempUnit::R,
+        TempUnit::De,
+        TempUnit::N,
+        TempUnit::Re,
+        TempUnit::Ro,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            TempUnit::C => "°C",
+            TempUnit::F => "°F",
+            TempUnit::K => "K",
+            TempUnit::R => "°R",
+            TempUnit::De => "°De",
+            TempUnit::N => "°N",
+            TempUnit::Re => "°Ré",
+            TempUnit::Ro => "°Rø",
+        }
+    }
+}
+
+/// FMG `convertTemperature` (`unitUtils.ts:11-24`), `rn(x)` = Math.round to 0
+/// decimals.
+pub fn convert_temperature(temp_c: f32, unit: TempUnit) -> String {
+    let rn0 = |v: f32| -> i64 { v.round() as i64 };
+    match unit {
+        TempUnit::C => format!("{}°C", rn0(temp_c)),
+        TempUnit::F => format!("{}°F", rn0(temp_c * 9.0 / 5.0 + 32.0)),
+        TempUnit::K => format!("{}K", rn0(temp_c + 273.15)),
+        TempUnit::R => format!("{}°R", rn0((temp_c + 273.15) * 9.0 / 5.0)),
+        TempUnit::De => format!("{}°De", rn0((100.0 - temp_c) * 3.0 / 2.0)),
+        TempUnit::N => format!("{}°N", rn0(temp_c * 33.0 / 100.0)),
+        TempUnit::Re => format!("{}°Ré", rn0(temp_c * 4.0 / 5.0)),
+        TempUnit::Ro => format!("{}°Rø", rn0(temp_c * 21.0 / 40.0 + 7.5)),
+    }
+}
+
+/// Isotherm label anchors — port of `addLabel` + `pushLabel`
+/// (`draw-temperature.ts:104-133`): one label at the isoline's top-center
+/// (minimizes `y − |x − xCenter|/2`), a second at the bottom-center when the
+/// chain has >20 points and both candidates are >10 px apart (dist² > 100);
+/// labels within 20 px of the canvas edge are dropped.
+pub fn temperature_labels(grid: &Grid) -> Vec<TemperatureLabel> {
+    let chains_by_t = trace_temperature_chains(grid).chains_by_t;
+    let x_center = grid.width / 2.0;
+    let mut labels = Vec::new();
+
+    let mut push = |x: f32, y: f32, t: f32| {
+        if x < 20.0 || x > grid.width - 20.0 || y < 20.0 || y > grid.height - 20.0 {
+            return;
+        }
+        labels.push(TemperatureLabel { x, y, temp_c: t });
+    };
+
+    for (t, chains) in &chains_by_t {
+        let tf = *t as f32;
+        for pts in chains {
+            // top-center: leastIndex by `a[1] - b[1] + (|a.x − xc| − |b.x − xc|)/2`
+            let Some(tc) = pts.iter().copied().min_by(|a, b| {
+                let ka =
+                    a[1] - b[1] + (a[0] - x_center).abs() / 2.0 - ((b[0] - x_center).abs() / 2.0);
+                ka.partial_cmp(
+                    &(b[1] - a[1] + (b[0] - x_center).abs() / 2.0
+                        - ((a[0] - x_center).abs() / 2.0)),
+                )
+                .unwrap_or(std::cmp::Ordering::Equal)
+            }) else {
+                continue;
+            };
+            push(tc[0], tc[1], tf);
+
+            if pts.len() > 20 {
+                // bottom-center: reversed comparator
+                if let Some(bc) = pts.iter().copied().min_by(|a, b| {
+                    let kb = b[1] - a[1] + (a[0] - x_center).abs() / 2.0
+                        - ((b[0] - x_center).abs() / 2.0);
+                    kb.partial_cmp(
+                        &(a[1] - b[1] + (b[0] - x_center).abs() / 2.0
+                            - ((a[0] - x_center).abs() / 2.0)),
+                    )
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                }) {
+                    let dist2 = (tc[1] - bc[1]).powi(2) + (tc[0] - bc[0]).powi(2);
+                    if dist2 > 100.0 {
+                        push(bc[0], bc[1], tf);
+                    }
+                }
+            }
+        }
+    }
+    labels
 }
 
 #[cfg(test)]
@@ -352,6 +512,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn convert_temperature_matches_fmg_formulas() {
+        use TempUnit::*;
+        assert_eq!(convert_temperature(20.0, C), "20°C");
+        assert_eq!(convert_temperature(20.0, F), "68°F"); // 20*9/5+32
+        assert_eq!(convert_temperature(20.0, K), "293K"); // 20+273.15 → round 293
+        assert_eq!(convert_temperature(20.0, R), "528°R"); // (20+273.15)*1.8 = 527.67
+                                                           // ^ careful: JS Math.round(527.67) = 528
+    }
+    #[test]
+    fn temp_unit_labels() {
+        assert_eq!(TempUnit::C.label(), "°C");
+        assert_eq!(TempUnit::Re.label(), "°Ré");
+        assert_eq!(TempUnit::Ro.label(), "°Rø");
+        assert_eq!(TempUnit::ALL.len(), 8);
+    }
     #[test]
     fn d3_range_matches_d3() {
         assert_eq!(d3_range(2.0, 10.0, 2.0), vec![2.0, 4.0, 6.0, 8.0]);

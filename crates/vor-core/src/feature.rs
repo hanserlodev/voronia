@@ -17,6 +17,9 @@ pub enum LakeGroup {
     Dry,
     Sinkhole,
     Lava,
+    /// FMG assigns `frozen` when the lake's temperature is < −3 °C
+    /// (features.ts:356-368); styled `#cdd4e7` with no stroke.
+    Frozen,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

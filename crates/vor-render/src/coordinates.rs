@@ -31,15 +31,24 @@ pub struct GraticuleLabel {
 }
 
 /// Possible graticule steps (Azgaar `steps` array in `drawCoordinates`).
-const STEPS: [f32; 6] = [0.5, 1.0, 2.0, 5.0, 10.0, 15.0];
+const STEPS: [f32; 7] = [0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0];
 /// Optional major step (Azgaar `stepMajor([400, 400])`; irrelevant here).
 const _MAJOR: f32 = 400.0;
-/// Line color for the graticule (Azgaar `#coordinateGrid` stroke).
-const GRID_COLOR: [f32; 4] = [0.5, 0.6, 0.7, 0.3];
+/// Line style for the graticule — FMG `#coordinates` defaults
+/// (`default.json`): stroke `#d4d4d4`, width 1, dasharray 5, opacity 1.
+/// GL LineList draws 1 px hardware lines without dashes, so only the color
+/// is exact.
+fn grid_color() -> [f32; 4] {
+    let mut c = crate::biome::hex_color_to_linear("#d4d4d4");
+    c[3] = 1.0;
+    c
+}
 
-/// Picks the "round" step Azgaar uses: closest of `STEPS` to `lonT/10`.
-pub fn pick_step(lon_t: f32) -> f32 {
-    let goal = (lon_t / 10.0).abs().max(1e-6);
+/// Picks the "round" step Azgaar uses: closest of `STEPS` to the given goal
+/// (`goal = lonT / scale / 10` in `drawCoordinates`; ties resolve to the
+/// smaller step, like the JS `reduce`).
+pub fn pick_step(goal: f32) -> f32 {
+    let goal = goal.abs().max(1e-6);
     STEPS
         .iter()
         .map(|&s| (s - goal).abs())
@@ -47,6 +56,14 @@ pub fn pick_step(lon_t: f32) -> f32 {
         .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(i, _)| STEPS[i])
         .unwrap_or(2.0)
+}
+
+/// FMG label rescaling: `font-size = max(rn(desired / scale**0.8, 2), 0.1)`
+/// in world units — i.e. `desired * scale**0.2` screen pixels for our
+/// screen-space glyphon text.
+pub fn label_font_px(desired: f32, scale: f32) -> f32 {
+    let world_units = (desired / scale.max(1e-6).powf(0.8) * 100.0).round() / 100.0;
+    (world_units * scale.max(1e-6)).max(0.1)
 }
 
 /// Converts a world canvas x (`0..width`) to longitude (Azgaar `getLongitude`).
@@ -87,11 +104,14 @@ pub struct GraticuleMesh {
 }
 
 /// Builds the geographic graticule over `[0,0]`..`[width,height]` given the map's
-/// lat/lon coordinates, mirroring Azgaar FMG.
+/// lat/lon coordinates and the (zoom-dependent) step in degrees, mirroring
+/// Azgaar FMG. Rebuilt whenever `step` changes (`drawCoordinates` redraws on
+/// every pan/zoom).
 pub fn build_coordinate_graticule(
     coords: &MapCoordinates,
     width: f32,
     height: f32,
+    step: f32,
 ) -> GraticuleMesh {
     let empty = HeightmapMesh {
         vertices: Vec::new(),
@@ -113,8 +133,6 @@ pub fn build_coordinate_graticule(
     let lat_t = coords.lat_t;
     let lat_s = lat_n - lat_t;
 
-    let step = pick_step(lon_r - lon_l);
-
     let mut verts: Vec<HeightmapVertex> = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
     let mut labels: Vec<GraticuleLabel> = Vec::new();
@@ -128,11 +146,11 @@ pub fn build_coordinate_graticule(
             let base = verts.len() as u32;
             verts.push(HeightmapVertex {
                 pos: [x, 0.0],
-                color: GRID_COLOR,
+                color: grid_color(),
             });
             verts.push(HeightmapVertex {
                 pos: [x, height],
-                color: GRID_COLOR,
+                color: grid_color(),
             });
             idx.push(base);
             idx.push(base + 1);
@@ -154,11 +172,11 @@ pub fn build_coordinate_graticule(
             let base = verts.len() as u32;
             verts.push(HeightmapVertex {
                 pos: [0.0, y],
-                color: GRID_COLOR,
+                color: grid_color(),
             });
             verts.push(HeightmapVertex {
                 pos: [width, y],
-                color: GRID_COLOR,
+                color: grid_color(),
             });
             idx.push(base);
             idx.push(base + 1);
@@ -200,19 +218,22 @@ mod tests {
 
     #[test]
     fn pick_step_closest_to_goal() {
-        // lonT = 20 -> goal 2.0 -> exactly 2.
-        assert_eq!(pick_step(20.0), 2.0);
-        // lonT = 60 -> goal 6.0 -> closest is 5 (|5-6|=1 < |10-6|=4).
-        assert_eq!(pick_step(60.0), 5.0);
+        // goal 2.0 -> exactly 2.
+        assert_eq!(pick_step(2.0), 2.0);
+        // goal 6.0 -> closest is 5 (|5-6|=1 < |10-6|=4).
+        assert_eq!(pick_step(6.0), 5.0);
         // Ties resolve to the earlier (smaller) step, like JS `reduce` (< strict).
-        assert_eq!(pick_step(35.0), 2.0); // goal 3.5: 2 and 5 both at 1.5
-        assert_eq!(pick_step(0.0), 0.5); // degenerately small range -> smallest step
+        assert_eq!(pick_step(3.5), 2.0); // 2 and 5 both at 1.5
+        assert_eq!(pick_step(0.0), 0.5); // degenerately small goal -> smallest step
+                                         // Azgaar's steps include 30.
+        assert_eq!(pick_step(30.0), 30.0);
+        assert_eq!(pick_step(26.0), 30.0); // |30-26|=4 < |15-26|=11
     }
 
     #[test]
     fn graticule_produces_lines_and_labels() {
         let c = coords();
-        let g = build_coordinate_graticule(&c, 1000.0, 1000.0);
+        let g = build_coordinate_graticule(&c, 1000.0, 1000.0, pick_step(35.0 / 10.0));
         assert!(!g.lines.vertices.is_empty());
         assert!(!g.labels.is_empty());
         // Every label has text.
@@ -230,7 +251,18 @@ mod tests {
 
     #[test]
     fn zero_bounds_empty() {
-        let g = build_coordinate_graticule(&coords(), 0.0, 100.0);
+        let g = build_coordinate_graticule(&coords(), 0.0, 100.0, 2.0);
         assert!(g.lines.vertices.is_empty());
+    }
+
+    #[test]
+    fn label_font_matches_fmg_formula() {
+        // world = desired/scale^0.8; screen px = world*scale = desired*scale^0.2
+        let f = label_font_px(12.0, 1.0);
+        assert!((f - 12.0).abs() < 0.13, "scale 1 -> desired ({f})");
+        // scale 4: 12*4^0.2 ≈ 12*1.3195 ≈ 15.83
+        let f = label_font_px(12.0, 4.0);
+        assert!((f - 15.83).abs() < 0.05, "got {f}");
+        assert!(label_font_px(12.0, 0.001) >= 0.1);
     }
 }

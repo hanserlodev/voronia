@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use vor_core::World;
+use vor_render::layers::DynamicLayerIds;
 use vor_render::{Camera, LayerFlags, Renderer};
 
 #[allow(clippy::too_many_arguments)]
@@ -10,6 +11,7 @@ pub fn export_modal(
     renderer: &Renderer,
     camera: &Camera,
     layer_flags: &LayerFlags,
+    dyn_ids: &DynamicLayerIds,
     vorn_save_path: &Path,
     world: &World,
 ) {
@@ -33,6 +35,7 @@ pub fn export_modal(
                             renderer,
                             camera,
                             layer_flags,
+                            dyn_ids,
                             camera.extent_y as u32 * 2,
                             camera.extent_y as u32,
                             &path,

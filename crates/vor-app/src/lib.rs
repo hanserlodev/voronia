@@ -19,14 +19,14 @@ use vor_render::coordinates::{build_coordinate_graticule, GraticuleLabel};
 use vor_render::culture_layer::build_culture_mesh;
 use vor_render::grid::build_grid_lines;
 use vor_render::heightmap::HeightmapMesh;
-use vor_render::ice_layer::build_ice_mesh;
-use vor_render::lakes::build_lake_mesh;
+use vor_render::ice_layer::build_ice_meshes;
+use vor_render::lakes::build_lake_meshes;
 use vor_render::layers::LayerFlags;
 use vor_render::mesh::build_land_cells_mask_mesh;
 use vor_render::population_layer::build_population_bars_mesh;
 use vor_render::precipitation::build_precipitation_mesh;
 use vor_render::province_layer::build_province_mesh;
-use vor_render::relief::build_relief_mesh;
+use vor_render::relief::{build_relief_instances, ReliefIconsOverlay, ReliefSettings};
 use vor_render::religion_layer::build_religion_mesh;
 use vor_render::river::build_river_mesh;
 use vor_render::route_layer::build_route_mesh;
@@ -148,26 +148,30 @@ struct State {
     show_load_modal: bool,
     show_new_modal: bool,
     texture_name: String,
+    /// FMG `data-x`/`data-y` paper shift, world units.
+    texture_shift: [f32; 2],
     texture_overlay: Option<vor_render::TextureOverlay>,
+    /// FMG `#oceanPattern`: tiled pattern image over the ocean base.
+    ocean_pattern: Option<vor_render::OceanPatternOverlay>,
+    /// FMG `#terrain`: relief icons atlas overlay.
+    relief_overlay: Option<ReliefIconsOverlay>,
+    /// FMG `#tempLabels`: isotherm label anchors (world px + °C).
+    temp_labels: Vec<vor_render::temperature::TemperatureLabel>,
+    /// FMG `temperatureScale` select (°C default).
+    temp_unit: vor_render::temperature::TempUnit,
+    /// FMG `g#wind` direction glyphs (world px).
+    wind_glyphs: Vec<vor_render::precipitation::WindGlyph>,
     text_system: Option<vor_render::TextSystem>,
 
-    // Indices of line layers in renderer.line_layers
-    line_cells_idx: usize,
-    line_grid_idx: usize,
-    line_coordinates_idx: usize,
-    line_routes_idx: usize,
-    /// Indices of the goods sub-layers (cells + icons) in renderer.layers.
-    layer_goods_cells_idx: usize,
-    layer_goods_icons_idx: usize,
-    /// Indices of the market sub-layers (fill + border + center).
-    layer_market_fill_idx: usize,
-    layer_market_border_idx: usize,
-    layer_market_center_idx: usize,
-    /// Index of the trade routes layer.
-    layer_trade_idx: usize,
+    /// Runtime-registered indices (lines + economy) for the FMG-ordered
+    /// draw sequence.
+    dyn_ids: vor_render::layers::DynamicLayerIds,
     /// Graticule labels (lat/long) drawn in world space when the coordinates
     /// layer is enabled.
     graticule_labels: Vec<GraticuleLabel>,
+    /// Current graticule step in degrees (rebuilt on zoom like FMG
+    /// `drawCoordinates`).
+    coordinate_step: f32,
     /// Camera `extent_y` right after initial framing — reference for zoom
     /// scaling of text/graticule labels.
     fit_extent_y: f32,
@@ -243,7 +247,36 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     // ocean). The initial frame and the ocean quad both use these.
     let world_bounds_min = [0.0f32, 0.0f32];
     let world_bounds_max = [world.grid.width, world.grid.height];
-    renderer.set_ocean(world_bounds_min, world_bounds_max, [0.16, 0.35, 0.66, 0.55]);
+    // FMG `#oceanBase` fill (default.json): #466eab, fully opaque.
+    renderer.set_ocean(
+        world_bounds_min,
+        world_bounds_max,
+        vor_render::biome::hex_color_to_linear("#466eab"),
+    );
+
+    // --- FMG `#ocean` group: bathymetry rings + tileable pattern ---
+    let bathymetry_mesh = vor_render::ocean_layers::build_bathymetry_mesh(
+        &world.grid,
+        &vor_render::ocean_layers::DEFAULT_LIMITS,
+    );
+    info!(
+        "ocean bathymetry: {}v/{}i",
+        bathymetry_mesh.vertices.len(),
+        bathymetry_mesh.indices.len()
+    );
+    // Registered later, after the fixed LAYER_* block (see below) so the
+    // dynamic layers never shift the constants' `layers[idx-1]` mapping.
+
+    let ocean_pattern_overlay = load_ocean_pattern(
+        &renderer.device,
+        &renderer.queue,
+        renderer.format,
+        renderer.msaa_count,
+        world_bounds_min,
+        world_bounds_max,
+        renderer.camera_bind_layout(),
+        "pattern1",
+    );
 
     // --- Heightmap color overlay (layer 1) ---
     // Azgaar parity: filled isoline bands per height level (not flat per-cell
@@ -256,7 +289,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         heightmap_color_mesh.vertices.len(),
         heightmap_color_mesh.indices.len()
     );
-    let _l_heightmap = renderer.add_layer_mesh(&heightmap_color_mesh);
 
     // --- Precompute water mask for the water gap ---
     let is_water: Vec<bool> = {
@@ -321,16 +353,47 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     );
     renderer.set_mesh(&cfg.mesh);
 
+    // --- Coastline strokes + drop shadow (FMG `#coastline`, always drawn) ---
+    // Same fractal pipeline as the landmass fill: simplify → clipPoly →
+    // fractalize → hybrid path, stroked with sea/lake island styles.
+    let coastline_meshes = vor_render::build_coastline_meshes(
+        &world.pack.vertices,
+        &world.pack.features,
+        world.grid.width,
+        world.grid.height,
+        &FractalSettings {
+            seed: world.header.seed.parse::<u64>().unwrap_or(0),
+            ..Default::default()
+        },
+        &vor_render::CoastlineStrokeSettings::default(),
+    );
+    info!(
+        "coastline stroke: {}v/{}i, shadow: {}v/{}i",
+        coastline_meshes.stroke.vertices.len(),
+        coastline_meshes.stroke.indices.len(),
+        coastline_meshes.shadow.vertices.len(),
+        coastline_meshes.shadow.indices.len()
+    );
+    // Registered later, after the fixed LAYER_* block (see below).
+
     // --- Additional layers (draw order: bottom→top) ---
 
-    // 1. Relief (landmass shading)
-    let relief_mesh = build_relief_mesh(&world.pack);
-    info!(
-        "relief mesh: {}v/{}i",
-        relief_mesh.vertices.len(),
-        relief_mesh.indices.len()
+    // 1. Relief (FMG `#terrain`): Poisson-scattered symbol icons rendered
+    // from the atlas overlay (drawn via `DrawItem::Relief`, not a mesh).
+    let relief_icons = build_relief_instances(
+        &world.pack,
+        world.header.seed.parse::<u64>().unwrap_or(0),
+        &ReliefSettings::default(),
     );
-    let _l_relief = renderer.add_layer_mesh(&relief_mesh);
+    info!("relief icons: {} instances", relief_icons.len());
+    let relief_overlay = load_relief_atlas(
+        &renderer.device,
+        &renderer.queue,
+        renderer.format,
+        renderer.msaa_count,
+        renderer.camera_bind_layout(),
+        &relief_icons,
+    );
 
     // 2. Biomes (landmass color)
     let biome_colors = biome_colors_from_catalog(&world.biomes);
@@ -370,10 +433,10 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         biome_mesh.vertices.len(),
         biome_mesh.indices.len()
     );
-    let _l_biomes = renderer.add_layer_mesh_masked(&biome_mesh, false);
 
     // 3. Climate: temperature, precipitation, ice
     let temp_mesh = build_temperature_mesh(&world.grid);
+    let temp_labels = vor_render::temperature::temperature_labels(&world.grid);
     info!(
         "temperature mesh: {}v/{}i",
         temp_mesh.vertices.len(),
@@ -383,26 +446,35 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     // layer must be drawn with the alpha-blended pipeline to blend over biomes
     // instead of overwriting them. FMG masks it to land too (`mask: #land`),
     // so it registers masked + blended.
-    let _l_temp = renderer.add_layer_mesh_masked(&temp_mesh, true);
 
     let prec_mesh = build_precipitation_mesh(&world.grid);
+    let wind_glyphs = vor_render::precipitation::wind_glyphs(
+        &world.coordinates,
+        &world.grid.points,
+        world.grid.cells_x as usize,
+        world.grid.cells_y as usize,
+        world.grid.width,
+        world.grid.height,
+    );
     info!(
         "precipitation mesh: {}v/{}i",
         prec_mesh.vertices.len(),
         prec_mesh.indices.len()
     );
-    let _l_prec = renderer.add_layer_mesh_masked(&prec_mesh, false);
 
-    let ice_mesh = build_ice_mesh(&world.ice);
+    let ice_meshes = build_ice_meshes(&world.ice);
     info!(
-        "ice mesh: {}v/{}i",
-        ice_mesh.vertices.len(),
-        ice_mesh.indices.len()
+        "ice mesh: fill {}v/{}i, stroke {}v/{}i, shadow {}v/{}i",
+        ice_meshes.fill.vertices.len(),
+        ice_meshes.fill.indices.len(),
+        ice_meshes.stroke.vertices.len(),
+        ice_meshes.stroke.indices.len(),
+        ice_meshes.shadow.vertices.len(),
+        ice_meshes.shadow.indices.len()
     );
-    let _l_ice = renderer.add_layer_mesh(&ice_mesh);
 
     // 4. Water: lakes, rivers
-    let lake_mesh = build_lake_mesh(
+    let lake_meshes = build_lake_meshes(
         &world.pack,
         world.grid.width,
         world.grid.height,
@@ -412,16 +484,15 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         },
     );
     info!(
-        "lake mesh: {}v/{}i",
-        lake_mesh.vertices.len(),
-        lake_mesh.indices.len()
+        "lake mesh: fill {}v/{}i, stroke {}v/{}i",
+        lake_meshes.fill.vertices.len(),
+        lake_meshes.fill.indices.len(),
+        lake_meshes.stroke.vertices.len(),
+        lake_meshes.stroke.indices.len()
     );
-    let _l_lakes = renderer.add_layer_mesh(&lake_mesh);
 
     let river_mesh = build_river_mesh(
         &world.pack.points,
-        &world.pack.vertices,
-        &is_water,
         &world.rivers,
         world.settings.distance_scale,
         world.grid.width,
@@ -432,7 +503,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         river_mesh.vertices.len(),
         river_mesh.indices.len()
     );
-    let _l_rivers = renderer.add_layer_mesh(&river_mesh);
 
     // 5. Human geography fills: states, provinces, cultures, religions, population, zones
     // Each one carries its own water gap to keep colors from bleeding into the ocean.
@@ -445,7 +515,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         state_mesh.vertices.len(),
         state_mesh.indices.len()
     );
-    let _l_state = renderer.add_layer_mesh_masked(&state_mesh, true);
 
     let province_mesh = build_province_mesh(
         &world.pack.vertices,
@@ -458,7 +527,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         province_mesh.vertices.len(),
         province_mesh.indices.len()
     );
-    let _l_province = renderer.add_layer_mesh_masked(&province_mesh, true);
 
     let culture_mesh = build_culture_mesh(
         &world.pack.vertices,
@@ -471,7 +539,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         culture_mesh.vertices.len(),
         culture_mesh.indices.len()
     );
-    let _l_culture = renderer.add_layer_mesh_masked(&culture_mesh, true);
 
     let religion_mesh = build_religion_mesh(
         &world.pack.vertices,
@@ -484,7 +551,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         religion_mesh.vertices.len(),
         religion_mesh.indices.len()
     );
-    let _l_religion = renderer.add_layer_mesh_masked(&religion_mesh, true);
 
     let population_mesh = build_population_bars_mesh(
         &world.pack.vertices,
@@ -497,7 +563,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         population_mesh.vertices.len(),
         population_mesh.indices.len()
     );
-    let _l_population = renderer.add_layer_mesh_blended(&population_mesh);
 
     let zone_mesh = build_zone_mesh(&world.pack.vertices, &world.pack, &world.zones);
     info!(
@@ -505,7 +570,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         zone_mesh.vertices.len(),
         zone_mesh.indices.len()
     );
-    let _l_zones = renderer.add_layer_mesh_blended(&zone_mesh);
 
     // 6. Borders & markers on top
     let border_state_mesh = build_border_mesh(&world.pack, BorderKind::State);
@@ -520,9 +584,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         border_culture_mesh.vertices.len(),
         border_culture_mesh.indices.len(),
     );
-    let _l_borders = renderer.add_layer_mesh_blended(&border_state_mesh);
-    let _l_bprov = renderer.add_layer_mesh_blended(&border_province_mesh);
-    let _l_bcult = renderer.add_layer_mesh_blended(&border_culture_mesh);
 
     let burg_mesh = build_burg_icons_mesh(&world.pack, &world.states);
     info!(
@@ -530,7 +591,90 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         burg_mesh.vertices.len(),
         burg_mesh.indices.len()
     );
-    let _l_burgs = renderer.add_layer_mesh(&burg_mesh);
+
+    // --- Fixed layer block: registered EXACTLY in `LAYER_*` constant order ---
+    // `Renderer::draw_layer(idx)` reads `self.layers[idx - 1]`, so THIS
+    // registration order is the mapping between the `LayerFlags::LAYER_*`
+    // constants (FMG `#viewbox` z-order) and the meshes. Reordering either
+    // side without the other makes toggles activate the wrong layer — the
+    // debug asserts below catch that in dev builds.
+    let l_heightmap = renderer.add_layer_mesh(&heightmap_color_mesh); // #terrs
+    assert_eq!(l_heightmap, vor_render::layers::LayerFlags::LAYER_HEIGHTMAP);
+    let l_lakes = renderer.add_layer_mesh_blended(&lake_meshes.fill); // #lakes
+    assert_eq!(l_lakes, vor_render::layers::LayerFlags::LAYER_LAKES);
+    let l_biomes = renderer.add_layer_mesh_masked(&biome_mesh, false); // #biomes
+    assert_eq!(l_biomes, vor_render::layers::LayerFlags::LAYER_BIOMES);
+    // FMG `#rivers` carries `mask: url(#land)` (index.css) — the stencil of
+    // the fractal landmass cuts each river exactly at the coastline.
+    let l_rivers = renderer.add_layer_mesh_masked(&river_mesh, false); // #rivers
+    assert_eq!(l_rivers, vor_render::layers::LayerFlags::LAYER_RIVERS);
+    // Slot 5 (#terrain) stays occupied with an empty mesh so the LAYER_*
+    // constants remain contiguous; the real relief drawing is the
+    // `ReliefIconsOverlay` reached via `DrawItem::Relief`.
+    let _relief_mesh = empty_heightmap_mesh();
+    let l_relief = renderer.add_layer_mesh(&_relief_mesh); // #terrain
+    assert_eq!(l_relief, vor_render::layers::LayerFlags::LAYER_RELIEF);
+    let l_religion = renderer.add_layer_mesh_masked(&religion_mesh, true); // #relig
+    assert_eq!(
+        l_religion,
+        vor_render::layers::LayerFlags::LAYER_RELIGION_FILL
+    );
+    let l_culture = renderer.add_layer_mesh_masked(&culture_mesh, true); // #cults
+    assert_eq!(
+        l_culture,
+        vor_render::layers::LayerFlags::LAYER_CULTURE_FILL
+    );
+    let l_state = renderer.add_layer_mesh_masked(&state_mesh, true); // #regions
+    assert_eq!(l_state, vor_render::layers::LayerFlags::LAYER_STATE_FILL);
+    let l_province = renderer.add_layer_mesh_masked(&province_mesh, true); // #provs
+    assert_eq!(
+        l_province,
+        vor_render::layers::LayerFlags::LAYER_PROVINCE_FILL
+    );
+    let l_zones = renderer.add_layer_mesh_blended(&zone_mesh); // #zones
+    assert_eq!(l_zones, vor_render::layers::LayerFlags::LAYER_ZONES);
+    let l_borders = renderer.add_layer_mesh_blended(&border_state_mesh); // #borders
+    assert_eq!(
+        l_borders,
+        vor_render::layers::LayerFlags::LAYER_BORDER_STATE
+    );
+    let l_bprov = renderer.add_layer_mesh_blended(&border_province_mesh);
+    assert_eq!(
+        l_bprov,
+        vor_render::layers::LayerFlags::LAYER_BORDER_PROVINCE
+    );
+    let l_bcult = renderer.add_layer_mesh_blended(&border_culture_mesh);
+    assert_eq!(
+        l_bcult,
+        vor_render::layers::LayerFlags::LAYER_BORDER_CULTURE
+    );
+    // FMG `#temperature` has NO mask (index.css) — it paints over the ocean too.
+    let l_temp = renderer.add_layer_mesh_blended(&temp_mesh); // #temperature
+    assert_eq!(l_temp, vor_render::layers::LayerFlags::LAYER_TEMPERATURE);
+    // FMG `#ice`: opacity 0.9 → alpha-blended; shadow/stroke are dynamic layers.
+    let l_ice = renderer.add_layer_mesh_blended(&ice_meshes.fill); // #ice
+    assert_eq!(l_ice, vor_render::layers::LayerFlags::LAYER_ICE);
+    // FMG `#prec` has no mask by default (style-editor Clipping is optional).
+    let l_prec = renderer.add_layer_mesh(&prec_mesh); // #prec
+    assert_eq!(l_prec, vor_render::layers::LayerFlags::LAYER_PRECIPITATION);
+    let l_population = renderer.add_layer_mesh_blended(&population_mesh); // #population
+    assert_eq!(
+        l_population,
+        vor_render::layers::LayerFlags::LAYER_POPULATION
+    );
+    let l_burgs = renderer.add_layer_mesh(&burg_mesh); // #icons
+    assert_eq!(l_burgs, vor_render::layers::LayerFlags::LAYER_BURGS);
+
+    // --- Dynamic layers (indices captured in `dyn_ids`) ---
+    // Registered AFTER the fixed block so `LAYER_*` ↔ `layers[idx-1]` stays
+    // contiguous; their real indices travel inside `DynamicLayerIds`, so
+    // position is free.
+    let ocean_bathymetry_idx = renderer.add_layer_mesh_blended(&bathymetry_mesh);
+    let layer_coastline_shadow_idx = renderer.add_layer_mesh_blended(&coastline_meshes.shadow);
+    let layer_coastline_stroke_idx = renderer.add_layer_mesh_blended(&coastline_meshes.stroke);
+    let layer_lake_stroke_idx = renderer.add_layer_mesh_blended(&lake_meshes.stroke);
+    let layer_ice_shadow_idx = renderer.add_layer_mesh_blended(&ice_meshes.shadow);
+    let layer_ice_stroke_idx = renderer.add_layer_mesh_blended(&ice_meshes.stroke);
 
     // Extra economy layers (goods / markets / trade) are registered AFTER all
     // the fixed-constant layers (0..18) so `active_indices()` keeps matching.
@@ -600,7 +744,10 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     );
     let line_cells_idx = renderer.add_line_layer(&cells_mesh);
 
-    let grid_mesh = build_grid_lines(mesh_bounds_min, mesh_bounds_max);
+    // FMG fills the grid pattern rect over the whole canvas
+    // (max(mapWidth,graphWidth) × max(mapHeight,graphHeight)), not over the
+    // landmass bounding box.
+    let grid_mesh = build_grid_lines(world_bounds_min, world_bounds_max);
     info!(
         "grid lines: {}v/{}i",
         grid_mesh.vertices.len(),
@@ -608,12 +755,20 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     );
     let line_grid_idx = renderer.add_line_layer(&grid_mesh);
 
-    let coord_graticule =
-        build_coordinate_graticule(&world.coordinates, world.grid.width, world.grid.height);
+    // Initial step at scale = 1 (FMG: goal = lonT / scale / 10).
+    let coordinate_step = vor_render::coordinates::pick_step(
+        (world.coordinates.lon_r - world.coordinates.lon_l) / 10.0,
+    );
+    let coord_graticule = build_coordinate_graticule(
+        &world.coordinates,
+        world.grid.width,
+        world.grid.height,
+        coordinate_step,
+    );
     info!(
         "coordinate graticule: {} lines ({:.0}° step), {} labels",
         coord_graticule.lines.vertices.len() / 2,
-        vor_render::coordinates::pick_step(world.coordinates.lon_r - world.coordinates.lon_l),
+        coordinate_step,
         coord_graticule.labels.len()
     );
     let line_coordinates_idx = renderer.add_line_layer(&coord_graticule.lines);
@@ -693,19 +848,34 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         edit_buffer,
         dirty: false,
         texture_name,
+        texture_shift: [0.0, 0.0],
         texture_overlay,
+        ocean_pattern: ocean_pattern_overlay,
+        relief_overlay,
+        temp_labels,
+        temp_unit: vor_render::temperature::TempUnit::C,
+        wind_glyphs,
         text_system,
-        line_cells_idx,
-        line_grid_idx,
-        line_coordinates_idx,
-        line_routes_idx,
-        layer_goods_cells_idx,
-        layer_goods_icons_idx,
-        layer_market_fill_idx,
-        layer_market_border_idx,
-        layer_market_center_idx,
-        layer_trade_idx,
+        dyn_ids: vor_render::layers::DynamicLayerIds {
+            cells_line: line_cells_idx,
+            grid_line: line_grid_idx,
+            coordinates_line: line_coordinates_idx,
+            routes_line: line_routes_idx,
+            goods_cells: layer_goods_cells_idx,
+            goods_icons: layer_goods_icons_idx,
+            market_fill: layer_market_fill_idx,
+            market_border: layer_market_border_idx,
+            market_center: layer_market_center_idx,
+            trade: layer_trade_idx,
+            coastline_shadow: layer_coastline_shadow_idx,
+            coastline_stroke: layer_coastline_stroke_idx,
+            ocean_bathymetry: ocean_bathymetry_idx,
+            lake_stroke: layer_lake_stroke_idx,
+            ice_shadow: layer_ice_shadow_idx,
+            ice_stroke: layer_ice_stroke_idx,
+        },
         graticule_labels: coord_graticule.labels,
+        coordinate_step,
         fit_extent_y: camera.extent_y,
         active_tab: ui::TabId::Layers,
         show_export_modal: false,
@@ -872,6 +1042,8 @@ impl State {
         // Destructure mutable refs to pass into the FnOnce closure
         let last_texture = self.texture_name.clone();
         let texture_name = &mut self.texture_name;
+        let texture_shift = &mut self.texture_shift;
+        let temp_unit = &mut self.temp_unit;
         let _texture_overlay = &mut self.texture_overlay;
         let active_tab = &mut self.active_tab;
         let layer_flags = &mut self.layer_flags;
@@ -884,6 +1056,7 @@ impl State {
         let autosave_enabled = &mut self.autosave_enabled;
         let camera = &mut self.camera;
         let renderer = &self.renderer;
+        let dyn_ids = &self.dyn_ids;
         let mesh_bounds_min = self.mesh_bounds_min;
         let mesh_bounds_max = self.mesh_bounds_max;
 
@@ -958,7 +1131,9 @@ impl State {
                         ui::TabId::Info => ui::info_tab(ui, picked_cell, world, edit_buffer, dirty),
                         ui::TabId::Tools => ui::tools_tab(ui, world, dirty),
                         ui::TabId::Options => ui::options_tab(ui),
-                        ui::TabId::Style => ui::style_tab(ui, texture_name),
+                        ui::TabId::Style => {
+                            ui::style_tab(ui, texture_name, texture_shift, temp_unit)
+                        }
                         ui::TabId::About => ui::about_tab(ui),
                     }
 
@@ -995,6 +1170,7 @@ impl State {
                     renderer,
                     camera,
                     layer_flags,
+                    dyn_ids,
                     &vorn_save_path,
                     world,
                 );
@@ -1036,6 +1212,30 @@ impl State {
             pixels_per_point,
         };
 
+        // FMG `scale` relative to the initial fit: >1 zoomed in, <1 out.
+        let zoom_scale = self.fit_extent_y / self.camera.extent_y.max(1.0);
+
+        // drawCoordinates redraws on every pan/zoom with
+        // `goal = lonT / scale / 10`; we rebuild when the picked step changes.
+        if self.layer_flags.coordinates {
+            let goal = (self.world.coordinates.lon_r - self.world.coordinates.lon_l)
+                / zoom_scale.max(1e-6)
+                / 10.0;
+            let new_step = vor_render::coordinates::pick_step(goal);
+            if new_step != self.coordinate_step {
+                let grat = build_coordinate_graticule(
+                    &self.world.coordinates,
+                    self.world.grid.width,
+                    self.world.grid.height,
+                    new_step,
+                );
+                self.renderer
+                    .update_line_layer(self.dyn_ids.coordinates_line, &grat.lines);
+                self.graticule_labels = grat.labels;
+                self.coordinate_step = new_step;
+            }
+        }
+
         // ---- Wgpu passes ----
         let surface_texture = self.renderer.surface.get_current_texture()?;
         let resolve_view = surface_texture
@@ -1056,40 +1256,84 @@ impl State {
             );
         }
 
-        // Graticule labels (coordinates layer): project each world anchor to
-        // screen and batch them into the text system. Font size scales with zoom
-        // (like Azgaar's viewbox text).
+        // Screen-space text overlays (glyphon), one combined batch:
+        // graticule labels (#coordinates) + isotherm labels (#tempLabels).
+        let mut text_labels: Vec<vor_render::Label> = Vec::new();
+        let surface = [screen_size_px.width as f32, screen_size_px.height as f32];
+
+        // Graticule labels: font size follows the FMG formula
+        // (`desired / scale**0.8` world units). Longitude labels ride the
+        // viewport's top edge, latitude labels the left edge.
         if self.layer_flags.coordinates {
+            let font_px = vor_render::coordinates::label_font_px(12.0, zoom_scale);
+            for gl in &self.graticule_labels {
+                let margin = 4.0;
+                let xy = if gl.is_latitude {
+                    let s = self.camera.world_to_screen([0.0, gl.world_y], surface);
+                    [margin, s[1] - font_px * 0.6]
+                } else {
+                    let s = self.camera.world_to_screen([gl.world_x, 0.0], surface);
+                    [s[0] + margin, margin]
+                };
+                // FMG labels: fill #333333.
+                text_labels.push(vor_render::Label::new(
+                    &gl.text,
+                    xy[0],
+                    xy[1],
+                    font_px,
+                    [0.2, 0.2, 0.2, 1.0],
+                ));
+            }
+        }
+
+        // FMG `#tempLabels`: font-size 8px (world units → scales with zoom),
+        // fill #000 at full opacity (overrides the group's 0.3 fill-opacity).
+        if self.layer_flags.temperature {
+            let font_px = (8.0 * zoom_scale).max(1.0);
+            for tl in &self.temp_labels {
+                let s = self.camera.world_to_screen([tl.x, tl.y], surface);
+                if s[0] < -40.0
+                    || s[1] < -40.0
+                    || s[0] > surface[0] + 40.0
+                    || s[1] > surface[1] + 40.0
+                {
+                    continue;
+                }
+                text_labels.push(vor_render::Label::new(
+                    vor_render::temperature::convert_temperature(tl.temp_c, self.temp_unit),
+                    s[0],
+                    s[1] - font_px * 0.6,
+                    font_px,
+                    [0.0, 0.0, 0.0, 1.0],
+                ));
+            }
+        }
+
+        // FMG `g#wind`: 32px direction glyphs, fill inherited #003dff.
+        if self.layer_flags.precipitation {
+            let font_px = (32.0 * zoom_scale).max(1.0);
+            for wg in &self.wind_glyphs {
+                let s = self.camera.world_to_screen([wg.x, wg.y], surface);
+                if s[0] < -60.0
+                    || s[1] < -60.0
+                    || s[0] > surface[0] + 60.0
+                    || s[1] > surface[1] + 60.0
+                {
+                    continue;
+                }
+                text_labels.push(vor_render::Label::new(
+                    wg.ch.to_string(),
+                    s[0],
+                    s[1] - font_px * 0.7,
+                    font_px,
+                    [0.0, 0.24, 1.0, 1.0], // #003dff
+                ));
+            }
+        }
+
+        if !text_labels.is_empty() {
             if let Some(ref mut ts) = self.text_system {
-                let base_font = 10.0;
-                let zoom = zoom_factor(&self.camera, self.fit_extent_y);
-                let surface = [screen_size_px.width as f32, screen_size_px.height as f32];
-                let labels: Vec<vor_render::Label> = self
-                    .graticule_labels
-                    .iter()
-                    .map(|gl| {
-                        // Longitude labels ride the viewport's top edge, latitude
-                        // labels ride the viewport's left edge (like FMG's
-                        // `drawCoordinates`), so they follow the view on pan and
-                        // zoom instead of being anchored to world (0,0).
-                        let margin = 4.0;
-                        let xy = if gl.is_latitude {
-                            let s = self.camera.world_to_screen([0.0, gl.world_y], surface);
-                            [margin, s[1] - base_font * zoom * 0.6]
-                        } else {
-                            let s = self.camera.world_to_screen([gl.world_x, 0.0], surface);
-                            [s[0] + margin, margin]
-                        };
-                        vor_render::Label::new(
-                            &gl.text,
-                            xy[0],
-                            xy[1],
-                            base_font * zoom,
-                            [0.35, 0.45, 0.55, 0.9],
-                        )
-                    })
-                    .collect();
-                ts.prepare(&self.renderer.device, &self.renderer.queue, &labels);
+                ts.prepare(&self.renderer.device, &self.renderer.queue, &text_labels);
             }
         }
 
@@ -1099,6 +1343,13 @@ impl State {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("vor-frame"),
                 });
+
+        // FMG auto-filter (invokeActiveZooming): the coastline drop-shadow is
+        // applied while the zoom scale relative to the initial fit is ≤ 1.5
+        // (a faint blur takes over above 2.6 — not replicated).
+        let draw_opts = vor_render::layers::DrawOptions {
+            coastline_shadow: zoom_scale <= vor_render::SHADOW_MAX_SCALE,
+        };
 
         // Pass 1: map layers (renders to 4x MSAA, resolves to surface)
         {
@@ -1135,60 +1386,38 @@ impl State {
                 occlusion_query_set: None,
             });
 
-            // Texture canvas/paper background: drawn first so the ocean and the
-            // land layers sit on top of it (Azgaar parity — #texture is inserted
-            // before #landmass in the SVG z-order).
-            if self.layer_flags.texture {
-                if let Some(ref tex) = self.texture_overlay {
-                    tex.draw(&mut pass, &self.renderer.camera_bind);
-                }
-            }
-
-            // Ocean background: covers the world rectangle first.
+            // Ocean background: covers the world rectangle first (FMG #ocean),
+            // then the tileable pattern rect (#oceanPattern, 20% opacity).
             self.renderer.draw_ocean(&mut pass);
-
-            for layer_idx in self.layer_flags.active_indices() {
-                self.renderer.draw_layer(&mut pass, layer_idx);
+            if let Some(ref pat) = self.ocean_pattern {
+                pat.draw(&mut pass, &self.renderer.camera_bind);
             }
 
-            // Line layers
-            if self.layer_flags.cells {
-                self.renderer
-                    .draw_line_layer(&mut pass, self.line_cells_idx);
-            }
-            if self.layer_flags.grid {
-                self.renderer.draw_line_layer(&mut pass, self.line_grid_idx);
-            }
-            if self.layer_flags.coordinates {
-                self.renderer
-                    .draw_line_layer(&mut pass, self.line_coordinates_idx);
-            }
-            if self.layer_flags.routes {
-                self.renderer
-                    .draw_line_layer(&mut pass, self.line_routes_idx);
-            }
-
-            // Goods sub-layers (cells + icons) — FMG `#goods`.
-            if self.layer_flags.goods {
-                self.renderer
-                    .draw_layer(&mut pass, self.layer_goods_cells_idx);
-                self.renderer
-                    .draw_layer(&mut pass, self.layer_goods_icons_idx);
-            }
-
-            // Markets sub-layers (fill + border + center) — FMG `#markets`.
-            if self.layer_flags.markets {
-                self.renderer
-                    .draw_layer(&mut pass, self.layer_market_fill_idx);
-                self.renderer
-                    .draw_layer(&mut pass, self.layer_market_border_idx);
-                self.renderer
-                    .draw_layer(&mut pass, self.layer_market_center_idx);
-            }
-
-            // Trade routes — FMG `#tradeAnimation`.
-            if self.layer_flags.trade {
-                self.renderer.draw_layer(&mut pass, self.layer_trade_idx);
+            // All map layers in the exact FMG `#viewbox` z-order (meshes and
+            // line layers interleaved). PNG export iterates the same sequence.
+            for item in self.layer_flags.draw_sequence(&self.dyn_ids, &draw_opts) {
+                match item {
+                    vor_render::layers::DrawItem::Mesh(idx) => {
+                        self.renderer.draw_layer(&mut pass, idx);
+                    }
+                    vor_render::layers::DrawItem::Line(idx) => {
+                        self.renderer.draw_line_layer(&mut pass, idx);
+                    }
+                    vor_render::layers::DrawItem::Texture => {
+                        if let Some(ref tex) = self.texture_overlay {
+                            // FMG `data-x`/`data-y` shift + stencil mask test
+                            // (ref must match the mask pipelines).
+                            tex.set_shift_world(&self.renderer.queue, self.texture_shift);
+                            pass.set_stencil_reference(1);
+                            tex.draw(&mut pass, &self.renderer.camera_bind);
+                        }
+                    }
+                    vor_render::layers::DrawItem::Relief => {
+                        if let Some(ref overlay) = self.relief_overlay {
+                            overlay.draw(&mut pass, &self.renderer.camera_bind);
+                        }
+                    }
+                }
             }
 
             // Text overlay (glyphon, inside the MSAA pass)
@@ -1271,13 +1500,6 @@ impl State {
 
         Ok(())
     }
-}
-
-/// Zoom factor relative to the initial fit: `fit_extent_y / extent_y`.
-/// `>1.0` when zoomed in, `<1.0` when zoomed out. Used to scale screen text
-/// (grid labels) the way Azgaar's viewbox text scales with the zoom.
-fn zoom_factor(camera: &Camera, fit_extent_y: f32) -> f32 {
-    fit_extent_y / camera.extent_y
 }
 
 async fn list_adapters() -> Vec<String> {
@@ -1410,6 +1632,121 @@ fn load_texture(
             None
         }
     }
+}
+
+/// Loads an ocean tile pattern from assets/textures/ocean/ (FMG
+/// `#oceanPattern` images, drawn at 20% opacity over the ocean base).
+#[allow(clippy::too_many_arguments)]
+fn load_ocean_pattern(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    format: wgpu::TextureFormat,
+    msaa_count: u32,
+    world_min: [f32; 2],
+    world_max: [f32; 2],
+    camera_layout: &wgpu::BindGroupLayout,
+    name: &str,
+) -> Option<vor_render::OceanPatternOverlay> {
+    let asset_path: PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "assets",
+        "textures",
+        "ocean",
+        &format!("{}.png", name),
+    ]
+    .iter()
+    .collect();
+    let rgba = match image::ImageReader::open(&asset_path) {
+        Ok(reader) => match reader.decode() {
+            Ok(img) => img.to_rgba8(),
+            Err(e) => {
+                tracing::warn!("failed to decode ocean pattern {name}: {e}");
+                return None;
+            }
+        },
+        Err(e) => {
+            tracing::warn!("ocean pattern not found: {} ({e})", asset_path.display());
+            return None;
+        }
+    };
+    let (w, h) = rgba.dimensions();
+    tracing::info!("loaded ocean pattern: {name} ({w}x{h})");
+    Some(vor_render::OceanPatternOverlay::new(
+        device,
+        queue,
+        format,
+        w,
+        h,
+        &rgba,
+        msaa_count,
+        world_min,
+        world_max,
+        camera_layout,
+        0.2,
+    ))
+}
+
+/// An empty `HeightmapMesh` (used to keep fixed layer slots occupied when a
+/// layer moved to a dedicated overlay pipeline).
+fn empty_heightmap_mesh() -> vor_render::HeightmapMesh {
+    vor_render::HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [0.0; 2],
+        bounds_max: [0.0; 2],
+    }
+}
+
+/// Loads the relief symbol atlas (assets/textures/relief/atlas.png, 3×3
+/// cells rasterized from FMG's simple-set `<symbol>` defs) and builds the
+/// icon overlay for the given instances.
+#[allow(clippy::too_many_arguments)]
+fn load_relief_atlas(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    format: wgpu::TextureFormat,
+    msaa_count: u32,
+    camera_layout: &wgpu::BindGroupLayout,
+    icons: &[vor_render::relief::ReliefIcon],
+) -> Option<ReliefIconsOverlay> {
+    let asset_path: PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "assets",
+        "textures",
+        "relief",
+        "atlas.png",
+    ]
+    .iter()
+    .collect();
+    let rgba = match image::ImageReader::open(&asset_path) {
+        Ok(reader) => match reader.decode() {
+            Ok(img) => img.to_rgba8(),
+            Err(e) => {
+                tracing::warn!("failed to decode relief atlas: {e}");
+                return None;
+            }
+        },
+        Err(e) => {
+            tracing::warn!("relief atlas not found: {} ({e})", asset_path.display());
+            return None;
+        }
+    };
+    let (w, h) = rgba.dimensions();
+    Some(ReliefIconsOverlay::new(
+        device,
+        queue,
+        format,
+        w,
+        h,
+        &rgba,
+        msaa_count,
+        camera_layout,
+        icons,
+    ))
 }
 
 pub fn run_cli() -> anyhow::Result<()> {

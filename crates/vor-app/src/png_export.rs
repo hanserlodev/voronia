@@ -7,17 +7,19 @@ use std::path::Path;
 use std::sync::mpsc;
 
 use anyhow::{Context, Result};
-use vor_render::{Camera, LayerFlags, Renderer};
+use vor_render::{layers::DynamicLayerIds, Camera, LayerFlags, Renderer};
 
 /// Renders the map to a PNG of the specified size.
 ///
 /// `surface_size` is the current window size (for camera and format).
 /// `export_width`/`export_height` is the output resolution.
 /// The camera is used as-is (same view as the current viewport).
+#[allow(clippy::too_many_arguments)]
 pub fn export_png(
     renderer: &Renderer,
     camera: &Camera,
     layer_flags: &LayerFlags,
+    dyn_ids: &DynamicLayerIds,
     export_width: u32,
     export_height: u32,
     path: &Path,
@@ -131,22 +133,27 @@ pub fn export_png(
             occlusion_query_set: None,
         });
 
-        for layer_idx in layer_flags.active_indices() {
-            renderer.draw_layer(&mut pass, layer_idx);
-        }
-        // Economy layers are registered after the fixed 0..18 layer block.
-        // Keep export parity with the interactive render path.
-        if layer_flags.goods {
-            renderer.draw_layer(&mut pass, 19);
-            renderer.draw_layer(&mut pass, 20);
-        }
-        if layer_flags.markets {
-            renderer.draw_layer(&mut pass, 21);
-            renderer.draw_layer(&mut pass, 22);
-            renderer.draw_layer(&mut pass, 23);
-        }
-        if layer_flags.trade {
-            renderer.draw_layer(&mut pass, 24);
+        // Same FMG-ordered sequence as the interactive frame (meshes + line
+        // layers interleaved). Line/economy indices arrive via `dyn_ids`.
+        // The export uses the same view as the window, so the coastline
+        // shadow threshold matches what is on screen.
+        let zoom_scale = camera.extent_y.max(1.0) / export_camera.extent_y.max(1.0);
+        let draw_opts = vor_render::layers::DrawOptions {
+            coastline_shadow: zoom_scale <= vor_render::SHADOW_MAX_SCALE,
+        };
+        for item in layer_flags.draw_sequence(dyn_ids, &draw_opts) {
+            match item {
+                vor_render::layers::DrawItem::Mesh(idx) => {
+                    renderer.draw_layer(&mut pass, idx);
+                }
+                vor_render::layers::DrawItem::Line(idx) => {
+                    renderer.draw_line_layer(&mut pass, idx);
+                }
+                // #texture and #terrain overlays live on the app State (own
+                // pipelines); exporting them is Phase C work.
+                vor_render::layers::DrawItem::Texture => {}
+                vor_render::layers::DrawItem::Relief => {}
+            }
         }
     }
 

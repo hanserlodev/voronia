@@ -22,4 +22,10 @@ pub struct Ice {
     /// Central cell (optional).
     #[serde(default)]
     pub cell: Option<u32>,
+    /// FMG iceberg size factor (slot 39, optional).
+    #[serde(default)]
+    pub size: Option<f32>,
+    /// FMG iceberg drift offset `[dx, dy]` (slot 39, optional).
+    #[serde(default)]
+    pub offset: Option<[f32; 2]>,
 }

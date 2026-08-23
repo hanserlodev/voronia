@@ -16,14 +16,21 @@
 //! are emitted from the integer tile range overlapping the requested bounds; the
 //! viewport clips anything that sticks out, exactly like the SVG pattern fill.
 
+use crate::biome::hex_color_to_linear;
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 
 /// Horizontal size of the Azgaar `pattern_pointyHex` tile (SVG `width` attr).
 const PATTERN_W: f32 = 25.0;
 /// Vertical size of the Azgaar `pattern_pointyHex` tile (SVG `height` attr).
 const PATTERN_H: f32 = 43.4;
-/// Pattern stroke color (Azgaar `stroke` default `#808080`, ~50% alpha).
-const GRID_COLOR: [f32; 4] = [0.5, 0.5, 0.5, 0.5];
+/// Pattern stroke style — FMG `default.json` `#gridOverlay`: stroke `#777777`,
+/// opacity 0.8. (GL LineList draws 1 px hardware lines, so only the color is
+/// exact; the 0.5 SVG stroke width is approximated.)
+fn grid_color() -> [f32; 4] {
+    let mut c = hex_color_to_linear("#777777");
+    c[3] = 0.8;
+    c
+}
 
 /// Builds a line mesh reproducing Azgaar's default pointy-hex grid overlay inside
 /// `[bounds_min, bounds_max]`, replacing the legacy rectangular lines.
@@ -63,11 +70,11 @@ pub fn build_grid_lines(bounds_min: [f32; 2], bounds_max: [f32; 2]) -> Heightmap
                 let base = verts.len() as u32;
                 verts.push(HeightmapVertex {
                     pos: a,
-                    color: GRID_COLOR,
+                    color: grid_color(),
                 });
                 verts.push(HeightmapVertex {
                     pos: b,
-                    color: GRID_COLOR,
+                    color: grid_color(),
                 });
                 idx.push(base);
                 idx.push(base + 1);

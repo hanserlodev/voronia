@@ -1,11 +1,16 @@
 use vor_core::voronoi::VoronoiVertices;
 
+use crate::biome::hex_color_to_linear;
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 
 pub fn build_cell_wireframe(vertices: &VoronoiVertices, points_n: usize) -> HeightmapMesh {
     let mut verts: Vec<HeightmapVertex> = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
-    let color = [0.7, 0.7, 0.7, 0.25];
+    // FMG `#cells` default style (default.json): stroke #808080, width 0.1,
+    // opacity 1. The GL LineList draws 1 px hardware lines, so only the color
+    // is exact; the hairline SVG stroke is approximated.
+    let mut color = hex_color_to_linear("#808080");
+    color[3] = 1.0;
 
     for p in 0..points_n {
         let ring = match vertices.cell_rings.get(p) {
