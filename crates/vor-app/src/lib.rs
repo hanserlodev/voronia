@@ -61,7 +61,7 @@ pub struct ViewerConfig {
 
 const PANEL_WIDTH: f32 = 240.0;
 
-pub fn run(mut cfg: ViewerConfig) -> Result<(), AppError> {
+pub fn run(cfg: ViewerConfig) -> Result<(), AppError> {
     let event_loop = EventLoop::new().map_err(|e| AppError::Winit(e.to_string()))?;
     let mut app = App {
         cfg: Some(cfg),
@@ -242,7 +242,7 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     // world up to its edge; outside the world there is empty canvas, not more
     // ocean). The initial frame and the ocean quad both use these.
     let world_bounds_min = [0.0f32, 0.0f32];
-    let world_bounds_max = [world.grid.width as f32, world.grid.height as f32];
+    let world_bounds_max = [world.grid.width, world.grid.height];
     renderer.set_ocean(world_bounds_min, world_bounds_max, [0.16, 0.35, 0.66, 0.55]);
 
     // --- Heightmap color overlay (layer 1) ---
@@ -404,8 +404,8 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     // 4. Water: lakes, rivers
     let lake_mesh = build_lake_mesh(
         &world.pack,
-        world.grid.width as f32,
-        world.grid.height as f32,
+        world.grid.width,
+        world.grid.height,
         &FractalSettings {
             seed: world.header.seed.parse::<u64>().unwrap_or(0),
             ..Default::default()
@@ -608,11 +608,8 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     );
     let line_grid_idx = renderer.add_line_layer(&grid_mesh);
 
-    let coord_graticule = build_coordinate_graticule(
-        &world.coordinates,
-        world.grid.width as f32,
-        world.grid.height as f32,
-    );
+    let coord_graticule =
+        build_coordinate_graticule(&world.coordinates, world.grid.width, world.grid.height);
     info!(
         "coordinate graticule: {} lines ({:.0}° step), {} labels",
         coord_graticule.lines.vertices.len() / 2,
@@ -857,7 +854,7 @@ impl State {
 
         // Cell tooltip (Azgaar-style): show info about the cell under the cursor.
         // Built here (outside the egui closure) and rendered with the debug painter.
-        let hover_text: Option<String> = self.hover_cell.and_then(|cid| {
+        let hover_text: Option<String> = self.hover_cell.map(|cid| {
             let h = world.pack.cells.height.get(cid).copied().unwrap_or(0);
             let height_m = world.settings.height_m(h);
             let bi = world.pack.cells.biome.get(cid).copied().unwrap_or(0);
@@ -866,10 +863,10 @@ impl State {
                 .get(bi as usize)
                 .map(|b| b.name.as_str())
                 .unwrap_or("?");
-            Some(format!(
+            format!(
                 "Cell #{cid}  ·  Height: {height_m:.*}{}  ·  Biome: {biome}",
                 0, world.settings.height_unit
-            ))
+            )
         });
 
         // Destructure mutable refs to pass into the FnOnce closure
@@ -1249,7 +1246,7 @@ impl State {
                 self.renderer.format,
                 self.renderer.msaa_count,
                 [0.0, 0.0],
-                [self.world.grid.width as f32, self.world.grid.height as f32],
+                [self.world.grid.width, self.world.grid.height],
                 self.renderer.camera_bind_layout(),
                 &self.texture_name,
             );
@@ -1339,6 +1336,7 @@ pub const TEXTURES: &[&str] = &[
 ];
 
 /// Loads a texture from assets/textures/, returning None if name is "none" or loading fails.
+#[allow(clippy::too_many_arguments)]
 fn load_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,

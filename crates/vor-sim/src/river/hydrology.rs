@@ -37,7 +37,7 @@ pub fn alter_heights(pack: &Pack) -> Vec<f32> {
         .collect()
 }
 
-pub fn resolve_depressions(pack: &Pack, h: &mut Vec<f32>) {
+pub fn resolve_depressions(pack: &Pack, h: &mut [f32]) {
     let cells = &pack.cells;
     let n = cells.len();
     if n == 0 {
@@ -45,7 +45,7 @@ pub fn resolve_depressions(pack: &Pack, h: &mut Vec<f32>) {
     }
     let max_iterations = n.min(500);
     let mut land: Vec<usize> = (0..n)
-        .filter(|&i| h[i] >= 20.0 && !cells.adjacency.get(i).map_or(true, |a| a.is_empty()))
+        .filter(|&i| h[i] >= 20.0 && !cells.adjacency.get(i).is_none_or(|a| a.is_empty()))
         .collect();
     land.sort_by(|&a, &b| h[a].partial_cmp(&h[b]).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -213,7 +213,7 @@ pub fn drain_water(pack: &mut Pack, h: &mut [f32], grid: &Grid) {
     // Lake outlet map: cell_id -> lake outlet river_id
     // Precompute lake out_cells
     let mut lake_out_cells: Vec<Option<u32>> = vec![None; n];
-    for (fi, feat) in pack.features.iter().enumerate() {
+    for feat in pack.features.iter() {
         if feat.kind == FeatureType::Lake && !feat.closed {
             if let Some(out) = feat.out_cell {
                 lake_out_cells[out as usize] = Some(feat.id);
@@ -240,7 +240,7 @@ pub fn drain_water(pack: &mut Pack, h: &mut [f32], grid: &Grid) {
                         let n = n as usize;
                         if n < h.len() && h[n] < 20.0 {
                             let nfid = pack.cells.feature_id.get(n).copied().unwrap_or(0) as usize;
-                            if pack.features.get(nfid).map_or(false, |f| f.id == lake_id) {
+                            if pack.features.get(nfid).is_some_and(|f| f.id == lake_id) {
                                 lake_cell = Some(n);
                                 break;
                             }
@@ -257,7 +257,6 @@ pub fn drain_water(pack: &mut Pack, h: &mut [f32], grid: &Grid) {
                         river_next += 1;
                     }
                     // Flow down from lake outlet
-                    let outlet_river = pack.cells.river[lc];
                     let mut min_h = h[i];
                     let mut down = i;
                     if let Some(neighbors) = pack.cells.adjacency.get(i) {
@@ -276,7 +275,7 @@ pub fn drain_water(pack: &mut Pack, h: &mut [f32], grid: &Grid) {
             }
         }
 
-        if pack.cells.flux[i] >= MIN_FLUX_TO_FORM_RIVER as u16 && pack.cells.river[i] == 0 {
+        if pack.cells.flux[i] >= MIN_FLUX_TO_FORM_RIVER && pack.cells.river[i] == 0 {
             pack.cells.river[i] = river_next;
             if river_next as usize >= river_parents.len() {
                 river_parents.resize(river_next as usize + 1, None);
@@ -311,11 +310,10 @@ fn flow_down(cells: &mut PackCells, h: &[f32], to_cell: usize, from_cell: usize)
     if to_river != 0 {
         if from_flux > to_flux {
             cells.confluence[to_cell] =
-                (cells.confluence[to_cell] as u16 + cells.flux[to_cell]).min(u16::MAX);
+                cells.confluence[to_cell].saturating_add(cells.flux[to_cell]);
             cells.river[to_cell] = from_river;
         } else {
-            cells.confluence[to_cell] =
-                (cells.confluence[to_cell] as u16 + from_flux).min(u16::MAX);
+            cells.confluence[to_cell] = cells.confluence[to_cell].saturating_add(from_flux);
         }
     } else {
         cells.river[to_cell] = from_river;

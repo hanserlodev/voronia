@@ -20,6 +20,7 @@ pub struct TextureOverlay {
 }
 
 impl TextureOverlay {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

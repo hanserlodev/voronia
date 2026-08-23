@@ -103,18 +103,18 @@ fn landmass_mask_covers_all_land_cell_centroids() {
     let mut by_feature: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
     let mut empty_rings_land = 0usize;
     let mut empty_rings_total = 0usize;
-    for p in 0..n {
+    for (p, water) in is_water.iter().enumerate() {
         let ring = match pack.vertices.cell_rings.get(p) {
             Some(r) if !r.is_empty() => r,
             _ => {
-                if !is_water[p] {
+                if !*water {
                     empty_rings_land += 1;
                 }
                 empty_rings_total += 1;
                 continue;
             }
         };
-        if is_water[p] {
+        if *water {
             continue;
         }
         let center = ring_centroid(&pack.vertices, ring);
@@ -158,8 +158,8 @@ fn landmass_mask_covers_all_land_cell_centroids() {
         })
         .collect();
     let mut fill_missing = 0usize;
-    for p in 0..n {
-        if is_water[p] {
+    for (p, water) in is_water.iter().enumerate() {
+        if *water {
             continue;
         }
         let ring = match pack.vertices.cell_rings.get(p) {

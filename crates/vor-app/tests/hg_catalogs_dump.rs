@@ -99,7 +99,7 @@ fn dump_human_geography_catalogs() {
     }
 
     // Zone mesh: outer-boundary fill per zone (FMG `getVertexPath`).
-    let zone_mesh = vor_render::zone_layer::build_zone_mesh(&pack.vertices, &pack, &world.zones);
+    let zone_mesh = vor_render::zone_layer::build_zone_mesh(&pack.vertices, pack, &world.zones);
     println!(
         "zones mesh: {}v/{}i ({} zones)",
         zone_mesh.vertices.len(),

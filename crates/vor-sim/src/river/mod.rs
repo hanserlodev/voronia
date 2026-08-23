@@ -50,7 +50,7 @@ impl RiverGenerator {
 
         if allow_erosion {
             pack.cells.height = h.iter().map(|&v| v as u8).collect();
-            let mut h2: Vec<f32> = h.iter().map(|&v| v).collect();
+            let mut h2: Vec<f32> = h.to_vec();
             Self::downcut_rivers(pack, &mut h2);
             pack.cells.height = h2.iter().map(|&v| v as u8).collect();
         }

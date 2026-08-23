@@ -120,14 +120,16 @@ fn rename_burg() {
 
 #[test]
 fn set_burg_population_updates_cell() {
-    let mut world = World::default();
-    world.pack = Pack {
-        cells: vor_core::cells::PackCells {
-            population: vec![100.0, 200.0],
-            ..vor_core::cells::PackCells::default()
+    let mut world = World {
+        pack: Pack {
+            cells: vor_core::cells::PackCells {
+                population: vec![100.0, 200.0],
+                ..vor_core::cells::PackCells::default()
+            },
+            points: vec![[0.0, 0.0], [10.0, 10.0]],
+            ..Pack::default()
         },
-        points: vec![[0.0, 0.0], [10.0, 10.0]],
-        ..Pack::default()
+        ..World::default()
     };
     world.burgs.push(Burg {
         id: 1,

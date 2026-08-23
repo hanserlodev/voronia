@@ -531,8 +531,10 @@ mod tests {
     #[test]
     fn smooth_span_when_no_subdivision() {
         let pts = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]];
-        let mut settings = FractalSettings::default();
-        settings.enabled = false;
+        let settings = FractalSettings {
+            enabled: false,
+            ..Default::default()
+        };
         let (_, spans) = fractalize_polygon(&pts, 0, false, 500.0, 500.0, &settings);
         assert!(
             spans.iter().all(|s| s.is_smooth),

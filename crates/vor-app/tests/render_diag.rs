@@ -34,58 +34,6 @@ fn pt_in_tri(pt: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]) -> bool {
     !(has_neg && has_pos)
 }
 
-fn point_in_cell(vertices: &vor_core::voronoi::VoronoiVertices, ring: &[u32], p: [f32; 2]) -> bool {
-    let pts: Vec<[f32; 2]> = ring
-        .iter()
-        .filter_map(|&t| vertices.positions.get(t as usize).copied())
-        .collect();
-    if pts.len() < 3 {
-        return false;
-    }
-    let mut inside = false;
-    let n = pts.len();
-    for i in 0..n {
-        let j = (i + 1) % n;
-        let (xi, yi) = (pts[i][0], pts[i][1]);
-        let (xj, yj) = (pts[j][0], pts[j][1]);
-        let intersects = (yi > p[1]) != (yj > p[1])
-            && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi).abs().max(1e-9) + xi;
-        if intersects {
-            inside = !inside;
-        }
-    }
-    inside
-}
-
-fn ring_distance(
-    vertices: &vor_core::voronoi::VoronoiVertices,
-    ring: &[u32],
-    p: [f32; 2],
-) -> Option<f32> {
-    let pts: Vec<[f32; 2]> = ring
-        .iter()
-        .filter_map(|&t| vertices.positions.get(t as usize).copied())
-        .collect();
-    if pts.len() < 2 {
-        return None;
-    }
-    let mut best = f32::INFINITY;
-    for i in 0..pts.len() {
-        let j = (i + 1) % pts.len();
-        let a = pts[i];
-        let b = pts[j];
-        let abx = b[0] - a[0];
-        let aby = b[1] - a[1];
-        let l2 = abx * abx + aby * aby;
-        let t = ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby).clamp(0.0, l2.max(1e-9)) / l2.max(1e-9);
-        let px = a[0] + abx * t;
-        let py = a[1] + aby * t;
-        let d = ((p[0] - px).powi(2) + (p[1] - py).powi(2)).sqrt();
-        best = best.min(d);
-    }
-    Some(best)
-}
-
 #[test]
 fn dump_biome_render_svg() {
     let bytes = std::fs::read(SORVIK_MAP_PATH).expect("Sorvik.map");
@@ -222,10 +170,13 @@ fn dump_biome_render_svg() {
     );
 
     // landmass base (blanca)
-    let _ = write!(svg, "<g clip-path=\"url(#land)\"><polygon points=\"{min_x},{min_y} {max_x},{min_y} {max_x},{max_y} {min_x},{max_y}\" fill=\"#ffffff\"/></g>\n");
+    let _ = writeln!(
+        svg,
+        "<g clip-path=\"url(#land)\"><polygon points=\"{min_x},{min_y} {max_x},{min_y} {max_x},{max_y} {min_x},{max_y}\" fill=\"#ffffff\"/></g>"
+    );
 
     // fill de biomes + water gap recortados
-    let _ = write!(svg, "<g clip-path=\"url(#land)\">{}</g>\n", {
+    let _ = writeln!(svg, "<g clip-path=\"url(#land)\">{}</g>", {
         let mut s = String::new();
         for c in biome_mesh.indices.chunks_exact(3) {
             let a = biome_mesh.vertices[c[0] as usize].pos;
@@ -242,9 +193,9 @@ fn dump_biome_render_svg() {
     });
 
     // stroke de costa de cada feature (rojo) para comparar con el recorte
-    let _ = write!(
+    let _ = writeln!(
         svg,
-        "<g fill=\"none\" stroke=\"#ff0000\" stroke-width=\"1.2\">{}</g>\n",
+        "<g fill=\"none\" stroke=\"#ff0000\" stroke-width=\"1.2\">{}</g>",
         {
             let mut s = String::new();
             for feat in &world.pack.features {
@@ -266,7 +217,7 @@ fn dump_biome_render_svg() {
         }
     );
 
-    let _ = write!(svg, "</svg>\n");
+    let _ = writeln!(svg, "</svg>");
 
     let out = "/tmp/voronia_diag_biome.svg";
     std::fs::write(out, &svg).expect("write svg");
@@ -275,8 +226,8 @@ fn dump_biome_render_svg() {
     // --- Numerical diagnostics on the rendered geometry ---
     // Precompute land rings + bboxes for fast point-in-cell tests.
     let mut land_rings: Vec<(Vec<[f32; 2]>, [f32; 4])> = Vec::new();
-    for p in 0..n {
-        if is_water[p] {
+    for (p, water) in is_water.iter().enumerate() {
+        if *water {
             continue;
         }
         if let Some(r) = pack.vertices.cell_rings.get(p) {
@@ -337,7 +288,7 @@ fn dump_biome_render_svg() {
                     coast_samples_outside += 1;
                     let d = land_rings
                         .iter()
-                        .filter_map(|(pts, _)| {
+                        .map(|(pts, _)| {
                             let mut best = f32::INFINITY;
                             for i in 0..pts.len() {
                                 let j = (i + 1) % pts.len();
@@ -354,7 +305,7 @@ fn dump_biome_render_svg() {
                                 best =
                                     best.min(((pt[0] - px).powi(2) + (pt[1] - py).powi(2)).sqrt());
                             }
-                            Some(best)
+                            best
                         })
                         .fold(f32::INFINITY, f32::min);
                     if d.is_finite() && d > max_outside_d {
@@ -510,8 +461,8 @@ fn dump_biome_render_svg() {
         })
         .collect();
     let mut uncovered = 0usize;
-    for p in 0..n {
-        if is_water[p] {
+    for (p, water) in is_water.iter().enumerate() {
+        if *water {
             continue;
         }
         let ring = match verts.cell_rings.get(p) {

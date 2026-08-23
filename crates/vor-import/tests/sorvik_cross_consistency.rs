@@ -34,9 +34,9 @@ fn load_sorvik() -> vor_import::mapfile::LoadResult {
 }
 
 /// 1) `pack.cells.grid_id` es un mapeo válido pack→grid: todos los ids en rango, y la altura
-/// replica exactamente la del grid cell de origen (slot `[7]`). Nótese que `re_graph` añade
-/// puntos intermedios en costas que comparten el mismo `grid_id` del cell de origen — por eso
-/// NO se exige unicidad del grid_id (cada pack cell apunta al grid cell que la originó).
+///    replica exactamente la del grid cell de origen (slot `[7]`). Nótese que `re_graph` añade
+///    puntos intermedios en costas que comparten el mismo `grid_id` del cell de origen — por eso
+///    NO se exige unicidad del grid_id (cada pack cell apunta al grid cell que la originó).
 #[test]
 fn pack_grid_id_is_valid_and_height_replicates() {
     let w = load_sorvik();
@@ -56,10 +56,10 @@ fn pack_grid_id_is_valid_and_height_replicates() {
 }
 
 /// 2) `pack.cells.feature_id` (derivada vía grid_id → grid.feature_id, slot `[9]`) es coherente
-/// con el catálogo de `grid.features` (slot `[6]`): todo id presente en pack debe existir como
-/// feature real en grid, y ningún pack cell puede apuntar a un id inexistente. (Los conteos
-/// `cell_count` que FMG serializa en `grid.features` son 0 en Sorvik — no son una señal útil —
-/// y los puntos extra de costa de `re_graph` inflan el pack, por eso no se comparan conteos.)
+///    con el catálogo de `grid.features` (slot `[6]`): todo id presente en pack debe existir como
+///    feature real en grid, y ningún pack cell puede apuntar a un id inexistente. (Los conteos
+///    `cell_count` que FMG serializa en `grid.features` son 0 en Sorvik — no son una señal útil —
+///    y los puntos extra de costa de `re_graph` inflan el pack, por eso no se comparan conteos.)
 #[test]
 fn pack_feature_ids_resolve_to_grid_feature_catalog() {
     let w = load_sorvik();
@@ -82,7 +82,7 @@ fn pack_feature_ids_resolve_to_grid_feature_catalog() {
 }
 
 /// 3) Referencias de catálogo de cada pack cell son válidas (existen en los catálogos de FMG):
-/// state, burg, culture, religion, province.
+///    state, burg, culture, religion, province.
 #[test]
 fn pack_cell_catalog_references_resolve() {
     let w = load_sorvik();
@@ -123,7 +123,7 @@ fn pack_cell_catalog_references_resolve() {
 }
 
 /// 4) Todo burg (slot `[15]`) referencia un pack cell existente, y ese pack cell tiene asignado
-/// ese burg en `pack.cells.burg` (slot `[17]`).
+///    ese burg en `pack.cells.burg` (slot `[17]`).
 #[test]
 fn burg_cell_references_resolve_to_assigned_burg() {
     let w = load_sorvik();

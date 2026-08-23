@@ -95,7 +95,7 @@ pub fn add_meandering(
             if c == u32::MAX {
                 true
             } else {
-                cell_heights.get(c as usize).map_or(true, |&h| h < 20)
+                cell_heights.get(c as usize).is_none_or(|&h| h < 20)
             }
         })
         .collect();
@@ -138,7 +138,7 @@ pub fn add_meandering(
 }
 
 /// Port of Azgaar's `relaxAcuteAngles()` from pathUtils.ts:453-506
-pub fn relax_acute_angles(points: &mut Vec<[f32; 2]>, anchor_indices: &[usize]) {
+pub fn relax_acute_angles(points: &mut [[f32; 2]], anchor_indices: &[usize]) {
     let n = points.len();
     if n < 3 {
         return;
@@ -165,7 +165,7 @@ pub fn relax_acute_angles(points: &mut Vec<[f32; 2]>, anchor_indices: &[usize]) 
     }
 
     for _ in 0..4 {
-        let snapshot: Vec<[f32; 2]> = points.clone();
+        let snapshot: Vec<[f32; 2]> = points.to_vec();
         let mut flipped_any = false;
         for i in 1..n - 1 {
             if is_anchor[i] {
