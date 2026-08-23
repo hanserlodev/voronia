@@ -843,14 +843,17 @@ Relative effort estimates (S/M/L/XL), not a fixed schedule — depends on real a
 - [ ] Manual border editing (reassign cells).
 - [ ] River editor.
 
-### Phase 7 — Native procedural generation engine · `XL`
-- [ ] Heightmap (templates + noise).
-- [ ] Hydrology (rivers, lakes).
-- [ ] Climate (temperature, precipitation) → biomes.
-- [ ] Cultures (expansion + namebases).
-- [ ] States/burgs/provinces (expansion, scoring, capitals).
-- [ ] Religions.
-- [ ] Routes + economy (goods).
+### Phase 7 — Native procedural generation engine · `XL` 🚧 IN PROGRESS
+
+Detailed work plan for the current stage: [`docs/plans/human-geography-parity.md`](human-geography-parity.md).
+
+- [ ] Heightmap (templates + noise) — render parity done (isoline bands, real height units); native generation pending.
+- [x] Hydrology (rivers, lakes) — complete native port in `vor-sim` (depressions, lakes, flux, width, meander, confluences) + bit-exact coastline rendering.
+- [ ] Climate (temperature, precipitation) → biomes — render parity done (temperature/precipitation/ice/lakes layers); native generation pending.
+- [ ] Cultures (expansion + namebases) — expansion ported natively and validated; namebases pending.
+- [ ] States/burgs/provinces (expansion, scoring, capitals) — states & provinces expansion ported natively and validated; burgs generation, names, poles and labels pending.
+- [ ] Religions — expansion ported natively and validated; names and exact `passageCost` pending.
+- [ ] Routes + economy (goods) — routes/goods/markets/deals typed models + initial render done; native generation of routes, goods production, markets and trade simulation pending.
 - [ ] Military/diplomacy (optional within this phase, can be deferred).
 
 ### Phase 8 — Extensions beyond Azgaar · `XL` (progressive selection, not all at once)

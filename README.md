@@ -1,5 +1,7 @@
 # Voronia
 
+[![CI](https://github.com/hanserlodev/voronia/actions/workflows/ci.yml/badge.svg)](https://github.com/hanserlodev/voronia/actions/workflows/ci.yml)
+
 *A native, GPU-accelerated engine for generating and editing fantasy worlds — written in Rust, rendered with wgpu.*
 
 Voronia is a from-scratch reimplementation of the procedural pipeline behind [Azgaar's Fantasy Map Generator](https://github.com/Azgaar/fantasy-map-generator), built as a native desktop application instead of a web app. It imports existing `.map` files produced by Azgaar, regenerates the underlying geometry bit-for-bit so that every per-cell attribute lands on the exact right cell, and renders them at high framerates — on its way to reproducing and extending the full procedural pipeline natively.
@@ -17,12 +19,13 @@ Development version: **0.3.0**. See [`CHANGELOG.md`](CHANGELOG.md). The master p
 - **Phase 4 — `.vorn` format**: native binary serialization (bincode v1, versioned header) + autosave.
 - **Phase 5 — Editing UI**: egui interface, layer toggles, entity inspector, basic attribute editing (rename, recolor), PNG/SVG export.
 
-**In progress**:
+**In progress** — **Phase 7: native procedural generation**, tracked in detail in [`docs/plans/human-geography-parity.md`](docs/plans/human-geography-parity.md):
 
+- **River hydrology (complete)** — native port of Azgaar's rivers in `vor-sim`: depression resolving, lakes, flux accumulation, width, meander, confluences and downcutting.
 - **Bit-exact coastline rendering** — Azgaar's coastline pipeline (`simplify` → `clipPoly` → `fractalize` → `buildCoastlinePath`) reproduced point-exact, documented in [`docs/analysis/azgaar-coastline-parity.md`](docs/analysis/azgaar-coastline-parity.md).
-- **River hydrology** — a first slice of the native simulation engine (`vor-sim`): flow, width, meander and river specification ported from Azgaar (`docs/phases/phase-6.md`).
+- **Human Geography & Economy parity** — deterministic native generation of states, provinces, cultures and religions using FMG's exact expansion costs; typed data models + initial render for goods, markets and trade deals; region isolines with landmask stencil, population bars, burg icons and Catmull-Rom routes.
 
-**Next up**: **Phase 6 — Advanced editing** (undo/redo, brushes, manual borders, river editing) and the rest of **Phase 7 — native procedural generation** (heightmap, climate, cultures, states, religions, routes).
+**Next up**: procedural names & labels (states/provinces/burgs), exact route generation, market/trade simulation with animation — then **Phase 6 — Advanced editing** (brushes, manual borders, river editor).
 
 ## Why
 
@@ -58,7 +61,7 @@ crates/
 ├── vor-core/     World Data Model (pure data, no logic, no render)
 ├── vor-import/   Azgaar .map parser + bit-exact geometry regeneration
 ├── vor-format/   .vorn native serialization
-├── vor-sim/      Procedural simulation engine (hydrology in progress)
+├── vor-sim/      Procedural simulation engine (hydrology + states/provinces/cultures/religions)
 ├── vor-render/   wgpu pipeline, layers, camera (never mutates world data)
 ├── vor-edit/     Edit commands (the only other mutator of world data)
 ├── vor-app/      Desktop application: winit + egui + orchestration
