@@ -448,6 +448,9 @@ pub fn parse_states(slot14: Option<&str>) -> Result<Vec<State>, CatalogError> {
 pub struct BurgRaw {
     #[serde(default)]
     pub i: u16,
+    /// Raw `production` array ({goodId, units} / {dealId} entries mixed).
+    #[serde(default)]
+    pub production: Option<serde_json::Value>,
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -527,6 +530,24 @@ pub fn parse_burgs(slot15: Option<&str>) -> Result<Vec<Burg>, CatalogError> {
             has_walls: b.walls != 0,
             locked: b.locked != 0,
             removed: b.removed != 0,
+            production: b
+                .production
+                .as_ref()
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|e| {
+                            // Entries are either {goodId, units} or {dealId}.
+                            let good = e.get("goodId")?.as_u64()? as u16;
+                            let units = e.get("units")?.as_f64().unwrap_or(0.0) as f32;
+                            Some(vor_core::entities::burg::BurgProduction {
+                                good_id: good,
+                                units,
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         });
     }
     Ok(out)

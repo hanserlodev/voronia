@@ -324,57 +324,6 @@ pub(crate) fn catmull_rom_open_alpha(
     result
 }
 
-/// Subdivides an open polyline with uniform cubic Catmull-Rom (α=0).
-/// The first and last segments repeat their endpoint to dampen the curve.
-pub(crate) fn catmull_rom_open(points: &[[f32; 2]], subdivisions: usize) -> Vec<[f32; 2]> {
-    let n = points.len();
-    if n < 2 || subdivisions == 0 {
-        return points.to_vec();
-    }
-    if n == 2 {
-        let mut result = Vec::with_capacity(2 + subdivisions);
-        result.push(points[0]);
-        for j in 1..=subdivisions {
-            let t = j as f32 / (subdivisions + 1) as f32;
-            result.push([
-                points[0][0] + (points[1][0] - points[0][0]) * t,
-                points[0][1] + (points[1][1] - points[0][1]) * t,
-            ]);
-        }
-        result.push(points[1]);
-        return result;
-    }
-    let mut result = Vec::with_capacity(n * subdivisions);
-    for i in 0..n - 1 {
-        let p0 = if i == 0 { points[0] } else { points[i - 1] };
-        let p1 = points[i];
-        let p2 = points[i + 1];
-        let p3 = if i + 2 < n {
-            points[i + 2]
-        } else {
-            points[i + 1]
-        };
-        for j in 0..subdivisions {
-            let t = j as f32 / subdivisions as f32;
-            let tt = t * t;
-            let ttt = tt * t;
-            let x = 0.5
-                * (2.0 * p1[0]
-                    + (-p0[0] + p2[0]) * t
-                    + (2.0 * p0[0] - 5.0 * p1[0] + 4.0 * p2[0] - p3[0]) * tt
-                    + (-p0[0] + 3.0 * p1[0] - 3.0 * p2[0] + p3[0]) * ttt);
-            let y = 0.5
-                * (2.0 * p1[1]
-                    + (-p0[1] + p2[1]) * t
-                    + (2.0 * p0[1] - 5.0 * p1[1] + 4.0 * p2[1] - p3[1]) * tt
-                    + (-p0[1] + 3.0 * p1[1] - 3.0 * p2[1] + p3[1]) * ttt);
-            result.push([x, y]);
-        }
-    }
-    result.push(points[n - 1]);
-    result
-}
-
 /// Builds the base map mesh from **features** (continents/islands), NOT from
 /// the Voronoi cell grid. Each feature's perimeter is smoothed with Catmull-Rom
 /// for natural coastlines, and the whole landmass is colored with

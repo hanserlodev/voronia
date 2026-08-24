@@ -6,7 +6,7 @@
 pub struct Biome {
     /// Biome id (its position in Azgaar's catalog — 0-indexed).
     pub id: u8,
-    /// Hex color (`#rrggbb`); Azgaar stores it as `rgb(R,G,B)`, which `vor-import` normalizes.
+    /// Hex color (`#rrggbb`), stored verbatim from slot `[3]` (`color|habitability|name`).
     pub color: String,
     /// Habitability (how suitable for settlements; used in burg scoring).
     pub habitability: f32,

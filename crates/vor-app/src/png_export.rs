@@ -153,6 +153,7 @@ pub fn export_png(
                 // pipelines); exporting them is Phase C work.
                 vor_render::layers::DrawItem::Texture => {}
                 vor_render::layers::DrawItem::Relief => {}
+                vor_render::layers::DrawItem::GoodsIcons => {}
             }
         }
     }

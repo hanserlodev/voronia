@@ -93,6 +93,8 @@ pub enum DrawItem {
     Texture,
     /// FMG `#terrain`: relief icons (atlas overlay on `State`).
     Relief,
+    /// FMG `#goodsIcons`/`#goodsBurgs` symbol quads (atlas overlay).
+    GoodsIcons,
 }
 
 /// Runtime-registered layer indices that are not part of the fixed
@@ -103,7 +105,6 @@ pub struct DynamicLayerIds {
     pub cells_line: usize,
     pub grid_line: usize,
     pub coordinates_line: usize,
-    pub routes_line: usize,
     pub goods_cells: usize,
     pub goods_icons: usize,
     pub market_fill: usize,
@@ -118,10 +119,18 @@ pub struct DynamicLayerIds {
     pub ocean_bathymetry: usize,
     /// FMG `#lakes`: shore strokes of the styled subgroups.
     pub lake_stroke: usize,
+    /// FMG `#biomes`: coastal water-gap stroke (width 3, biome color).
+    pub biome_gap: usize,
+    /// FMG `#routes` subgroup meshes (tessellated strokes, exact dashes).
+    pub routes_roads: usize,
+    pub routes_trails: usize,
+    pub routes_searoutes: usize,
     /// FMG `#ice`: dropShadow01 approximation (offset black copy).
     pub ice_shadow: usize,
     /// FMG `#ice`: shore strokes.
     pub ice_stroke: usize,
+    /// FMG `#goodsBurgs`: production plates (rects + circles mesh).
+    pub goods_burgs: usize,
 }
 
 /// Per-frame draw options that depend on view state rather than flags.
@@ -201,9 +210,10 @@ impl LayerFlags {
             seq.push(Mesh(Self::LAYER_LAKES));
             seq.push(Mesh(dyn_ids.lake_stroke));
         }
-        // #biomes
+        // #biomes: isoline fills + the coastal gap stroke on top
         if self.biomes {
             seq.push(Mesh(Self::LAYER_BIOMES));
+            seq.push(Mesh(dyn_ids.biome_gap));
         }
         // #cells, #gridOverlay, #coordinates
         if self.cells {
@@ -249,9 +259,11 @@ impl LayerFlags {
         if self.borders_culture {
             seq.push(Mesh(Self::LAYER_BORDER_CULTURE));
         }
-        // #routes
+        // #routes: subgroup meshes in FMG creation order
         if self.routes {
-            seq.push(Line(dyn_ids.routes_line));
+            seq.push(Mesh(dyn_ids.routes_roads));
+            seq.push(Mesh(dyn_ids.routes_trails));
+            seq.push(Mesh(dyn_ids.routes_searoutes));
         }
         // #temperature
         if self.temperature {
@@ -269,10 +281,11 @@ impl LayerFlags {
             seq.push(Mesh(Self::LAYER_ICE));
             seq.push(Mesh(dyn_ids.ice_stroke));
         }
-        // #goods
+        // #goods: production cells → symbol quads overlay → burg plates
         if self.goods {
             seq.push(Mesh(dyn_ids.goods_cells));
-            seq.push(Mesh(dyn_ids.goods_icons));
+            seq.push(DrawItem::GoodsIcons);
+            seq.push(Mesh(dyn_ids.goods_burgs));
         }
         // #markets
         if self.markets {
@@ -409,7 +422,6 @@ mod tests {
             cells_line: 100,
             grid_line: 101,
             coordinates_line: 102,
-            routes_line: 103,
             goods_cells: 104,
             goods_icons: 105,
             market_fill: 106,
@@ -420,6 +432,11 @@ mod tests {
             coastline_stroke: 111,
             ocean_bathymetry: 112,
             lake_stroke: 113,
+            biome_gap: 116,
+            routes_roads: 117,
+            routes_trails: 118,
+            routes_searoutes: 119,
+            goods_burgs: 120,
             ice_shadow: 114,
             ice_stroke: 115,
         }
@@ -484,6 +501,7 @@ mod tests {
             DrawItem::Mesh(LayerFlags::LAYER_LAKES),
             DrawItem::Mesh(ids.lake_stroke),
             DrawItem::Mesh(LayerFlags::LAYER_BIOMES),
+            DrawItem::Mesh(ids.biome_gap),
             DrawItem::Line(ids.cells_line),
             DrawItem::Line(ids.grid_line),
             DrawItem::Line(ids.coordinates_line),
@@ -497,7 +515,9 @@ mod tests {
             DrawItem::Mesh(LayerFlags::LAYER_BORDER_STATE),
             DrawItem::Mesh(LayerFlags::LAYER_BORDER_PROVINCE),
             DrawItem::Mesh(LayerFlags::LAYER_BORDER_CULTURE),
-            DrawItem::Line(ids.routes_line),
+            DrawItem::Mesh(ids.routes_roads),
+            DrawItem::Mesh(ids.routes_trails),
+            DrawItem::Mesh(ids.routes_searoutes),
             DrawItem::Mesh(LayerFlags::LAYER_TEMPERATURE),
             // #coastline: shadow (auto-filter on at scale ≤ 1.5) + strokes.
             DrawItem::Mesh(ids.coastline_shadow),
@@ -506,7 +526,8 @@ mod tests {
             DrawItem::Mesh(LayerFlags::LAYER_ICE),
             DrawItem::Mesh(ids.ice_stroke),
             DrawItem::Mesh(ids.goods_cells),
-            DrawItem::Mesh(ids.goods_icons),
+            DrawItem::GoodsIcons,
+            DrawItem::Mesh(ids.goods_burgs),
             DrawItem::Mesh(ids.market_fill),
             DrawItem::Mesh(ids.market_border),
             DrawItem::Mesh(ids.market_center),

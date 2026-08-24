@@ -115,4 +115,4 @@ El trade de bienes se dibuja sobre las rutas (`#goods` z=23 tras `#routes`). En 
 | Burgs | TriangleList | existing + color by state | `burg[]` → `state[]` |
 | Zones | TriangleList | `build_pack_mesh` + lookup | `zone[].cells` |
 | Routes | LineList | line segments | `route[].points` | ✅ ~70% (`route_layer.rs` + cableado) |
-| Goods/Trade | — | — | `world.goods` | 🔴 sin modelo/render (solo re-export opaco) |
+| Goods/Trade | — | — | `world.goods` | ✅ modelo tipado + render desde 0.3.0 — ver `docs/layers/biosphere-layers.md` |

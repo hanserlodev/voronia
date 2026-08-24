@@ -54,6 +54,17 @@ pub struct Burg {
     pub locked: bool,
     #[serde(default)]
     pub removed: bool,
+    /// Urban production entries (`{goodId, units}` in the .map burgs JSON;
+    /// `dealId`-only entries are dropped by the importer).
+    #[serde(default)]
+    pub production: Vec<BurgProduction>,
+}
+
+/// One produced good of a burg (FMG `burg.production` records).
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct BurgProduction {
+    pub good_id: u16,
+    pub units: f32,
 }
 
 impl Burg {
@@ -80,6 +91,7 @@ impl Burg {
             has_walls: false,
             locked: false,
             removed: false,
+            production: Vec::new(),
         }
     }
 }

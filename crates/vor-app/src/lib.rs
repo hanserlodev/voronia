@@ -10,13 +10,19 @@ use thiserror::Error;
 use tracing::info;
 use vor_core::World;
 use vor_edit::EditBuffer;
-use vor_render::biome::{biome_colors_from_catalog, build_biome_coast_fill, build_biome_mesh};
+use vor_render::biome::{
+    biome_colors_from_catalog, build_biome_coast_fill, build_biome_isolines_meshes,
+};
 use vor_render::border::{build_border_mesh, BorderKind};
 use vor_render::burg::build_burg_icons_mesh;
 use vor_render::cells::build_cell_wireframe;
 use vor_render::coastline::{build_fractal_landmass_mesh, FractalSettings};
 use vor_render::coordinates::{build_coordinate_graticule, GraticuleLabel};
 use vor_render::culture_layer::build_culture_mesh;
+use vor_render::goods::{
+    build_goods_burg_plates, build_goods_icon_circles_mesh, goods_icon_quads, BurgPlateLabel,
+    GoodsIconQuad, GoodsIconsOverlay,
+};
 use vor_render::grid::build_grid_lines;
 use vor_render::heightmap::HeightmapMesh;
 use vor_render::ice_layer::build_ice_meshes;
@@ -29,10 +35,9 @@ use vor_render::province_layer::build_province_mesh;
 use vor_render::relief::{build_relief_instances, ReliefIconsOverlay, ReliefSettings};
 use vor_render::religion_layer::build_religion_mesh;
 use vor_render::river::build_river_mesh;
-use vor_render::route_layer::build_route_mesh;
+use vor_render::route_layer::build_route_group_meshes;
 use vor_render::state_layer::build_state_mesh;
 use vor_render::temperature::build_temperature_mesh;
-use vor_render::water_gap::append_water_gap;
 use vor_render::zone_layer::build_zone_mesh;
 use vor_render::{Camera, Renderer};
 use winit::application::ApplicationHandler;
@@ -161,6 +166,10 @@ struct State {
     temp_unit: vor_render::temperature::TempUnit,
     /// FMG `g#wind` direction glyphs (world px).
     wind_glyphs: Vec<vor_render::precipitation::WindGlyph>,
+    /// FMG `#goodsIcons`/`#goodsBurgs` symbol quads (atlas overlay).
+    goods_overlay: Option<GoodsIconsOverlay>,
+    /// FMG `#goodsBurgs` value labels (world px).
+    goods_plate_labels: Vec<BurgPlateLabel>,
     text_system: Option<vor_render::TextSystem>,
 
     /// Runtime-registered indices (lines + economy) for the FMG-ordered
@@ -397,12 +406,16 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
 
     // 2. Biomes (landmass color)
     let biome_colors = biome_colors_from_catalog(&world.biomes);
-    let mut biome_mesh = build_biome_mesh(&world.pack, &biome_colors);
+    // FMG draws biomes with the getIsolines engine (one straight-ring polygon
+    // set per biome id, evenodd) + a width-3 coastal gap stroke. Our coast_fill
+    // anti-halo is kept prepended as a safety net (candidate for removal after
+    // visual verification).
+    let biome_isolines = build_biome_isolines_meshes(&world.pack, &biome_colors);
+    let mut biome_mesh = biome_isolines.fill;
     // Coast fill: the fractal coastline protrudes beyond the outermost land
     // cells (fractal displacement), leaving a white halo where the mask covers
     // but the cell fill does not. Recolor the fractal landmass with the nearest
-    // land cell's biome and prepend it, so the cell fill paints on top and the
-    // biome color reaches exactly up to the fractal coast.
+    // land cell's biome and prepend it, so the isoline fill paints on top.
     let coast_fill = build_biome_coast_fill(&cfg.mesh, &world.pack, &is_water, &biome_colors);
     if !coast_fill.indices.is_empty() {
         let shift = coast_fill.vertices.len() as u32;
@@ -421,17 +434,12 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
             coast_fill.indices.len()
         );
     }
-    append_water_gap(&mut biome_mesh, &world.pack, &is_water, |p| {
-        let bi = world.pack.cells.biome.get(p).copied().unwrap_or(0) as usize;
-        biome_colors
-            .get(bi)
-            .copied()
-            .unwrap_or([0.0, 0.0, 0.0, 1.0])
-    });
     info!(
-        "biomes mesh + water gap: {}v/{}i",
+        "biomes mesh (isolines + coast fill): {}v/{}i, gap {}v/{}i",
         biome_mesh.vertices.len(),
-        biome_mesh.indices.len()
+        biome_mesh.indices.len(),
+        biome_isolines.gap.vertices.len(),
+        biome_isolines.gap.indices.len()
     );
 
     // 3. Climate: temperature, precipitation, ice
@@ -471,6 +479,38 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         ice_meshes.stroke.indices.len(),
         ice_meshes.shadow.vertices.len(),
         ice_meshes.shadow.indices.len()
+    );
+
+    // FMG `#routes`: tessellated strokes per subgroup (roads/trails/searoutes)
+    // with exact dash patterns — replaces the old LineList approximation.
+    let route_meshes = build_route_group_meshes(&world.routes);
+    info!(
+        "routes: roads {}v, trails {}v, searoutes {}v",
+        route_meshes.roads.vertices.len(),
+        route_meshes.trails.vertices.len(),
+        route_meshes.searoutes.vertices.len()
+    );
+
+    // FMG `#goodsIcons` circles + `#goodsBurgs` plates (symbol quads go to the
+    // atlas overlay; values to the glyphon text batch).
+    let goods_circles_mesh = build_goods_icon_circles_mesh(&world.pack, &world.goods);
+    let (goods_burgs_mesh, goods_plate_quads, goods_plate_labels) =
+        build_goods_burg_plates(&world.burgs, &world.goods);
+    let mut goods_quads = goods_icon_quads(&world.pack, &world.goods);
+    goods_quads.extend(goods_plate_quads);
+    info!(
+        "goods: circles {}v, plates {}v, icon quads {}",
+        goods_circles_mesh.vertices.len(),
+        goods_burgs_mesh.vertices.len(),
+        goods_quads.len()
+    );
+    let goods_overlay = load_goods_atlas(
+        &renderer.device,
+        &renderer.queue,
+        renderer.format,
+        renderer.msaa_count,
+        renderer.camera_bind_layout(),
+        &goods_quads,
     );
 
     // 4. Water: lakes, rivers
@@ -673,8 +713,13 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     let layer_coastline_shadow_idx = renderer.add_layer_mesh_blended(&coastline_meshes.shadow);
     let layer_coastline_stroke_idx = renderer.add_layer_mesh_blended(&coastline_meshes.stroke);
     let layer_lake_stroke_idx = renderer.add_layer_mesh_blended(&lake_meshes.stroke);
+    let layer_biome_gap_idx = renderer.add_layer_mesh_blended(&biome_isolines.gap);
+    let layer_routes_roads_idx = renderer.add_layer_mesh_blended(&route_meshes.roads);
+    let layer_routes_trails_idx = renderer.add_layer_mesh_blended(&route_meshes.trails);
+    let layer_routes_searoutes_idx = renderer.add_layer_mesh_blended(&route_meshes.searoutes);
     let layer_ice_shadow_idx = renderer.add_layer_mesh_blended(&ice_meshes.shadow);
     let layer_ice_stroke_idx = renderer.add_layer_mesh_blended(&ice_meshes.stroke);
+    let layer_goods_burgs_idx = renderer.add_layer_mesh_blended(&goods_burgs_mesh);
 
     // Extra economy layers (goods / markets / trade) are registered AFTER all
     // the fixed-constant layers (0..18) so `active_indices()` keeps matching.
@@ -773,14 +818,6 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     );
     let line_coordinates_idx = renderer.add_line_layer(&coord_graticule.lines);
 
-    let route_mesh = build_route_mesh(&world.routes);
-    info!(
-        "route lines: {}v/{}i",
-        route_mesh.vertices.len(),
-        route_mesh.indices.len()
-    );
-    let line_routes_idx = renderer.add_line_layer(&route_mesh);
-
     let mut camera = Camera::new([0.0, 0.0], 1000.0, size.width, size.height);
     camera.frame_bounds(world_bounds_min, world_bounds_max);
 
@@ -855,12 +892,14 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         temp_labels,
         temp_unit: vor_render::temperature::TempUnit::C,
         wind_glyphs,
+        goods_overlay,
+        goods_plate_labels,
         text_system,
         dyn_ids: vor_render::layers::DynamicLayerIds {
             cells_line: line_cells_idx,
             grid_line: line_grid_idx,
             coordinates_line: line_coordinates_idx,
-            routes_line: line_routes_idx,
+
             goods_cells: layer_goods_cells_idx,
             goods_icons: layer_goods_icons_idx,
             market_fill: layer_market_fill_idx,
@@ -871,8 +910,13 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
             coastline_stroke: layer_coastline_stroke_idx,
             ocean_bathymetry: ocean_bathymetry_idx,
             lake_stroke: layer_lake_stroke_idx,
+            biome_gap: layer_biome_gap_idx,
+            routes_roads: layer_routes_roads_idx,
+            routes_trails: layer_routes_trails_idx,
+            routes_searoutes: layer_routes_searoutes_idx,
             ice_shadow: layer_ice_shadow_idx,
             ice_stroke: layer_ice_stroke_idx,
+            goods_burgs: layer_goods_burgs_idx,
         },
         graticule_labels: coord_graticule.labels,
         coordinate_step,
@@ -1331,6 +1375,28 @@ impl State {
             }
         }
 
+        // FMG `#goodsBurgs` value labels: 3.5px world units, fill #28282f.
+        if self.layer_flags.goods {
+            let font_px = (3.5 * zoom_scale).max(1.0);
+            for pl in &self.goods_plate_labels {
+                let s = self.camera.world_to_screen([pl.x, pl.y], surface);
+                if s[0] < -30.0
+                    || s[1] < -30.0
+                    || s[0] > surface[0] + 30.0
+                    || s[1] > surface[1] + 30.0
+                {
+                    continue;
+                }
+                text_labels.push(vor_render::Label::new(
+                    &pl.text,
+                    s[0],
+                    s[1] - font_px * 0.5,
+                    font_px,
+                    [0.157, 0.157, 0.184, 1.0],
+                ));
+            }
+        }
+
         if !text_labels.is_empty() {
             if let Some(ref mut ts) = self.text_system {
                 ts.prepare(&self.renderer.device, &self.renderer.queue, &text_labels);
@@ -1414,6 +1480,11 @@ impl State {
                     }
                     vor_render::layers::DrawItem::Relief => {
                         if let Some(ref overlay) = self.relief_overlay {
+                            overlay.draw(&mut pass, &self.renderer.camera_bind);
+                        }
+                    }
+                    vor_render::layers::DrawItem::GoodsIcons => {
+                        if let Some(ref overlay) = self.goods_overlay {
                             overlay.draw(&mut pass, &self.renderer.camera_bind);
                         }
                     }
@@ -1746,6 +1817,55 @@ fn load_relief_atlas(
         msaa_count,
         camera_layout,
         icons,
+    ))
+}
+
+/// Loads the goods symbol atlas (assets/textures/goods/atlas.png, 8×9 cells
+/// of 64 px rasterized from FMG's `#good-icons` defs).
+#[allow(clippy::too_many_arguments)]
+fn load_goods_atlas(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    format: wgpu::TextureFormat,
+    msaa_count: u32,
+    camera_layout: &wgpu::BindGroupLayout,
+    quads: &[GoodsIconQuad],
+) -> Option<GoodsIconsOverlay> {
+    let asset_path: PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "assets",
+        "textures",
+        "goods",
+        "atlas.png",
+    ]
+    .iter()
+    .collect();
+    let rgba = match image::ImageReader::open(&asset_path) {
+        Ok(reader) => match reader.decode() {
+            Ok(img) => img.to_rgba8(),
+            Err(e) => {
+                tracing::warn!("failed to decode goods atlas: {e}");
+                return None;
+            }
+        },
+        Err(e) => {
+            tracing::warn!("goods atlas not found: {} ({e})", asset_path.display());
+            return None;
+        }
+    };
+    let (w, h) = rgba.dimensions();
+    Some(GoodsIconsOverlay::new(
+        device,
+        queue,
+        format,
+        w,
+        h,
+        &rgba,
+        msaa_count,
+        camera_layout,
+        quads,
     ))
 }
 

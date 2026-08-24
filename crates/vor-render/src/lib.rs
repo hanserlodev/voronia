@@ -35,6 +35,10 @@ pub mod coastline_stroke;
 pub mod coordinates;
 pub mod culture_layer;
 pub mod goods;
+pub use goods::{
+    build_goods_burg_plates, build_goods_icon_circles_mesh, goods_icon_quads, BurgPlateLabel,
+    GoodsIconQuad, GoodsIconsOverlay,
+};
 pub mod grid;
 pub mod heightmap;
 pub mod ice_layer;
@@ -62,7 +66,10 @@ pub mod trade;
 pub mod water_gap;
 pub mod zone_layer;
 
-pub use biome::{build_biome_coast_fill, build_biome_mesh};
+pub use biome::{
+    biome_colors_from_catalog, build_biome_coast_fill, build_biome_isolines_meshes,
+    build_biome_mesh, BiomeIsolineMeshes,
+};
 pub use border::{build_border_mesh, BorderKind};
 pub use burg::build_burg_icons_mesh;
 pub use camera::Camera;
@@ -101,7 +108,7 @@ pub use relief::{
 pub use religion_layer::build_religion_mesh;
 pub use renderer::{stencil_passthrough, Renderer, STENCIL_FORMAT};
 pub use river::{build_river_mesh, get_offset, get_width};
-pub use route_layer::build_route_mesh;
+pub use route_layer::{build_route_group_meshes, RouteMeshes};
 pub use simplify::simplify;
 pub use state_layer::build_state_mesh;
 pub use temperature::build_temperature_mesh;

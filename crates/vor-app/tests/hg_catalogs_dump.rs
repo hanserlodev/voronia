@@ -267,14 +267,18 @@ fn dump_human_geography_catalogs() {
     );
     assert!(!pop_mesh.vertices.is_empty(), "population bars must draw");
 
-    // Routes with Catmull-Rom smoothing.
-    let route_mesh = vor_render::route_layer::build_route_mesh(&world.routes);
+    // Routes: tessellated strokes per subgroup (roads/trails/searoutes).
+    let route_meshes = vor_render::route_layer::build_route_group_meshes(&world.routes);
     println!(
-        "route mesh (smoothed): {}v/{}i",
-        route_mesh.vertices.len(),
-        route_mesh.indices.len()
+        "routes: roads {}v, trails {}v, searoutes {}v",
+        route_meshes.roads.vertices.len(),
+        route_meshes.trails.vertices.len(),
+        route_meshes.searoutes.vertices.len()
     );
-    assert!(!route_mesh.vertices.is_empty(), "routes must draw");
+    let route_total = route_meshes.roads.vertices.len()
+        + route_meshes.trails.vertices.len()
+        + route_meshes.searoutes.vertices.len();
+    assert!(route_total > 0, "routes must draw");
 
     // Burg icons (circles per burg, colored by state).
     let burg_mesh = vor_render::burg::build_burg_icons_mesh(pack, &world.states);
