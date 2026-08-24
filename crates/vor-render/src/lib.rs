@@ -85,14 +85,14 @@ pub use coastline_stroke::{
     build_coastline_meshes, CoastlineMeshes, CoastlineStrokeSettings, SHADOW_MAX_SCALE,
 };
 pub use coordinates::{build_coordinate_graticule, GraticuleLabel, GraticuleMesh};
-pub use culture_layer::build_culture_mesh;
+pub use culture_layer::{build_culture_mesh, build_culture_stroke_mesh};
 pub use grid::build_grid_lines;
 pub use heightmap::{build_mesh, height_color, HeightmapMesh};
 pub use ice_layer::{build_ice_meshes, IceMeshes};
 pub use isoline::{
-    build_heightmap_band_mesh, build_region_mesh, build_vertex_path_mesh, connect_vertices,
-    get_border_path, get_fill_path, get_halo_path, get_isolines, get_water_gap_path,
-    IsolineOptions, IsolineOutput,
+    build_heightmap_band_mesh, build_region_mesh, build_region_stroke_mesh, build_vertex_path_mesh,
+    connect_vertices, get_border_path, get_fill_path, get_halo_path, get_isolines,
+    get_water_gap_path, IsolineOptions, IsolineOutput,
 };
 pub use lakes::{build_lake_meshes, LakeMeshes};
 pub use layers::LayerFlags;
@@ -115,4 +115,4 @@ pub use temperature::build_temperature_mesh;
 pub use text::{Label, TextSystem};
 pub use texture::{OceanPatternOverlay, TextureOverlay};
 pub use water_gap::{append_water_gap, build_water_gap_mesh};
-pub use zone_layer::build_zone_mesh;
+pub use zone_layer::build_zone_hatch_mesh;

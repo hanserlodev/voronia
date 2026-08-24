@@ -452,6 +452,8 @@ pub struct BurgRaw {
     #[serde(default)]
     pub production: Option<serde_json::Value>,
     #[serde(default)]
+    pub group: String,
+    #[serde(default)]
     pub name: String,
     #[serde(default)]
     pub cell: u32,
@@ -530,6 +532,7 @@ pub fn parse_burgs(slot15: Option<&str>) -> Result<Vec<Burg>, CatalogError> {
             has_walls: b.walls != 0,
             locked: b.locked != 0,
             removed: b.removed != 0,
+            group: b.group.clone(),
             production: b
                 .production
                 .as_ref()

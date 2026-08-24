@@ -756,6 +756,80 @@ pub fn build_heightmap_band_mesh_with(
     result
 }
 
+/// Stroke outline over a region's isoline rings (e.g. FMG `#cults
+/// { stroke: #777777, stroke-width: 0.5 }`). Same chain walk as
+/// [`build_region_mesh`], stroked instead of filled.
+pub fn build_region_stroke_mesh(
+    pack: &Pack,
+    get_type: &impl Fn(usize) -> u16,
+    color: [f32; 4],
+    width: f32,
+) -> HeightmapMesh {
+    use lyon::tessellation::{
+        BuffersBuilder, LineCap, LineJoin, StrokeOptions, StrokeTessellator, VertexBuffers,
+    };
+    let mut result = HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [f32::INFINITY; 2],
+        bounds_max: [f32::NEG_INFINITY; 2],
+    };
+    let mut tess = StrokeTessellator::new();
+    let opts = StrokeOptions::default()
+        .with_line_width(width)
+        .with_line_join(LineJoin::Round)
+        .with_line_cap(LineCap::Round);
+
+    let iso_opts = IsolineOptions {
+        polygons: true,
+        ..Default::default()
+    };
+    for iso in get_isolines(pack, get_type, &iso_opts) {
+        if iso.chain.len() < 3 {
+            continue;
+        }
+        let path = get_fill_path(&iso.chain, &pack.vertices);
+        let mut out: VertexBuffers<HeightmapVertex, u32> = VertexBuffers::new();
+        struct StrokeColorCtor([f32; 4]);
+        impl lyon::tessellation::StrokeVertexConstructor<HeightmapVertex> for StrokeColorCtor {
+            fn new_vertex(
+                &mut self,
+                vertex: lyon::tessellation::StrokeVertex<'_, '_>,
+            ) -> HeightmapVertex {
+                let p = vertex.position();
+                HeightmapVertex {
+                    pos: [p.x, p.y],
+                    color: self.0,
+                }
+            }
+        }
+        if tess
+            .tessellate_path(
+                &path,
+                &opts,
+                &mut BuffersBuilder::new(&mut out, StrokeColorCtor(color)),
+            )
+            .is_ok()
+        {
+            let base = result.vertices.len() as u32;
+            let start = result.vertices.len();
+            result.vertices.extend(out.vertices);
+            result.indices.extend(out.indices.iter().map(|&i| i + base));
+            for v in &result.vertices[start..] {
+                result.bounds_min[0] = result.bounds_min[0].min(v.pos[0]);
+                result.bounds_min[1] = result.bounds_min[1].min(v.pos[1]);
+                result.bounds_max[0] = result.bounds_max[0].max(v.pos[0]);
+                result.bounds_max[1] = result.bounds_max[1].max(v.pos[1]);
+            }
+        }
+    }
+    if !result.bounds_min.iter().all(|v| v.is_finite()) {
+        result.bounds_min = [0.0; 2];
+        result.bounds_max = [0.0; 2];
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

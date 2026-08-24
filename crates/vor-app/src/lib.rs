@@ -18,7 +18,7 @@ use vor_render::burg::build_burg_icons_mesh;
 use vor_render::cells::build_cell_wireframe;
 use vor_render::coastline::{build_fractal_landmass_mesh, FractalSettings};
 use vor_render::coordinates::{build_coordinate_graticule, GraticuleLabel};
-use vor_render::culture_layer::build_culture_mesh;
+use vor_render::culture_layer::{build_culture_mesh, build_culture_stroke_mesh};
 use vor_render::goods::{
     build_goods_burg_plates, build_goods_icon_circles_mesh, goods_icon_quads, BurgPlateLabel,
     GoodsIconQuad, GoodsIconsOverlay,
@@ -38,7 +38,7 @@ use vor_render::river::build_river_mesh;
 use vor_render::route_layer::build_route_group_meshes;
 use vor_render::state_layer::build_state_mesh;
 use vor_render::temperature::build_temperature_mesh;
-use vor_render::zone_layer::build_zone_mesh;
+use vor_render::zone_layer::build_zone_hatch_mesh;
 use vor_render::{Camera, Renderer};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -574,6 +574,7 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         &world.cultures,
         &is_water,
     );
+    let culture_stroke_mesh = build_culture_stroke_mesh(&world.pack);
     info!(
         "culture fill + water gap: {}v/{}i",
         culture_mesh.vertices.len(),
@@ -604,7 +605,7 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         population_mesh.indices.len()
     );
 
-    let zone_mesh = build_zone_mesh(&world.pack.vertices, &world.pack, &world.zones);
+    let zone_mesh = build_zone_hatch_mesh(&world.pack, &world.zones);
     info!(
         "zones: {}v/{}i",
         zone_mesh.vertices.len(),
@@ -625,7 +626,8 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         border_culture_mesh.indices.len(),
     );
 
-    let burg_mesh = build_burg_icons_mesh(&world.pack, &world.states);
+    // FMG v1.138: white per-group icons (not colored by state), blended.
+    let burg_mesh = build_burg_icons_mesh(&world.burgs);
     info!(
         "burgs: {}v/{}i",
         burg_mesh.vertices.len(),
@@ -702,7 +704,8 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         l_population,
         vor_render::layers::LayerFlags::LAYER_POPULATION
     );
-    let l_burgs = renderer.add_layer_mesh(&burg_mesh); // #icons
+    // FMG `#burgIcons` fill-opacity 0.7 → alpha-blended.
+    let l_burgs = renderer.add_layer_mesh_blended(&burg_mesh); // #icons
     assert_eq!(l_burgs, vor_render::layers::LayerFlags::LAYER_BURGS);
 
     // --- Dynamic layers (indices captured in `dyn_ids`) ---
@@ -714,6 +717,7 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     let layer_coastline_stroke_idx = renderer.add_layer_mesh_blended(&coastline_meshes.stroke);
     let layer_lake_stroke_idx = renderer.add_layer_mesh_blended(&lake_meshes.stroke);
     let layer_biome_gap_idx = renderer.add_layer_mesh_blended(&biome_isolines.gap);
+    let layer_culture_stroke_idx = renderer.add_layer_mesh_blended(&culture_stroke_mesh);
     let layer_routes_roads_idx = renderer.add_layer_mesh_blended(&route_meshes.roads);
     let layer_routes_trails_idx = renderer.add_layer_mesh_blended(&route_meshes.trails);
     let layer_routes_searoutes_idx = renderer.add_layer_mesh_blended(&route_meshes.searoutes);
@@ -911,6 +915,7 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
             ocean_bathymetry: ocean_bathymetry_idx,
             lake_stroke: layer_lake_stroke_idx,
             biome_gap: layer_biome_gap_idx,
+            culture_stroke: layer_culture_stroke_idx,
             routes_roads: layer_routes_roads_idx,
             routes_trails: layer_routes_trails_idx,
             routes_searoutes: layer_routes_searoutes_idx,

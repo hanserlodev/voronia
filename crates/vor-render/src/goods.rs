@@ -909,6 +909,7 @@ mod plate_tests {
             locked: false,
             removed: false,
             production,
+            group: "town".to_string(),
         }
     }
 

@@ -54,6 +54,11 @@ pub struct Burg {
     pub locked: bool,
     #[serde(default)]
     pub removed: bool,
+    /// FMG burg group (`capital`/`city`/`town`/`fort`/`monastery`/
+    /// `caravanserai`/`trading_post`/`village`/`hamlet`) — drives the icon
+    /// style (`#burgIcons > g#<group>` in default.json).
+    #[serde(default)]
+    pub group: String,
     /// Urban production entries (`{goodId, units}` in the .map burgs JSON;
     /// `dealId`-only entries are dropped by the importer).
     #[serde(default)]
@@ -92,6 +97,7 @@ impl Burg {
             locked: false,
             removed: false,
             production: Vec::new(),
+            group: String::new(),
         }
     }
 }

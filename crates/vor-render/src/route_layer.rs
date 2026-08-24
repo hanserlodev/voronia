@@ -142,6 +142,11 @@ pub fn build_route_group_meshes(routes: &[Route]) -> RouteMeshes {
 
 /// Splits a polyline into `dash[0]`-long "on" runs separated by `dash[1]`
 /// gaps (SVG `stroke-dasharray: on off`).
+/// Public wrapper for the dash walker (used by borders too).
+pub fn dash_segments_pub(pts: &[[f32; 2]], dash: [f32; 2]) -> Vec<Vec<[f32; 2]>> {
+    dash_segments(pts, dash)
+}
+
 fn dash_segments(pts: &[[f32; 2]], dash: [f32; 2]) -> Vec<Vec<[f32; 2]>> {
     let mut segments = Vec::new();
     if pts.len() < 2 {

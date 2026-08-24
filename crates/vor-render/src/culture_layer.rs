@@ -30,3 +30,15 @@ pub fn build_culture_mesh(
     let _ = vertices;
     mesh
 }
+
+/// FMG `#cults { stroke: #777777, stroke-width: 0.5 }` — outline over the
+/// culture fills, at the group opacity.
+pub fn build_culture_stroke_mesh(pack: &Pack) -> HeightmapMesh {
+    let stroke_color = {
+        let mut c = crate::biome::hex_color_to_linear("#777777");
+        c[3] = 0.6; // group opacity
+        c
+    };
+    let get_type = |p: usize| pack.cells.culture.get(p).copied().unwrap_or(0);
+    crate::isoline::build_region_stroke_mesh(pack, &get_type, stroke_color, 0.5)
+}

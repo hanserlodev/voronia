@@ -1,118 +1,47 @@
-# Azgaar Human Geography Layers — Documentation and porting plan
+# Human Geography + Borders — estado de paridad (22 ago 2026)
 
-> **Category**: Human Geography
-> **Layers**: states, provinces, zones, cultures, religions, population, burgs, markets, trade
-> **Source**: Azgaar's FMP v1.135.2 — the local azgaar-fmg reference checkout
+> **Category**: Human Geography · **Layers**: states, provinces, zones, cultures, religions, population, burgs, markets, trade (+ Borders)
+> **Source**: azgaar-fmg checkout local, **v1.138.0** (commit 51d8e3e). Plan: `.opencode/plans/human-geography-parity.md`.
+> Reemplaza la versión anterior (v1.135.2 — obsoleta: hablaba de heatmap para population, burgs "triángulos rojos" y routes LineList).
 
-## 1. States (fill + borders)
+## Z-order (ya global)
 
-### What it does in Azgaar
-Fills each Voronoi cell with the state's color (from `state.color`). Draws borders between states with a darker stroke.
+`#relig(13) < #cults(14) < #regions states(15) [statesBody+statesHalo] < #provs(16) < #zones(17) < #borders(18) < #routes(19) < … < #markets(24) < #tradeAnimation(25) < #population(27) < #icons(29) [burgIcons→anchors]`
 
-### Data
-| Slot | Voronia Field | Type | Description |
-|------|---------------|------|-------------|
-| `[14]` | `pack.states` | `Vec<State>` | State catalog |
-| `[25]` | `pack.cells.state` | `Vec<u16>` | state_id per pack cell |
-| — | `state.color` | `String` | Hex `#rrggbb` |
+Slots Voronia: `LAYER_RELIGION_FILL=6, CULTURE_FILL=7 (+dyn culture_stroke), STATE_FILL=8, PROVINCE_FILL=9, ZONES=10, BORDERS=11-13, POPULATION=17, BURGS=18` + `dyn_ids.goods_burgs/market_*/trade`.
 
-### Voronia implementation
-- **Fill**: `build_pack_mesh()` with `pack.cells.state[p] → states[id].color`
-- **Borders**: `build_border_mesh(BorderKind::State)` already exists (but with fixed red color)
+## Estado por capa
 
----
+| Layer | Estado | Detalles |
+|---|---|---|
+| States | ✅ | `build_region_mesh` (getIsolines, anillos rectos evenodd) + water gap; alpha **0.4**, masked `url(#land)`; color del catálogo slot `[14]`. Divergencias: `statesHalo` NO implementado (en FMG solo renderiza con `shapeRendering=geometricPrecision`, no es default); labels de estado → categoría Labels |
+| Provinces | ✅ | Mismo motor; alpha **0.7**. Labels → Labels |
+| Religions | ✅ | Alpha 0.7, sin stroke (FMG w0). Pendiente menor: filtrar religiones `removed` |
+| Cultures | ✅ | Alpha 0.6 + **stroke de fill `#777777` w0.5** portado (`build_region_stroke_mesh` → `dyn_ids.culture_stroke`) |
+| Zones | ✅ | **Hatching por tipo** (`build_zone_hatch_mesh`): líneas negras clippeadas al contorno `getVertexPath` a escala tile 1:1, grupo op 0.6. Mapeo: invasion→hatch1 (45° sp4 w2), flood→hatch2 (horizontal), rebels→hatch3 (−45°), eruption/fault→hatch5 (grid 45°/135° w1.5), proselytism/crusade→hatch6 (**puntos r1 grid 5**), avalanche→hatch7 (−45° sp3 w1.5), disease→hatch12 (dos familias offset), tsunami→hatch13. Kinds desconocidos sin geometría |
+| Population | ✅ | Barras `pop/5` rurales y `(pop/5)·urbanization` urbanas ✅; colores FMG **rural `#0000ff` / urbano `#ff0000`**, ancho total **1.6** |
+| Burgs | ✅ | Iconos blancos **por tipo** (fill `#ffffff` op0.7, stroke `#3e3e4b`, centrados en el burg): capital=cuadrado fs2 sw1 · city=círculo 1.5 sw1 · town=círculo 1 sw1.2 · village 0.7 · hamlet 0.5 · fort=cuadrado 0.7 · monastery=cruz · caravanserai/trading_post=triángulo. **Anchors de puerto** (opacos, sw1.2) tras todos los iconos. Requiere `burg.group` (parseado del slot `[15]`). Pipeline blended. Divergencia: anchor = aproximación geométrica del path curvo de FMG; labels de burg → Labels |
+| Markets | ✅ | Territorio = get_isolines por mercado con **curveBasisClosed** (curvo), fill `market.color` op **0.03**; border = stroke **`darken(fill)` w0.7 op0.8** sobre el anillo curvo (FMG lo clipea al propio fill — nosotros trazamos el anillo completo, documentado); centro círculo **r4** (`max(rn(3+1/scale,2),2)`). Divergencia: emoji ⚖️ no renderizado (glyphon sin soporte emoji fiable) |
+| Trade | ✅* | **Extensión documentada**: quads estáticos por deal coloreados por bien. FMG no dibuja nada estático (`#tradeAnimation` runtime-only con marcadores ship/wagon + Dijkstra — Fase 8). El `.map` guarda el grupo vacío |
+| Borders | ✅ | Estilos exactos por kind: state `#56566d` **w1 dash [2,2]** butt · province `#56566d` **w0.5 dots "0 2" round** · culture = extensión propia ámbar sólida (`#cultureBorders` no existe en FMG). Geometría por aristas Voronoi compartidas (el port a cadenas `getBorderPath` queda pendiente — los strokes son equivalentes por arista) |
 
-## 2. Provinces (fill + borders)
+## Tests
 
-Identical to States but with `pack.cells.province` and `provinces[].color`.
+- `burg.rs`: shapes por grupo (capital cuadrado/town círculo), anchors solo en puertos, removed skipped, fallback town.
+- `zone_layer.rs`: mapeo kind→patrón (dots para crusade, familias/ángulos), spans inside-polygon.
+- `border.rs`: estilos por kind vía tabla (colores/dash).
+- `hg_catalogs_dump.rs`: paridad isolines regionales vs distinct types, zone hatch finito, population bars, burg icons, markets centers, deals+trade mesh.
+- `isoline.rs::region_mesh_fill_matches_isolines`: fills regionales.
 
----
+## Divergencias aceptadas
 
-## 3. Cultures (fill + borders)
+1. `statesHalo` omitido (no-default en FMG; requiere blur GPU).
+2. Labels (states/provinces/burgs/population values) → categoría Labels / Fase C.
+3. Anchor de puerto geométrico (aproximación del path curvo).
+4. Emoji ⚖️ del centro de mercados no renderizado (glyphon).
+5. Trade estático = extensión Voronia (animación real → Fase 8).
+6. Borders por aristas individuales (no cadenas getBorderPath continuas).
+7. Generación nativa: markets/trade/zones siguen import-only (states/provinces/cultures/religions ya generan en vor-sim).
 
-Identical to States but with `pack.cells.culture` and `cultures[].color`.
-
----
-
-## 4. Religions (fill)
-
-Identical to States but with `pack.cells.religion` and `religions[].color`. No borders (Azgaar does not draw religious borders).
-
----
-
-## 5. Population
-
-### What it does in Azgaar
-There is no explicit population layer in Azgaar — it is shown as burg size. Voronia will implement a per-cell heatmap.
-
-### Data
-| Slot | Voronia Field | Type |
-|------|---------------|------|
-| `[21]` | `pack.cells.population` | `Vec<f32>` |
-
-### Implementation
-Heatmap: transparent → yellow → orange → red depending on density.
-
----
-
-## 6. Burgs
-
-### What it does in Azgaar
-Circular markers at each burg's position, colored by state.
-
-### Voronia implementation
-`build_burg_mesh()` already exists (red triangles). Improvement: color by `burgs[].state → states[].color`.
-
----
-
-## 7. Zones
-
-### Data
-| Slot | Voronia Field | Type |
-|------|---------------|------|
-| `[38]` | `world.zones` | `Vec<Zone>` |
-| — | `zone.cells` | `Vec<u32>` |
-| — | `zone.color` | `String` |
-
-### Implementation
-Color the pack cells that belong to zones.
-
----
-
-## 8. Routes/Trade
-
-### Data
-| Slot | Voronia Field | Type |
-|------|---------------|------|
-| `[37]` | `world.routes` | `Vec<Route>` |
-| — | `route.points` | `Vec<[f32;3]>` |
-| — | `route.group` | RouteGroup (roads/trails/searoutes) |
-| — | `route.feature` | `u32` (island/lake/ocean id) |
-| — | `route.length` | `f32` |
-
-### Voronia implementation
-- **Modelo**: `vor-core/src/entities/route.rs` — `Route` + `RouteGroup` (paridad de slot `[37]`).
-- **Render**: `vor-render/src/route_layer.rs::build_route_mesh` — líneas entre `route.points`, color por grupo (roads=brown `[0.5,0.3,0.1]`, trails=tan `[0.6,0.5,0.3]`, searoutes=blue `[0.2,0.4,0.8]`, semi-transparentes).
-- **Cableado**: `vor-app/src/lib.rs:564-570` → `add_line_layer`, flag `layer_flags.routes` (checkbox en la UI).
-
-### Estado: 🟡 ~70%
-Completo: modelo de datos, render de líneas por grupo, toggle en la app. Pendiente: generación nativa en `vor-sim` (hoy solo import del `.map`), paridad visual (stroke-width/dash, curvas Catmull-Rom), iconos de burg en extremos de ruta.
-
-### Goods (depende de Routes)
-El trade de bienes se dibuja sobre las rutas (`#goods` z=23 tras `#routes`). En Voronia `world.goods` (slot `[41]`) se re-exporta opaco (`serde_json::Value`) sin modelo ni render: pendiente `Good`/`Market`, `build_goods_mesh` y presets de UI. Ver `docs/layers/biosphere-layers.md` §3 (z-order).
-
----
-
-## Summary
-
-| Layer | Pipeline | Method | Source |
-|------|----------|--------|--------|
-| States fill | TriangleList | `build_pack_mesh` + entity color | `state[]` |
-| Provinces fill | TriangleList | `build_pack_mesh` + entity color | `province[]` |
-| Cultures fill | TriangleList | `build_pack_mesh` + entity color | `culture[]` |
-| Religions fill | TriangleList | `build_pack_mesh` + entity color | `religion[]` |
-| Population | TriangleList | `build_pack_mesh` + heatmap | `population[]` |
-| Burgs | TriangleList | existing + color by state | `burg[]` → `state[]` |
-| Zones | TriangleList | `build_pack_mesh` + lookup | `zone[].cells` |
-| Routes | LineList | line segments | `route[].points` | ✅ ~70% (`route_layer.rs` + cableado) |
-| Goods/Trade | — | — | `world.goods` | ✅ modelo tipado + render desde 0.3.0 — ver `docs/layers/biosphere-layers.md` |
+## Fuera de alcance (Fase C / Fase 8)
+Style editor por capa, tooltips, trade animation completa, generación nativa de markets/zones/trade, emblems/armies/markers/rulers (grupo Overlay).

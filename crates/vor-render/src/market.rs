@@ -9,125 +9,123 @@ use vor_core::entities::market::Market;
 use vor_core::pack::Pack;
 
 use crate::biome::hex_color_to_linear;
+use crate::heightmap::ColorCtor;
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
-use crate::isoline::build_region_mesh;
 
-/// Half-width of the market border quads.
-const BORDER_HALF_WIDTH: f32 = 0.35;
 /// Radius of the market center circle.
-const CENTER_RADIUS: f32 = 3.0;
+/// FMG: `r = max(rn(3 + 1/scale, 2), 2)` — 4 at load scale.
+const CENTER_RADIUS: f32 = 4.0;
 /// Segments of the center circle.
 const CENTER_SEGMENTS: u32 = 16;
 
-/// Builds the market **fill** layer: isoline per market id, fill at low opacity
-/// (FMG `fill-opacity: 0.03`), border darker (`color.darker()`).
+/// Builds the market **fill** layer: isolines per market id wrapped in
+/// `line().curve(curveBasisClosed)` (FMG `draw-markets.ts:30,47`), fill at
+/// `fill-opacity: 0.03`.
 pub fn build_market_fill_mesh(pack: &Pack, markets: &[Market]) -> HeightmapMesh {
-    let get_type = |p: usize| pack.cells.market.get(p).copied().unwrap_or(0);
-    let color_fn = |mid: u16| -> [f32; 4] {
-        match markets.iter().find(|m| m.id == mid) {
-            Some(m) if !m.color.is_empty() => {
-                let mut c = hex_color_to_linear(&m.color);
-                c[3] = 0.03; // FMG `fill-opacity: 0.03`
-                c
-            }
-            _ => [0.0, 0.0, 0.0, 0.0],
-        }
+    use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator};
+    let mut mesh = HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [f32::INFINITY; 2],
+        bounds_max: [f32::NEG_INFINITY; 2],
     };
-    let mut mesh = build_region_mesh(pack, &get_type, &color_fn);
+    let mut tess = FillTessellator::new();
+    let opts = FillOptions::default().with_fill_rule(lyon::tessellation::FillRule::EvenOdd);
+    for market in markets {
+        let mid = market.id;
+        let color = market_color(market, 0.03); // FMG `fill-opacity: 0.03`
+        if color[3] == 0.0 {
+            continue;
+        }
+        let get_type =
+            |c: usize| -> u16 { u16::from(pack.cells.market.get(c).copied().unwrap_or(0) == mid) };
+        let iso_opts = crate::isoline::IsolineOptions {
+            polygons: true,
+            ..Default::default()
+        };
+        for iso in crate::isoline::get_isolines(pack, &get_type, &iso_opts) {
+            // FMG wraps the ring in `line().curve(curveBasisClosed)`.
+            let path = crate::isoline::build_curve_basis_closed(&iso.points, None);
+            let mut out: lyon::tessellation::VertexBuffers<HeightmapVertex, u32> =
+                lyon::tessellation::VertexBuffers::new();
+            if tess
+                .tessellate_path(
+                    &path,
+                    &opts,
+                    &mut BuffersBuilder::new(&mut out, ColorCtor(color)),
+                )
+                .is_ok()
+            {
+                append_mesh(&mut mesh, out);
+            }
+        }
+    }
     if !mesh.bounds_min.iter().all(|v| v.is_finite()) {
-        mesh.bounds_min = [0.0, 0.0];
-        mesh.bounds_max = [0.0, 0.0];
+        mesh.bounds_min = [0.0; 2];
+        mesh.bounds_max = [0.0; 2];
     }
     mesh
 }
 
-/// Builds the market **border** mesh: darker stroke on the isoline boundaries.
+fn market_color(m: &Market, alpha: f32) -> [f32; 4] {
+    if m.color.is_empty() {
+        return [0.0; 4];
+    }
+    let mut c = hex_color_to_linear(&m.color);
+    c[3] = alpha;
+    c
+}
+
+/// Builds the market **border** stroke: `darker(fill)` at width 0.7 and
+/// stroke-opacity 0.8 over the same curved rings (FMG clips it to the own
+/// fill via clip-path — we stroke the full ring, documented approximation).
 pub fn build_market_border_mesh(pack: &Pack, markets: &[Market]) -> HeightmapMesh {
+    use lyon::tessellation::{BuffersBuilder, LineCap, LineJoin, StrokeOptions, StrokeTessellator};
     let mut mesh = HeightmapMesh {
         vertices: Vec::new(),
         indices: Vec::new(),
-        bounds_min: [f32::INFINITY, f32::INFINITY],
-        bounds_max: [f32::NEG_INFINITY, f32::NEG_INFINITY],
+        bounds_min: [f32::INFINITY; 2],
+        bounds_max: [f32::NEG_INFINITY; 2],
     };
-
-    let n = pack.points_n();
-    for p in 0..n {
-        let mid = pack.cells.market.get(p).copied().unwrap_or(0);
-        if mid == 0 {
+    let mut tess = StrokeTessellator::new();
+    let opts = StrokeOptions::default()
+        .with_line_width(0.7)
+        .with_line_join(LineJoin::Round)
+        .with_line_cap(LineCap::Round);
+    for market in markets {
+        if market.color.is_empty() {
             continue;
         }
-        let neighbors = match pack.cells.adjacency.get(p) {
-            Some(v) => v,
-            None => continue,
+        let base_fill = hex_color_to_linear(&market.color);
+        // `color.darker()` (d3 default k=1): sRGB channels × 0.7.
+        let mut stroke = crate::heightmap::darken(base_fill, 1.0);
+        stroke[3] = 0.8; // FMG `stroke-opacity: 0.8`
+        let get_type = |c: usize| -> u16 {
+            u16::from(pack.cells.market.get(c).copied().unwrap_or(0) == market.id)
         };
-        for &nb in neighbors {
-            let nb = nb as usize;
-            if nb >= n {
-                continue;
-            }
-            if pack.cells.market.get(nb).copied().unwrap_or(0) != mid {
-                // Border between two markets.
-                let color = markets
-                    .iter()
-                    .find(|m| m.id == mid)
-                    .and_then(|m| {
-                        if m.color.is_empty() {
-                            None
-                        } else {
-                            Some(hex_color_to_linear(&m.color))
-                        }
-                    })
-                    .unwrap_or([0.0, 0.0, 0.0, 0.8]);
-                let a = pack.points.get(p).copied().unwrap_or([0.0, 0.0]);
-                let b = pack.points.get(nb).copied().unwrap_or([0.0, 0.0]);
-                let dx = b[0] - a[0];
-                let dy = b[1] - a[1];
-                let len = (dx * dx + dy * dy).sqrt();
-                if len < 0.001 {
-                    continue;
-                }
-                let nx = -dy / len * BORDER_HALF_WIDTH;
-                let ny = dx / len * BORDER_HALF_WIDTH;
-                let base = mesh.vertices.len() as u32;
-                mesh.vertices.extend_from_slice(&[
-                    HeightmapVertex {
-                        pos: [a[0] + nx, a[1] + ny],
-                        color,
-                    },
-                    HeightmapVertex {
-                        pos: [a[0] - nx, a[1] - ny],
-                        color,
-                    },
-                    HeightmapVertex {
-                        pos: [b[0] + nx, b[1] + ny],
-                        color,
-                    },
-                    HeightmapVertex {
-                        pos: [b[0] - nx, b[1] - ny],
-                        color,
-                    },
-                ]);
-                mesh.indices.extend_from_slice(&[
-                    base,
-                    base + 1,
-                    base + 2,
-                    base + 1,
-                    base + 3,
-                    base + 2,
-                ]);
-                for v in &mesh.vertices[base as usize..][..4] {
-                    mesh.bounds_min[0] = mesh.bounds_min[0].min(v.pos[0]);
-                    mesh.bounds_min[1] = mesh.bounds_min[1].min(v.pos[1]);
-                    mesh.bounds_max[0] = mesh.bounds_max[0].max(v.pos[0]);
-                    mesh.bounds_max[1] = mesh.bounds_max[1].max(v.pos[1]);
-                }
+        let iso_opts = crate::isoline::IsolineOptions {
+            polygons: true,
+            ..Default::default()
+        };
+        for iso in crate::isoline::get_isolines(pack, &get_type, &iso_opts) {
+            let path = crate::isoline::build_curve_basis_closed(&iso.points, None);
+            let mut out: lyon::tessellation::VertexBuffers<HeightmapVertex, u32> =
+                lyon::tessellation::VertexBuffers::new();
+            if tess
+                .tessellate_path(
+                    &path,
+                    &opts,
+                    &mut BuffersBuilder::new(&mut out, StrokeColorCtor(stroke)),
+                )
+                .is_ok()
+            {
+                append_mesh(&mut mesh, out);
             }
         }
     }
-
     if !mesh.bounds_min.iter().all(|v| v.is_finite()) {
-        mesh.bounds_min = [0.0, 0.0];
-        mesh.bounds_max = [0.0, 0.0];
+        mesh.bounds_min = [0.0; 2];
+        mesh.bounds_max = [0.0; 2];
     }
     mesh
 }
@@ -183,4 +181,32 @@ pub fn build_market_center_mesh(markets: &[Market], burgs: &[Burg]) -> Heightmap
         mesh.bounds_max = [0.0, 0.0];
     }
     mesh
+}
+
+struct StrokeColorCtor([f32; 4]);
+
+impl lyon::tessellation::StrokeVertexConstructor<HeightmapVertex> for StrokeColorCtor {
+    fn new_vertex(&mut self, vertex: lyon::tessellation::StrokeVertex<'_, '_>) -> HeightmapVertex {
+        let p = vertex.position();
+        HeightmapVertex {
+            pos: [p.x, p.y],
+            color: self.0,
+        }
+    }
+}
+
+fn append_mesh(
+    target: &mut HeightmapMesh,
+    out: lyon::tessellation::VertexBuffers<HeightmapVertex, u32>,
+) {
+    let base = target.vertices.len() as u32;
+    let start = target.vertices.len();
+    target.vertices.extend(out.vertices);
+    target.indices.extend(out.indices.iter().map(|&i| i + base));
+    for v in &target.vertices[start..] {
+        target.bounds_min[0] = target.bounds_min[0].min(v.pos[0]);
+        target.bounds_min[1] = target.bounds_min[1].min(v.pos[1]);
+        target.bounds_max[0] = target.bounds_max[0].max(v.pos[0]);
+        target.bounds_max[1] = target.bounds_max[1].max(v.pos[1]);
+    }
 }

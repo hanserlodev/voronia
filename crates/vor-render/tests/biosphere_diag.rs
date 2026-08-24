@@ -5,7 +5,7 @@
 use vor_import::mapfile::{raw, Loader};
 use vor_render::{
     biome_colors_from_catalog, build_biome_isolines_meshes, build_goods_burg_plates,
-    build_route_group_meshes,
+    build_route_group_meshes, build_zone_hatch_mesh,
 };
 
 const SORVIK_MAP_PATH: &str = concat!(
@@ -55,6 +55,16 @@ fn biosphere_layers_on_sorvik() {
         let v: f32 = label.text.parse().expect("numeric value");
         assert!(v > 0.0);
     }
+
+    // --- Zones: EVERY zone must produce hatch geometry (color-driven
+    // patterns; Capitalized kinds must not break resolution).
+    let zones = &world.zones;
+    assert!(!zones.is_empty(), "Sorvik fixture carries 13 zones");
+    let zone_mesh = build_zone_hatch_mesh(&world.pack, zones);
+    assert!(
+        !zone_mesh.vertices.is_empty(),
+        "zone hatch geometry must exist"
+    );
 
     // --- Routes: three tessellated group meshes ---
     let routes = build_route_group_meshes(&world.routes);

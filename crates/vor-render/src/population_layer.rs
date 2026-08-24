@@ -4,13 +4,18 @@ use vor_core::Pack;
 
 use crate::heightmap::{HeightmapMesh, HeightmapVertex};
 
-/// Half-width of each population bar in map units.
-const BAR_HALF_WIDTH: f32 = 0.4;
+/// Half-width of each population bar: FMG `#population stroke-width: 1.6`
+/// (bars are stroked lines → total width 1.6).
+const BAR_HALF_WIDTH: f32 = 0.8;
 
-/// Rural bar color (Azgaar's `#rural` CSS — `#4d4d4d`).
-const RURAL_COLOR: [f32; 4] = [0.3, 0.3, 0.3, 0.8];
-/// Urban bar color (Azgaar's `#urban` CSS — `#d0240f`).
-const URBAN_COLOR: [f32; 4] = [0.82, 0.14, 0.06, 0.9];
+/// FMG `#rural` stroke (`default.json`): `#0000ff`.
+fn rural_color() -> [f32; 4] {
+    crate::biome::hex_color_to_linear("#0000ff")
+}
+/// FMG `#urban` stroke (`default.json`): `#ff0000`.
+fn urban_color() -> [f32; 4] {
+    crate::biome::hex_color_to_linear("#ff0000")
+}
 
 fn push_bar(mesh: &mut HeightmapMesh, cx: f32, base_y: f32, height: f32, color: [f32; 4]) {
     if height <= 0.0 {
@@ -69,14 +74,14 @@ pub fn build_population_bars_mesh(
             continue;
         }
         let [x, y] = pack.points.get(p).copied().unwrap_or([0.0, 0.0]);
-        push_bar(&mut mesh, x, y, pop / 5.0, RURAL_COLOR);
+        push_bar(&mut mesh, x, y, pop / 5.0, rural_color());
     }
 
     // Urban bars.
     for burg in burgs.iter().filter(|b| b.id != 0 && !b.removed) {
         let [x, y] = burg.position;
         let height = (burg.population / 5.0) * urbanization;
-        push_bar(&mut mesh, x, y, height, URBAN_COLOR);
+        push_bar(&mut mesh, x, y, height, urban_color());
     }
 
     if !mesh.bounds_min.iter().all(|v| v.is_finite()) {

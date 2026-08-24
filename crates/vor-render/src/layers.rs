@@ -131,6 +131,8 @@ pub struct DynamicLayerIds {
     pub ice_stroke: usize,
     /// FMG `#goodsBurgs`: production plates (rects + circles mesh).
     pub goods_burgs: usize,
+    /// FMG `#cults` fill outline (`stroke #777777 w0.5`, group opacity).
+    pub culture_stroke: usize,
 }
 
 /// Per-frame draw options that depend on view state rather than flags.
@@ -232,12 +234,13 @@ impl LayerFlags {
         if self.relief {
             seq.push(DrawItem::Relief);
         }
-        // #relig, #cults
+        // #relig, #cults (cults carries a fill outline stroke)
         if self.religions {
             seq.push(Mesh(Self::LAYER_RELIGION_FILL));
         }
         if self.cultures {
             seq.push(Mesh(Self::LAYER_CULTURE_FILL));
+            seq.push(Mesh(dyn_ids.culture_stroke));
         }
         // #regions, #provs, #zones
         if self.states {
@@ -437,6 +440,7 @@ mod tests {
             routes_trails: 118,
             routes_searoutes: 119,
             goods_burgs: 120,
+            culture_stroke: 121,
             ice_shadow: 114,
             ice_stroke: 115,
         }
@@ -509,6 +513,7 @@ mod tests {
             DrawItem::Relief,
             DrawItem::Mesh(LayerFlags::LAYER_RELIGION_FILL),
             DrawItem::Mesh(LayerFlags::LAYER_CULTURE_FILL),
+            DrawItem::Mesh(ids.culture_stroke),
             DrawItem::Mesh(LayerFlags::LAYER_STATE_FILL),
             DrawItem::Mesh(LayerFlags::LAYER_PROVINCE_FILL),
             DrawItem::Mesh(LayerFlags::LAYER_ZONES),
