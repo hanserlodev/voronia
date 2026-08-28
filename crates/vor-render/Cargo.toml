@@ -19,6 +19,8 @@ bytemuck.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 glyphon.workspace = true
+fontdue = "0.9"
+image.workspace = true
 
 [dev-dependencies]
 pollster.workspace = true

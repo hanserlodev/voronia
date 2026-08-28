@@ -400,6 +400,18 @@ fn push_segment_stroke(
     );
 }
 
+/// FMG `#burgLabels > g#<group>`: `(data-size, data-dy)` per group.
+pub fn burg_label_style(group: &str) -> (f32, f32) {
+    match group {
+        "capital" => (6.0, -0.5),
+        "city" => (5.0, -0.4),
+        "fort" | "monastery" => (2.0, -0.5),
+        "village" => (3.0, -0.4),
+        // town + fallback
+        _ => (4.0, -0.4),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

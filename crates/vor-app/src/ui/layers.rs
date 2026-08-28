@@ -154,15 +154,13 @@ impl Preset {
             }
             Preset::Military => {
                 f.states = true;
-                f.burgs = true;
+                f.burgs = true; // FMG "Icons" toggle (burg icons)
                 f.rulers = true;
-                f.icons = true;
-                f.emblems = true;
                 f.borders_state = true;
                 f.labels = true;
             }
+            // Emblems deferred (Fase C): preset keeps the base layers only.
             Preset::Emblems => {
-                f.emblems = true;
                 f.states = true;
                 f.burgs = true;
                 f.labels = true;
@@ -218,13 +216,10 @@ fn fields_match(a: &LayerFlags, b: &LayerFlags) -> bool {
         && a.borders_province == b.borders_province
         && a.borders_culture == b.borders_culture
         && a.markers == b.markers
-        && a.icons == b.icons
-        && a.emblems == b.emblems
         && a.rulers == b.rulers
         && a.labels == b.labels
         && a.wind_rose == b.wind_rose
         && a.scale_bar == b.scale_bar
-        && a.vignette == b.vignette
 }
 
 pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
@@ -351,13 +346,13 @@ pub fn show(ui: &mut egui::Ui, layer_flags: &mut LayerFlags) {
     })
     .body(|ui| {
         checkbox(ui, layer_flags, "markers", |f| &mut f.markers);
-        checkbox(ui, layer_flags, "icons", |f| &mut f.icons);
-        checkbox(ui, layer_flags, "emblems", |f| &mut f.emblems);
+        // FMG "Icons" toggle == burg icons (grouped under Human Geography here).
         checkbox(ui, layer_flags, "rulers", |f| &mut f.rulers);
         checkbox(ui, layer_flags, "labels", |f| &mut f.labels);
-        checkbox(ui, layer_flags, "wind rose", |f| &mut f.wind_rose);
+        // FMG calls the compass rose toggle "Wind Rose".
+        checkbox(ui, layer_flags, "wind rose (compass)", |f| &mut f.wind_rose);
         checkbox(ui, layer_flags, "scale bar", |f| &mut f.scale_bar);
-        checkbox(ui, layer_flags, "vignette", |f| &mut f.vignette);
+        // Emblems deferred to Fase C; vignette intentionally not ported.
     });
 }
 

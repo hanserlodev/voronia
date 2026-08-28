@@ -14,9 +14,10 @@ use vor_render::biome::{
     biome_colors_from_catalog, build_biome_coast_fill, build_biome_isolines_meshes,
 };
 use vor_render::border::{build_border_mesh, BorderKind};
-use vor_render::burg::build_burg_icons_mesh;
+use vor_render::burg::{build_burg_icons_mesh, burg_label_style};
 use vor_render::cells::build_cell_wireframe;
 use vor_render::coastline::{build_fractal_landmass_mesh, FractalSettings};
+use vor_render::compass::CompassOverlay;
 use vor_render::coordinates::{build_coordinate_graticule, GraticuleLabel};
 use vor_render::culture_layer::{build_culture_mesh, build_culture_stroke_mesh};
 use vor_render::goods::{
@@ -28,6 +29,7 @@ use vor_render::heightmap::HeightmapMesh;
 use vor_render::ice_layer::build_ice_meshes;
 use vor_render::lakes::build_lake_meshes;
 use vor_render::layers::LayerFlags;
+use vor_render::marker_layer::{build_marker_emoji_mesh, build_marker_pins};
 use vor_render::mesh::build_land_cells_mask_mesh;
 use vor_render::population_layer::build_population_bars_mesh;
 use vor_render::precipitation::build_precipitation_mesh;
@@ -36,6 +38,11 @@ use vor_render::relief::{build_relief_instances, ReliefIconsOverlay, ReliefSetti
 use vor_render::religion_layer::build_religion_mesh;
 use vor_render::river::build_river_mesh;
 use vor_render::route_layer::build_route_group_meshes;
+use vor_render::ruler_layer::build_ruler_layer;
+use vor_render::state_labels::{
+    build_label_mesh, compute_state_label_paths, measure_letter, rasterize_strips,
+    StateLabelsOverlay,
+};
 use vor_render::state_layer::build_state_mesh;
 use vor_render::temperature::build_temperature_mesh;
 use vor_render::zone_layer::build_zone_hatch_mesh;
@@ -170,6 +177,18 @@ struct State {
     goods_overlay: Option<GoodsIconsOverlay>,
     /// FMG `#goodsBurgs` value labels (world px).
     goods_plate_labels: Vec<BurgPlateLabel>,
+    /// FMG `#markers` emoji labels (world px).
+    marker_emoji_overlay: Option<StateLabelsOverlay>,
+    /// FMG `#ruler` distance labels (world px).
+    ruler_labels: Vec<vor_render::ruler_layer::RulerLabel>,
+    /// FMG `#compass` rose core overlay.
+    compass_overlay: Option<CompassOverlay>,
+    /// FMG `#labels > #states`: curved text overlay (rebuilt per zoom bucket).
+    state_labels_overlay: Option<StateLabelsOverlay>,
+    state_labels_bucket: i32,
+    label_font_bytes: Vec<u8>,
+    state_label_paths: Vec<Vec<[f32; 2]>>,
+    letter_length: f32,
     text_system: Option<vor_render::TextSystem>,
 
     /// Runtime-registered indices (lines + economy) for the FMG-ordered
@@ -513,6 +532,40 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         &goods_quads,
     );
 
+    // --- FMG Overlay group: markers, ruler measurers, compass rose ---
+    let (marker_pins_mesh, _marker_labels) = build_marker_pins(&world.markers);
+    let marker_emoji_font = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../assets/fonts/NotoEmoji-Regular.ttf"
+    ))
+    .unwrap_or_default();
+    let marker_emoji_overlay =
+        build_marker_emoji_mesh(&marker_emoji_font, &world.markers).map(|mesh| {
+            StateLabelsOverlay::new(
+                &renderer.device,
+                &renderer.queue,
+                renderer.format,
+                &mesh,
+                renderer.msaa_count,
+                renderer.camera_bind_layout(),
+            )
+        });
+    let ruler_layer = build_ruler_layer(&world.measurers, world.settings.distance_scale);
+    let compass_overlay = load_compass_texture(
+        &renderer.device,
+        &renderer.queue,
+        renderer.format,
+        renderer.msaa_count,
+        renderer.camera_bind_layout(),
+    );
+    let label_font_bytes = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../assets/fonts/AlmendraSC-Regular.ttf"
+    ))
+    .unwrap_or_default();
+    let letter_length = measure_letter(&label_font_bytes, 22.0);
+    let state_label_paths = compute_state_label_paths(&world.pack, &world.states, letter_length);
+
     // 4. Water: lakes, rivers
     let lake_meshes = build_lake_meshes(
         &world.pack,
@@ -724,6 +777,19 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
     let layer_ice_shadow_idx = renderer.add_layer_mesh_blended(&ice_meshes.shadow);
     let layer_ice_stroke_idx = renderer.add_layer_mesh_blended(&ice_meshes.stroke);
     let layer_goods_burgs_idx = renderer.add_layer_mesh_blended(&goods_burgs_mesh);
+    let layer_marker_pins_idx = renderer.add_layer_mesh_blended(&marker_pins_mesh);
+    let layer_ruler_under_idx = renderer.add_layer_mesh_blended(&ruler_layer.under);
+    let layer_ruler_over_idx = renderer.add_layer_mesh_blended(&ruler_layer.over);
+    let empty_lines_mesh = vor_render::HeightmapMesh {
+        vertices: Vec::new(),
+        indices: Vec::new(),
+        bounds_min: [0.0; 2],
+        bounds_max: [0.0; 2],
+    };
+    let layer_compass_lines_idx = renderer.add_line_layer(match &compass_overlay {
+        Some(c) => &c.lines_mesh,
+        None => &empty_lines_mesh,
+    });
 
     // Extra economy layers (goods / markets / trade) are registered AFTER all
     // the fixed-constant layers (0..18) so `active_indices()` keeps matching.
@@ -898,6 +964,14 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
         wind_glyphs,
         goods_overlay,
         goods_plate_labels,
+        marker_emoji_overlay,
+        ruler_labels: ruler_layer.labels,
+        compass_overlay,
+        state_labels_overlay: None,
+        state_labels_bucket: i32::MIN,
+        label_font_bytes,
+        state_label_paths,
+        letter_length,
         text_system,
         dyn_ids: vor_render::layers::DynamicLayerIds {
             cells_line: line_cells_idx,
@@ -922,6 +996,10 @@ async fn init_state(window: Arc<Window>, mut cfg: ViewerConfig) -> State {
             ice_shadow: layer_ice_shadow_idx,
             ice_stroke: layer_ice_stroke_idx,
             goods_burgs: layer_goods_burgs_idx,
+            compass_lines: layer_compass_lines_idx,
+            marker_pins: layer_marker_pins_idx,
+            ruler_under: layer_ruler_under_idx,
+            ruler_over: layer_ruler_over_idx,
         },
         graticule_labels: coord_graticule.labels,
         coordinate_step,
@@ -1044,30 +1122,68 @@ impl State {
         ];
         let world_cursor = self.camera.screen_to_world(cursor_screen, surface_size);
         let picked_cell = self.picked_cell;
+
+        // FMG `scale` relative to the initial fit: >1 zoomed in, <1 out.
+        let zoom_scale = self.fit_extent_y / self.camera.extent_y.max(1.0);
+
+        // drawCoordinates redraws on every pan/zoom with
+        // `goal = lonT / scale / 10`; we rebuild when the picked step changes.
+        if self.layer_flags.coordinates {
+            let goal = (self.world.coordinates.lon_r - self.world.coordinates.lon_l)
+                / zoom_scale.max(1e-6)
+                / 10.0;
+            let new_step = vor_render::coordinates::pick_step(goal);
+            if new_step != self.coordinate_step {
+                let grat = build_coordinate_graticule(
+                    &self.world.coordinates,
+                    self.world.grid.width,
+                    self.world.grid.height,
+                    new_step,
+                );
+                self.renderer
+                    .update_line_layer(self.dyn_ids.coordinates_line, &grat.lines);
+                self.graticule_labels = grat.labels;
+                self.coordinate_step = new_step;
+            }
+        }
+
+        // Rebuild state-label mesh when the zoom bucket changes (FMG rescales
+        // label fonts on zoom; we quantize into buckets).
+        if self.layer_flags.labels {
+            let bucket = ((zoom_scale * 8.0).round() as i32).max(0);
+            if bucket != self.state_labels_bucket {
+                self.state_labels_bucket = bucket;
+                let font_world =
+                    ((22.0 + 22.0 / zoom_scale.max(1e-6)) / 2.0 * 100.0).round() / 100.0;
+                let names: Vec<String> = self
+                    .state_label_paths
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.len() >= 2)
+                    .filter_map(|(i, _)| self.world.states.get(i).map(|st| st.name.clone()))
+                    .collect();
+                let strips = rasterize_strips(&self.label_font_bytes, &names, 64.0);
+                let mesh = build_label_mesh(
+                    &strips,
+                    &self.state_label_paths,
+                    &self.world.states,
+                    font_world,
+                    self.letter_length,
+                );
+                self.state_labels_overlay = Some(StateLabelsOverlay::new(
+                    &self.renderer.device,
+                    &self.renderer.queue,
+                    self.renderer.format,
+                    &mesh,
+                    self.renderer.msaa_count,
+                    self.renderer.camera_bind_layout(),
+                ));
+            }
+        }
+
         let world = &mut self.world;
 
-        let show_labels = self.layer_flags.labels;
-        let label_data: Vec<(f32, f32, String)> = if show_labels {
-            world
-                .burgs
-                .iter()
-                .filter_map(|b| {
-                    let pt = world.pack.points.get(b.cell as usize)?;
-                    let s = self.camera.world_to_screen(*pt, surface_size);
-                    if s[0] >= 0.0
-                        && s[0] <= surface_size[0]
-                        && s[1] >= 0.0
-                        && s[1] <= surface_size[1]
-                    {
-                        Some((s[0], s[1], b.name.clone()))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let distance_scale = world.settings.distance_scale;
 
         let vorn_save_path = self.map_path.with_extension("vorn");
 
@@ -1129,21 +1245,6 @@ impl State {
                     text,
                     egui::FontId::proportional(13.0),
                     egui::Color32::from_rgb(240, 240, 240),
-                );
-            }
-
-            // Labels overlay (clip below sidebar)
-            let painter = ctx.debug_painter();
-            for (sx, sy, name) in &label_data {
-                if *sx < PANEL_WIDTH + 10.0 {
-                    continue;
-                }
-                painter.text(
-                    egui::pos2(*sx, *sy),
-                    egui::Align2::CENTER_CENTER,
-                    name,
-                    egui::FontId::proportional(10.0),
-                    egui::Color32::WHITE,
                 );
             }
 
@@ -1233,9 +1334,70 @@ impl State {
             if *show_new {
                 ui::new_map_modal(ctx, show_new);
             }
+
+            // FMG `#scaleBar` (screen-space): white top line w2, dark bottom
+            // line offset +2, dark ticks at each fifth, 6 labels ABOVE.
+            if layer_flags.scale_bar {
+                let (bar_w, sub_km) = vor_render::scale_bar::scale_bar_geometry(
+                    surface_size[1],
+                    camera.extent_y,
+                    distance_scale,
+                );
+                let painter = ctx.debug_painter();
+                let size = 2.0_f32;
+                let x0 = surface_size[0] - 30.0 - bar_w;
+                let y0 = surface_size[1] - 40.0;
+                let white = egui::Color32::WHITE;
+                let dark = egui::Color32::from_rgb(0x3d, 0x3d, 0x3d);
+                painter.line_segment(
+                    [
+                        egui::pos2(x0, y0 + size),
+                        egui::pos2(x0 + bar_w + size, y0 + size),
+                    ],
+                    egui::Stroke::new(size, dark),
+                );
+                painter.line_segment(
+                    [
+                        egui::pos2(x0 + 0.5, y0),
+                        egui::pos2(x0 + bar_w + size - 0.5, y0),
+                    ],
+                    egui::Stroke::new(size, white),
+                );
+                for i in 0..=5 {
+                    let tx = x0 + bar_w * i as f32 / 5.0;
+                    painter.line_segment(
+                        [egui::pos2(tx, y0 - size), egui::pos2(tx + size, y0 + size)],
+                        egui::Stroke::new(size * 3.0, dark),
+                    );
+                }
+                for i in 0..=5 {
+                    let value = sub_km * i as f32;
+                    let label = if i == 5 {
+                        format!("{:.0} km", value)
+                    } else {
+                        format!("{:.0}", value)
+                    };
+                    painter.text(
+                        egui::pos2(x0 + bar_w * i as f32 / 5.0, y0 - 10.0),
+                        egui::Align2::CENTER_CENTER,
+                        label,
+                        egui::FontId::proportional(10.0),
+                        white,
+                    );
+                }
+            }
         });
 
         // Upload textures (font atlas etc.)
+        for (tex_id, img_delta) in &output.textures_delta.set {
+            self.egui_renderer.update_texture(
+                &self.renderer.device,
+                &self.renderer.queue,
+                *tex_id,
+                img_delta,
+            );
+        }
+        // Upload textures (font atlas etc.) — without this egui draws nothing.
         for (tex_id, img_delta) in &output.textures_delta.set {
             self.egui_renderer.update_texture(
                 &self.renderer.device,
@@ -1260,30 +1422,6 @@ impl State {
             size_in_pixels: [screen_size_px.width, screen_size_px.height],
             pixels_per_point,
         };
-
-        // FMG `scale` relative to the initial fit: >1 zoomed in, <1 out.
-        let zoom_scale = self.fit_extent_y / self.camera.extent_y.max(1.0);
-
-        // drawCoordinates redraws on every pan/zoom with
-        // `goal = lonT / scale / 10`; we rebuild when the picked step changes.
-        if self.layer_flags.coordinates {
-            let goal = (self.world.coordinates.lon_r - self.world.coordinates.lon_l)
-                / zoom_scale.max(1e-6)
-                / 10.0;
-            let new_step = vor_render::coordinates::pick_step(goal);
-            if new_step != self.coordinate_step {
-                let grat = build_coordinate_graticule(
-                    &self.world.coordinates,
-                    self.world.grid.width,
-                    self.world.grid.height,
-                    new_step,
-                );
-                self.renderer
-                    .update_line_layer(self.dyn_ids.coordinates_line, &grat.lines);
-                self.graticule_labels = grat.labels;
-                self.coordinate_step = new_step;
-            }
-        }
 
         // ---- Wgpu passes ----
         let surface_texture = self.renderer.surface.get_current_texture()?;
@@ -1402,6 +1540,57 @@ impl State {
             }
         }
 
+        // FMG `#ruler`: distance labels.
+        if self.layer_flags.rulers {
+            let font_px = (20.0 * zoom_scale).max(1.0);
+            for rl in &self.ruler_labels {
+                let s = self.camera.world_to_screen([rl.x, rl.y], surface);
+                if s[0] < -80.0
+                    || s[1] < -40.0
+                    || s[0] > surface[0] + 80.0
+                    || s[1] > surface[1] + 40.0
+                {
+                    continue;
+                }
+                text_labels.push(vor_render::Label::new(
+                    &rl.text,
+                    s[0],
+                    s[1] - font_px * 0.6,
+                    font_px,
+                    [0.24, 0.24, 0.24, 1.0], // #3d3d3d
+                ));
+            }
+        }
+
+        // FMG `#labels > #burgLabels`: per-group sizes/offsets, fill #3e3e4b.
+        if self.layer_flags.burgs && self.layer_flags.labels {
+            for b in &world.burgs {
+                if b.removed {
+                    continue;
+                }
+                let (desired_size, dy_em) = burg_label_style(&b.group);
+                let font_world =
+                    ((desired_size + desired_size / zoom_scale.max(1e-6)) / 2.0 * 100.0).round()
+                        / 100.0;
+                let font_px = (font_world * zoom_scale).max(1.0);
+                let s = self.camera.world_to_screen(b.position, surface);
+                if s[0] < -120.0
+                    || s[1] < -40.0
+                    || s[0] > surface[0] + 120.0
+                    || s[1] > surface[1] + 40.0
+                {
+                    continue;
+                }
+                text_labels.push(vor_render::Label::new(
+                    &b.name,
+                    s[0],
+                    s[1] - font_px * (1.0 + dy_em),
+                    font_px,
+                    [0.243, 0.243, 0.294, 1.0], // #3e3e4b
+                ));
+            }
+        }
+
         if !text_labels.is_empty() {
             if let Some(ref mut ts) = self.text_system {
                 ts.prepare(&self.renderer.device, &self.renderer.queue, &text_labels);
@@ -1493,6 +1682,31 @@ impl State {
                             overlay.draw(&mut pass, &self.renderer.camera_bind);
                         }
                     }
+                    // FMG `mask="url(#water)"`: stencil 0 = water.
+                    vor_render::layers::DrawItem::Compass => {
+                        if let Some(ref overlay) = self.compass_overlay {
+                            pass.set_stencil_reference(0);
+                            overlay.draw(&mut pass, &self.renderer.camera_bind);
+                            // Restore the landmass-mask reference for masked
+                            // layers drawn later in the sequence.
+                            pass.set_stencil_reference(1);
+                        }
+                    }
+                }
+            }
+
+            // FMG `#markers`: emoji icons baked into an atlas (glyphon has
+            // no emoji font — tofu otherwise).
+            if self.layer_flags.markers {
+                if let Some(ref overlay) = self.marker_emoji_overlay {
+                    overlay.draw(&mut pass, &self.renderer.camera_bind);
+                }
+            }
+
+            // FMG `#labels > #states`: curved text overlay (after all fills).
+            if self.layer_flags.labels && self.state_labels_bucket != i32::MIN {
+                if let Some(ref overlay) = self.state_labels_overlay {
+                    overlay.draw(&mut pass, &self.renderer.camera_bind);
                 }
             }
 
@@ -1871,6 +2085,52 @@ fn load_goods_atlas(
         msaa_count,
         camera_layout,
         quads,
+    ))
+}
+
+/// Loads the compass rose core texture (assets/textures/compass.png).
+#[allow(clippy::too_many_arguments)]
+fn load_compass_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    format: wgpu::TextureFormat,
+    msaa_count: u32,
+    camera_layout: &wgpu::BindGroupLayout,
+) -> Option<CompassOverlay> {
+    let asset_path: std::path::PathBuf = [
+        env!("CARGO_MANIFEST_DIR"),
+        "..",
+        "..",
+        "assets",
+        "textures",
+        "compass.png",
+    ]
+    .iter()
+    .collect();
+    let rgba = match image::ImageReader::open(&asset_path) {
+        Ok(reader) => match reader.decode() {
+            Ok(img) => img.to_rgba8(),
+            Err(e) => {
+                tracing::warn!("failed to decode compass texture: {e}");
+                return None;
+            }
+        },
+        Err(e) => {
+            tracing::warn!("compass texture not found: {} ({e})", asset_path.display());
+            return None;
+        }
+    };
+    let (w, h) = rgba.dimensions();
+    tracing::info!("loaded compass texture: {w}x{h}");
+    Some(CompassOverlay::new(
+        device,
+        queue,
+        format,
+        w,
+        h,
+        &rgba,
+        msaa_count,
+        camera_layout,
     ))
 }
 

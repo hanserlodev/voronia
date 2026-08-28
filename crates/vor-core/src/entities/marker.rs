@@ -34,4 +34,7 @@ pub struct Marker {
     /// `true` if the marker is "hidden" / removed manually in the UI.
     #[serde(default)]
     pub removed: bool,
+    /// FMG size multiplier (default 1 → 30-unit box).
+    #[serde(default)]
+    pub size: Option<f32>,
 }

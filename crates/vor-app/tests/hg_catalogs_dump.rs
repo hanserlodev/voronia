@@ -303,6 +303,25 @@ fn dump_human_geography_catalogs() {
     );
     assert!(!goods_icons.vertices.is_empty(), "goods icons must draw");
 
+    // Borders (FMG draw-borders chains): state + province must produce
+    // continuous chain geometry; culture is a documented extension.
+    let s_borders =
+        vor_render::border::build_border_mesh(pack, vor_render::border::BorderKind::State);
+    let p_borders =
+        vor_render::border::build_border_mesh(pack, vor_render::border::BorderKind::Province);
+    println!(
+        "borders: state {}v/{}i, province {}v/{}i",
+        s_borders.vertices.len(),
+        s_borders.indices.len(),
+        p_borders.vertices.len(),
+        p_borders.indices.len()
+    );
+    assert!(!s_borders.vertices.is_empty(), "state borders must draw");
+    assert!(!p_borders.vertices.is_empty(), "province borders must draw");
+    // Determinism.
+    let again = vor_render::border::build_border_mesh(pack, vor_render::border::BorderKind::State);
+    assert_eq!(s_borders.vertices.len(), again.vertices.len());
+
     // Markets: typed catalog + render (fill/border/center).
     println!("markets catalog: {}", world.markets.len());
     assert!(world.markets.len() > 1, "markets catalog must be parsed");

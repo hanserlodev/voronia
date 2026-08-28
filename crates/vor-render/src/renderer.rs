@@ -95,6 +95,34 @@ pub fn stencil_mask_test() -> wgpu::DepthStencilState {
     }
 }
 
+/// A `DepthStencilState` that only paints where the landmass mask did NOT
+/// stamp (stencil == 0) — i.e. water. Used by the compass rose
+/// (`mask="url(#water)"` in FMG). Stencil value untouched.
+pub fn stencil_water_test() -> wgpu::DepthStencilState {
+    wgpu::DepthStencilState {
+        format: STENCIL_FORMAT,
+        depth_write_enabled: false,
+        depth_compare: wgpu::CompareFunction::Always,
+        stencil: wgpu::StencilState {
+            front: wgpu::StencilFaceState {
+                compare: wgpu::CompareFunction::Equal,
+                fail_op: wgpu::StencilOperation::Keep,
+                depth_fail_op: wgpu::StencilOperation::Keep,
+                pass_op: wgpu::StencilOperation::Keep,
+            },
+            back: wgpu::StencilFaceState {
+                compare: wgpu::CompareFunction::Equal,
+                fail_op: wgpu::StencilOperation::Keep,
+                depth_fail_op: wgpu::StencilOperation::Keep,
+                pass_op: wgpu::StencilOperation::Keep,
+            },
+            read_mask: u32::MAX,
+            write_mask: 0,
+        },
+        bias: wgpu::DepthBiasState::default(),
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum RenderError {
     #[error("wgpu: no surface texture ({0})")]

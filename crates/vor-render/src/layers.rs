@@ -32,13 +32,11 @@ pub struct LayerFlags {
     pub borders_province: bool,
     pub borders_culture: bool,
     pub markers: bool,
-    pub icons: bool,
-    pub emblems: bool,
     pub rulers: bool,
     pub labels: bool,
+    /// FMG "Wind Rose" toggle — the compass rose (child 10 of `#viewbox`).
     pub wind_rose: bool,
     pub scale_bar: bool,
-    pub vignette: bool,
 }
 
 impl Default for LayerFlags {
@@ -71,13 +69,10 @@ impl Default for LayerFlags {
             borders_province: false,
             borders_culture: false,
             markers: false,
-            icons: false,
-            emblems: false,
             rulers: false,
-            labels: false,
-            wind_rose: true,
+            labels: true,
+            wind_rose: false,
             scale_bar: true,
-            vignette: false,
         }
     }
 }
@@ -95,6 +90,8 @@ pub enum DrawItem {
     Relief,
     /// FMG `#goodsIcons`/`#goodsBurgs` symbol quads (atlas overlay).
     GoodsIcons,
+    /// FMG `#compass`: rose core (texture overlay, water-stenciled).
+    Compass,
 }
 
 /// Runtime-registered layer indices that are not part of the fixed
@@ -133,6 +130,14 @@ pub struct DynamicLayerIds {
     pub goods_burgs: usize,
     /// FMG `#cults` fill outline (`stroke #777777 w0.5`, group opacity).
     pub culture_stroke: usize,
+    /// FMG `#compass` coordinate lines (rose core = special overlay).
+    pub compass_lines: usize,
+    /// FMG `#markers`: pin geometry.
+    pub marker_pins: usize,
+    /// FMG `#ruler`: gray solid under-lines (+ planimeter fills).
+    pub ruler_under: usize,
+    /// FMG `#ruler`: white dashed over-lines.
+    pub ruler_over: usize,
 }
 
 /// Per-frame draw options that depend on view state rather than flags.
@@ -227,6 +232,11 @@ impl LayerFlags {
         if self.coordinates {
             seq.push(Line(dyn_ids.coordinates_line));
         }
+        // #compass ("Wind Rose"): coord lines + rose core (z hijo 10)
+        if self.wind_rose {
+            seq.push(Line(dyn_ids.compass_lines));
+            seq.push(DrawItem::Compass);
+        }
         // #rivers, #terrain (relief icons render as a special atlas overlay)
         if self.rivers {
             seq.push(Mesh(Self::LAYER_RIVERS));
@@ -307,9 +317,16 @@ impl LayerFlags {
         if self.population {
             seq.push(Mesh(Self::LAYER_POPULATION));
         }
-        // #emblems has no mesh yet; #icons (burgs) is the top implemented layer.
+        // #emblems deferred; #icons (burgs) → #markers → #ruler near the top.
         if self.burgs {
             seq.push(Mesh(Self::LAYER_BURGS));
+        }
+        if self.markers {
+            seq.push(Mesh(dyn_ids.marker_pins));
+        }
+        if self.rulers {
+            seq.push(Mesh(dyn_ids.ruler_under));
+            seq.push(Mesh(dyn_ids.ruler_over));
         }
         seq
     }
@@ -441,6 +458,10 @@ mod tests {
             routes_searoutes: 119,
             goods_burgs: 120,
             culture_stroke: 121,
+            compass_lines: 122,
+            marker_pins: 123,
+            ruler_under: 124,
+            ruler_over: 125,
             ice_shadow: 114,
             ice_stroke: 115,
         }
@@ -464,11 +485,8 @@ mod tests {
             texture: false,
             wind_rose: false,
             scale_bar: false,
-            vignette: false,
             labels: false,
             markers: false,
-            icons: false,
-            emblems: false,
             rulers: false,
             ..LayerFlags::default()
         };

@@ -32,6 +32,7 @@ pub mod clip_poly;
 pub mod coastline;
 pub mod coastline_path;
 pub mod coastline_stroke;
+pub mod compass;
 pub mod coordinates;
 pub mod culture_layer;
 pub mod goods;
@@ -45,6 +46,8 @@ pub mod ice_layer;
 pub mod isoline;
 pub mod lakes;
 pub mod layers;
+pub mod marker_layer;
+pub use marker_layer::{build_marker_emoji_mesh, build_marker_pins, MarkerLabel};
 pub mod market;
 pub mod mesh;
 pub mod ocean_layers;
@@ -57,7 +60,10 @@ pub mod religion_layer;
 pub mod renderer;
 pub mod river;
 pub mod route_layer;
+pub mod ruler_layer;
+pub mod scale_bar;
 pub mod simplify;
+pub mod state_labels;
 pub mod state_layer;
 pub mod temperature;
 pub mod text;
@@ -71,7 +77,7 @@ pub use biome::{
     build_biome_mesh, BiomeIsolineMeshes,
 };
 pub use border::{build_border_mesh, BorderKind};
-pub use burg::build_burg_icons_mesh;
+pub use burg::{build_burg_icons_mesh, burg_label_style};
 pub use camera::Camera;
 pub use cells::build_cell_wireframe;
 pub use clip_poly::clip_polygon;
@@ -84,6 +90,7 @@ pub use coastline_path::{
 pub use coastline_stroke::{
     build_coastline_meshes, CoastlineMeshes, CoastlineStrokeSettings, SHADOW_MAX_SCALE,
 };
+pub use compass::CompassOverlay;
 pub use coordinates::{build_coordinate_graticule, GraticuleLabel, GraticuleMesh};
 pub use culture_layer::{build_culture_mesh, build_culture_stroke_mesh};
 pub use grid::build_grid_lines;
@@ -108,8 +115,13 @@ pub use relief::{
 pub use religion_layer::build_religion_mesh;
 pub use renderer::{stencil_passthrough, Renderer, STENCIL_FORMAT};
 pub use river::{build_river_mesh, get_offset, get_width};
-pub use route_layer::{build_route_group_meshes, RouteMeshes};
+pub use route_layer::{build_route_group_meshes, dash_segments_pub, RouteMeshes};
+pub use ruler_layer::{build_ruler_layer, RulerLayer};
 pub use simplify::simplify;
+pub use state_labels::{
+    build_label_mesh, compute_state_label_paths, measure_letter, rasterize_strips, CellGrid,
+    StateLabelsMesh, StateLabelsOverlay, STATE_LABEL_SIZE,
+};
 pub use state_layer::build_state_mesh;
 pub use temperature::build_temperature_mesh;
 pub use text::{Label, TextSystem};

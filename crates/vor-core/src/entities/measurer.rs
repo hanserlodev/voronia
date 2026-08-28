@@ -6,6 +6,9 @@
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Measurer {
     pub id: u32,
+    /// FMG kind: "Ruler" | "Opisometer" | "RouteOpisometer" | "Planimeter".
+    #[serde(rename = "type", default)]
+    pub kind: String,
     /// Rule name.
     #[serde(default)]
     pub name: String,

@@ -154,6 +154,7 @@ pub fn export_png(
                 vor_render::layers::DrawItem::Texture => {}
                 vor_render::layers::DrawItem::Relief => {}
                 vor_render::layers::DrawItem::GoodsIcons => {}
+                vor_render::layers::DrawItem::Compass => {}
             }
         }
     }

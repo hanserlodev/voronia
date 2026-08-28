@@ -362,6 +362,8 @@ pub struct StateRaw {
     #[serde(default)]
     pub formName: String,
     #[serde(default)]
+    pub pole: Option<[f32; 2]>,
+    #[serde(default)]
     pub fullName: String,
     #[serde(default)]
     pub area: u32,
@@ -418,7 +420,7 @@ pub fn parse_states(slot14: Option<&str>) -> Result<Vec<State>, CatalogError> {
             full_name: s.fullName,
             color: s.color,
             center_cell: s.center,
-            pole_of_inaccessibility: [0.0, 0.0],
+            pole_of_inaccessibility: s.pole.unwrap_or([0.0; 2]),
             culture: s.culture,
             kind,
             expansionism: s.expansionism,
@@ -775,6 +777,8 @@ pub struct MarkerRaw {
     pub y: f32,
     #[serde(default)]
     pub cell: u32,
+    #[serde(default)]
+    pub size: Option<f32>,
 }
 
 pub fn parse_markers(slot35: Option<&str>) -> Result<Vec<Marker>, CatalogError> {
@@ -794,6 +798,7 @@ pub fn parse_markers(slot35: Option<&str>) -> Result<Vec<Marker>, CatalogError> 
             legend: None,
             note_id: None,
             removed: false,
+            size: m.size,
         })
         .collect())
 }
@@ -930,7 +935,8 @@ pub fn parse_measurers(slot46: Option<&str>) -> Result<Vec<Measurer>, CatalogErr
         .enumerate()
         .map(|(i, m)| Measurer {
             id: i as u32,
-            name: m.kind_str,
+            name: String::new(),
+            kind: m.kind_str,
             points: m.points,
             length: None,
         })
