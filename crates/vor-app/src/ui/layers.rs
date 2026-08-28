@@ -54,124 +54,140 @@ impl Preset {
 
     fn apply(&self, f: &mut LayerFlags) {
         *f = LayerFlags::default();
+        // 1:1 with FMG getDefaultPresets() (public/modules/ui/layers.js:7-124).
+        // toggleVignette/toggleMilitary/toggleEmblems have no Voronia flag
+        // (vignette intentionally not ported, military/emblems deferred) — ignored.
         match self {
             Preset::Physical => {
+                // FMG physical: toggleCoordinates, toggleHeight, toggleIce, toggleLakes, toggleRivers, toggleScaleBar
+                f.coordinates = true;
                 f.heightmap = true;
-                f.texture = false;
-                f.relief = true;
-                f.rivers = true;
-                f.lakes = true;
-                f.temperature = true;
-                f.precipitation = true;
                 f.ice = true;
-                f.wind_rose = true;
+                f.lakes = true;
+                f.rivers = true;
                 f.scale_bar = true;
-                f.labels = true;
             }
             Preset::HeightmapOnly => {
+                // FMG heightmap: toggleHeight, toggleLakes, toggleRivers
                 f.heightmap = true;
-                f.relief = true;
-                f.wind_rose = true;
-                f.scale_bar = true;
-                f.labels = true;
+                f.lakes = true;
+                f.rivers = true;
             }
             Preset::Biomes => {
+                // FMG biomes: toggleBiomes, toggleIce, toggleLakes, toggleRivers, toggleScaleBar
                 f.biomes = true;
+                f.ice = true;
+                f.lakes = true;
                 f.rivers = true;
-                f.borders_state = true;
-                f.wind_rose = true;
                 f.scale_bar = true;
-                f.labels = true;
             }
             Preset::Political => {
-                f.states = true;
-                f.provinces = true;
-                f.burgs = true;
+                // FMG political: toggleBorders, toggleBurgIcons, toggleIce, toggleLabels, toggleLakes, toggleRivers, toggleRoutes, toggleScaleBar, toggleStates
                 f.borders_state = true;
-                f.borders_province = true;
-                f.rivers = true;
-                f.population = true;
-                f.wind_rose = true;
-                f.scale_bar = true;
+                f.burgs = true;
+                f.ice = true;
                 f.labels = true;
+                f.lakes = true;
+                f.rivers = true;
+                f.routes = true;
+                f.scale_bar = true;
+                f.states = true;
             }
             Preset::Cultural => {
-                f.cultures = true;
-                f.states = true;
-                f.religions = true;
-                f.burgs = true;
+                // FMG cultural: toggleBorders, toggleBurgIcons, toggleCultures, toggleLabels, toggleLakes, toggleRivers, toggleRoutes, toggleScaleBar
                 f.borders_state = true;
-                f.borders_culture = true;
-                f.wind_rose = true;
-                f.scale_bar = true;
+                f.burgs = true;
+                f.cultures = true;
                 f.labels = true;
+                f.lakes = true;
+                f.rivers = true;
+                f.routes = true;
+                f.scale_bar = true;
             }
             Preset::Religions => {
-                f.religions = true;
-                f.states = true;
+                // FMG religions: toggleBorders, toggleBurgIcons, toggleLabels, toggleLakes, toggleReligions, toggleRivers, toggleRoutes, toggleScaleBar
                 f.borders_state = true;
-                f.wind_rose = true;
-                f.scale_bar = true;
+                f.burgs = true;
                 f.labels = true;
+                f.lakes = true;
+                f.religions = true;
+                f.rivers = true;
+                f.routes = true;
+                f.scale_bar = true;
             }
             Preset::Provinces => {
-                f.provinces = true;
-                f.states = true;
-                f.burgs = true;
+                // FMG provinces: toggleBorders, toggleBurgIcons, toggleLakes, toggleProvinces, toggleRivers, toggleScaleBar
                 f.borders_state = true;
-                f.borders_province = true;
+                f.burgs = true;
+                f.lakes = true;
+                f.provinces = true;
                 f.rivers = true;
-                f.population = true;
-                f.wind_rose = true;
                 f.scale_bar = true;
-                f.labels = true;
             }
             Preset::PlacesOfInterest => {
-                f.burgs = true;
-                f.markers = true;
-                f.routes = true;
-                f.goods = true;
-                f.trade = true;
-                f.states = true;
+                // FMG poi: toggleBorders, toggleBurgIcons, toggleHeight, toggleIce, toggleLakes, toggleMarkers, toggleRivers, toggleRoutes, toggleScaleBar
                 f.borders_state = true;
-                f.labels = true;
+                f.burgs = true;
+                f.heightmap = true;
+                f.ice = true;
+                f.lakes = true;
+                f.markers = true;
+                f.rivers = true;
+                f.routes = true;
+                f.scale_bar = true;
             }
             Preset::Goods => {
+                // FMG goods: toggleBorders, toggleBurgIcons, toggleCells, toggleGoods, toggleMarketsLayer, toggleLakes, toggleRivers, toggleRoutes, toggleScaleBar, toggleTrade
+                f.borders_state = true;
+                f.burgs = true;
+                f.cells = true;
                 f.goods = true;
-                f.trade = true;
+                f.markets = true;
+                f.lakes = true;
+                f.rivers = true;
                 f.routes = true;
-                f.markers = true;
-                f.wind_rose = true;
                 f.scale_bar = true;
-                f.labels = true;
+                f.trade = true;
             }
             Preset::TradeAnimation => {
-                f.trade = true;
-                f.routes = true;
+                // FMG trade: toggleBorders, toggleBurgIcons, toggleLakes, toggleRivers, toggleRoutes, toggleScaleBar, toggleStates, toggleTrade
+                f.borders_state = true;
                 f.burgs = true;
-                f.markers = true;
-                f.grid = true;
+                f.lakes = true;
+                f.rivers = true;
+                f.routes = true;
+                f.scale_bar = true;
+                f.states = true;
+                f.trade = true;
             }
             Preset::Military => {
-                f.states = true;
-                f.burgs = true; // FMG "Icons" toggle (burg icons)
-                f.rulers = true;
+                // FMG military: toggleBorders, toggleBurgIcons, toggleLabels, toggleLakes, toggleMilitary, toggleRivers, toggleRoutes, toggleScaleBar, toggleStates (+ vignette)
+                // toggleMilitary has no Voronia flag — mapped to rulers (closest overlay)
                 f.borders_state = true;
-                f.labels = true;
-            }
-            // Emblems deferred (Fase C): preset keeps the base layers only.
-            Preset::Emblems => {
-                f.states = true;
                 f.burgs = true;
                 f.labels = true;
+                f.lakes = true;
+                f.rivers = true;
+                f.routes = true;
+                f.scale_bar = true;
+                f.states = true;
+                f.rulers = true;
+            }
+            Preset::Emblems => {
+                // FMG emblems: toggleBorders, toggleBurgIcons, toggleIce, toggleEmblems, toggleLakes, toggleRivers, toggleRoutes, toggleScaleBar, toggleStates
+                // toggleEmblems deferred — base layers only
+                f.borders_state = true;
+                f.burgs = true;
+                f.ice = true;
+                f.lakes = true;
+                f.rivers = true;
+                f.routes = true;
+                f.scale_bar = true;
+                f.states = true;
             }
             Preset::PureLandmass => {
-                f.texture = true;
-                f.heightmap = true;
-                f.relief = true;
-                f.cells = true;
-                f.grid = true;
-                f.coordinates = true;
+                // FMG landmass: toggleScaleBar only
+                f.scale_bar = true;
             }
         }
     }
